@@ -40,4 +40,51 @@
     <span>基于知识库检索回答，并显示 citation。</span>
   </a>
 </section>
+
+<section id="sources" class="panel">
+  <h2>搜索候选资料</h2>
+  <form action="/domains/{{ project.id }}/discover" method="post" class="form-grid">
+    <label>
+      <span>搜索查询</span>
+      <input name="query" value="{{ project.name }}" placeholder="默认使用领域名称">
+    </label>
+    <button type="submit">搜索候选</button>
+  </form>
+  <p class="muted">默认搜索 {{ search_max_results }} 条，页面展示评分靠前的候选；确认后会进入待摄取队列。</p>
+</section>
+
+<section class="panel">
+  <h2>候选资料</h2>
+  {% if candidates %}
+    <div class="candidate-list">
+      {% for candidate in candidates %}
+        <article class="candidate-item">
+          <div class="candidate-main">
+            <div class="candidate-heading">
+              <strong>{{ candidate.title }}</strong>
+              <span class="status-pill">{{ candidate.status }}</span>
+            </div>
+            <a href="{{ candidate.url }}" target="_blank" rel="noreferrer">{{ candidate.url }}</a>
+            <p>{{ candidate.snippet or "暂无摘要。" }}</p>
+            <small>
+              类型 {{ candidate.source_type }}
+              {% if candidate.publisher %} · 来源 {{ candidate.publisher }}{% endif %}
+              {% if candidate.published_at %} · 发布 {{ candidate.published_at }}{% endif %}
+            </small>
+            <small>权威性 {{ "%.2f"|format(candidate.authority_score) }} · {{ candidate.authority_reason }}</small>
+          </div>
+          {% if candidate.status != "accepted" %}
+            <form action="/domains/{{ project.id }}/candidates/{{ candidate.id }}/confirm" method="post">
+              <button type="submit">确认</button>
+            </form>
+          {% else %}
+            <span class="accepted-label">已确认</span>
+          {% endif %}
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="muted">还没有候选资料。先搜索一组权威来源，再选择要摄取的资料。</p>
+  {% endif %}
+</section>
 {% endblock %}

@@ -17,15 +17,16 @@
 - [x] Implement domain project repository.
 - [x] Add create/list project routes and templates.
 - [x] Add tests for project persistence and dashboard rendering.
-- [ ] Commit and push phase result.
+- [x] Commit phase result.
+- [ ] Push phase result. Blocked by missing GitHub credentials in this environment.
 
 ## Phase 3: Exa Source Discovery
 
-- [ ] Implement Exa provider adapter.
-- [ ] Add candidate normalization and authority scoring.
-- [ ] Add search and confirmation UI.
-- [ ] Persist source candidates.
-- [ ] Add mocked provider tests.
+- [x] Implement Exa provider adapter.
+- [x] Add candidate normalization and authority scoring.
+- [x] Add search and confirmation UI.
+- [x] Persist source candidates.
+- [x] Add mocked provider tests.
 - [ ] Commit and push phase result.
 
 ## Phase 4: Ingestion And Indexing

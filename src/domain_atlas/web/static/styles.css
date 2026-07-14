@@ -127,7 +127,8 @@ button {
 
 .project-list,
 .workflow-grid,
-.status-grid {
+.status-grid,
+.candidate-list {
   display: grid;
   gap: 12px;
 }
@@ -165,10 +166,65 @@ button {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.candidate-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: start;
+  padding: 16px;
+  border: 1px solid #dde2ea;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.candidate-main {
+  display: grid;
+  gap: 8px;
+}
+
+.candidate-heading {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.candidate-item a {
+  color: #1d4ed8;
+  overflow-wrap: anywhere;
+}
+
+.candidate-item p {
+  margin: 0;
+  color: #334155;
+}
+
+.candidate-item small {
+  color: #64748b;
+}
+
+.status-pill,
+.accepted-label {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: #1e40af;
+  background: #dbeafe;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.accepted-label {
+  color: #166534;
+  background: #dcfce7;
+}
+
 @media (max-width: 720px) {
   .form-row,
   .status-grid,
-  .workflow-grid {
+  .workflow-grid,
+  .candidate-item {
     grid-template-columns: 1fr;
   }
 }

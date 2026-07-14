@@ -25,6 +25,29 @@ CREATE TABLE IF NOT EXISTS domain_projects (
 
 CREATE INDEX IF NOT EXISTS idx_domain_projects_updated_at
 ON domain_projects(updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS source_candidates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES domain_projects(id) ON DELETE CASCADE,
+    provider TEXT NOT NULL,
+    provider_source_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    url TEXT NOT NULL,
+    snippet TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'web',
+    publisher TEXT NOT NULL DEFAULT '',
+    author TEXT NOT NULL DEFAULT '',
+    published_at TEXT NOT NULL DEFAULT '',
+    authority_score REAL NOT NULL DEFAULT 0.0,
+    authority_reason TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'discovered',
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_source_candidates_project
+ON source_candidates(project_id, status, authority_score DESC);
 """
 
 

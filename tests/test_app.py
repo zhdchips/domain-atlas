@@ -3,7 +3,28 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from domain_atlas.core.settings import Settings
+from domain_atlas.domain.source_candidates import SourceCandidateDraft
 from domain_atlas.web.app import create_app
+
+
+class FakeDiscoveryProvider:
+    def search(self, query: str, limit: int) -> list[SourceCandidateDraft]:
+        assert query
+        assert limit == 12
+        return [
+            SourceCandidateDraft(
+                provider="exa",
+                provider_source_id="src-1",
+                title="Agent Docs",
+                url="https://docs.example.com/agents",
+                snippet="Official docs for agents.",
+                source_type="official_docs",
+                publisher="Example Docs",
+                published_at="2026-01-01",
+                authority_score=0.9,
+                authority_reason="官方资料",
+            )
+        ]
 
 
 def test_health_route_returns_ok(tmp_path):
@@ -71,3 +92,32 @@ def test_missing_domain_returns_404(tmp_path):
     response = client.get("/domains/404")
 
     assert response.status_code == 404
+
+
+def test_discover_sources_lists_candidates_and_confirm_accepts(tmp_path):
+    app = create_app(Settings(data_dir=tmp_path), discovery_provider=FakeDiscoveryProvider())
+    client = TestClient(app)
+    client.post("/domains", data={"name": "LLM Agents"})
+
+    discover = client.post(
+        "/domains/1/discover",
+        data={"query": ""},
+        follow_redirects=False,
+    )
+
+    assert discover.status_code == 303
+    assert discover.headers["location"] == "/domains/1"
+
+    dashboard = client.get("/domains/1")
+    assert "Agent Docs" in dashboard.text
+    assert "Official docs for agents." in dashboard.text
+    assert "官方资料" in dashboard.text
+
+    confirm = client.post(
+        "/domains/1/candidates/1/confirm",
+        follow_redirects=False,
+    )
+
+    assert confirm.status_code == 303
+    accepted_dashboard = client.get("/domains/1")
+    assert "已确认" in accepted_dashboard.text
