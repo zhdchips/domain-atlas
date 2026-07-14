@@ -9,7 +9,7 @@
 - [x] Add settings loader for local paths and provider env names.
 - [x] Add basic pytest coverage.
 - [x] Commit phase result.
-- [ ] Push phase result. Blocked by missing GitHub credentials in this environment.
+- [x] Push deferred by user for now.
 
 ## Phase 2: Configuration, SQLite, And Base UI
 
@@ -18,7 +18,7 @@
 - [x] Add create/list project routes and templates.
 - [x] Add tests for project persistence and dashboard rendering.
 - [x] Commit phase result.
-- [ ] Push phase result. Blocked by missing GitHub credentials in this environment.
+- [x] Push deferred by user for now.
 
 ## Phase 3: Exa Source Discovery
 
@@ -28,7 +28,7 @@
 - [x] Persist source candidates.
 - [x] Add mocked provider tests.
 - [x] Commit phase result.
-- [ ] Push phase result. Blocked by missing GitHub credentials in this environment.
+- [x] Push deferred by user for now.
 
 ## Phase 4: Ingestion And Indexing
 
@@ -38,7 +38,7 @@
 - [x] Implement embedding adapter and Chroma indexing.
 - [x] Add fixture ingestion tests.
 - [x] Commit phase result.
-- [ ] Push phase result. Blocked by missing GitHub credentials in this environment.
+- [x] Push deferred by user for now.
 
 ## Phase 5: Knowledge Build
 
@@ -49,7 +49,7 @@
 - [x] Add five-stage learning path generation.
 - [x] Add artifact contract tests with mocked LLM.
 - [x] Commit phase result.
-- [ ] Push phase result. Blocked by missing GitHub credentials in this environment.
+- [x] Push deferred by user for now.
 
 ## Phase 6: Retrieval QA
 
@@ -59,7 +59,7 @@
 - [x] Persist QA records and render QA UI.
 - [x] Add QA integration tests.
 - [x] Commit phase result.
-- [ ] Push phase result. Blocked by missing GitHub credentials in this environment.
+- [x] Push deferred by user for now.
 
 ## Phase 7: Hardening
 
@@ -68,4 +68,4 @@
 - [x] Run full tests and manual app smoke.
 - [x] Verify ignored secret/runtime files.
 - [x] Commit final MVP result.
-- [ ] Push final MVP result. Blocked by missing GitHub credentials in this environment.
+- [x] Push deferred by user for now.
