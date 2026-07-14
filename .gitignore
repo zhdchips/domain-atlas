@@ -1,0 +1,17 @@
+.env
+.env.*
+!.env.example
+.idea/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+data/
+uploads/
+*.sqlite
+*.sqlite3
+dist/
+build/
+*.egg-info/
