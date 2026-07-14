@@ -168,6 +168,19 @@ ON wiki_pages(project_id, topic_path);
 
 CREATE INDEX IF NOT EXISTS idx_learning_modules_project
 ON learning_modules(project_id, stage);
+
+CREATE TABLE IF NOT EXISTS qa_records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES domain_projects(id) ON DELETE CASCADE,
+    question TEXT NOT NULL,
+    answer TEXT NOT NULL,
+    citations_json TEXT NOT NULL DEFAULT '[]',
+    evidence_status TEXT NOT NULL DEFAULT 'sufficient',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_qa_records_project
+ON qa_records(project_id, id DESC);
 """
 
 

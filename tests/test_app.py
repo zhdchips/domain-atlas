@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from domain_atlas.core.settings import Settings
 from domain_atlas.domain.source_candidates import SourceCandidateDraft
+from domain_atlas.providers.vector_index import RetrievedChunk
 from domain_atlas.web.app import create_app
 
 
@@ -38,6 +39,18 @@ class FakeVectorIndex:
 
     def upsert_chunks(self, *, project_id: int, chunks, embeddings) -> None:
         self.calls.append((project_id, len(chunks), len(embeddings)))
+
+    def query(self, *, project_id: int, query_embedding: list[float], limit: int):
+        return [
+            RetrievedChunk(
+                chunk_uid="chunk:1",
+                text="Agents use tools.",
+                citation_label="S1-C1",
+                source_id=1,
+                distance=0.1,
+                metadata={},
+            )
+        ]
 
 
 class FakeChatProvider:
@@ -94,6 +107,15 @@ class FakeChatProvider:
                     start=1,
                 )
             ],
+        }
+
+
+class FakeQAChatProvider:
+    def complete_json(self, *, system_prompt: str, user_prompt: str):
+        return {
+            "answer": "Agent 会使用工具完成任务。",
+            "citations": ["S1-C1"],
+            "evidence_status": "sufficient",
         }
 
 
@@ -268,3 +290,25 @@ def test_build_knowledge_route_renders_wiki_and_learning_path(tmp_path):
     path = client.get("/domains/1/path")
     assert "入门认知" in path.text
     assert "进阶专题" in path.text
+
+
+def test_qa_route_records_cited_answer(tmp_path):
+    app = create_app(
+        Settings(data_dir=tmp_path),
+        chat_provider=FakeQAChatProvider(),
+        embedding_provider=FakeEmbeddingProvider(),
+        vector_index=FakeVectorIndex(),
+    )
+    client = TestClient(app)
+    client.post("/domains", data={"name": "LLM Agents"})
+
+    response = client.post(
+        "/domains/1/qa",
+        data={"question": "Agent 是什么？"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    qa_page = client.get("/domains/1/qa")
+    assert "Agent 会使用工具完成任务" in qa_page.text
+    assert "S1-C1" in qa_page.text

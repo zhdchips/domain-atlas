@@ -48,15 +48,16 @@
 - [x] Add encyclopedia-style Wiki generation.
 - [x] Add five-stage learning path generation.
 - [x] Add artifact contract tests with mocked LLM.
-- [ ] Commit and push phase result.
+- [x] Commit phase result.
+- [ ] Push phase result. Blocked by missing GitHub credentials in this environment.
 
 ## Phase 6: Retrieval QA
 
-- [ ] Implement Chroma retrieval for project chunks.
-- [ ] Add citation-grounded answer generation.
-- [ ] Add insufficient-evidence behavior.
-- [ ] Persist QA records and render QA UI.
-- [ ] Add QA integration tests.
+- [x] Implement Chroma retrieval for project chunks.
+- [x] Add citation-grounded answer generation.
+- [x] Add insufficient-evidence behavior.
+- [x] Persist QA records and render QA UI.
+- [x] Add QA integration tests.
 - [ ] Commit and push phase result.
 
 ## Phase 7: Hardening

@@ -15,12 +15,14 @@ from domain_atlas.core.settings import Settings, get_settings
 from domain_atlas.discovery.exa import ExaSearchProvider, SourceDiscoveryError
 from domain_atlas.domain.artifacts import KnowledgeArtifactRepository
 from domain_atlas.domain.projects import CreateDomainProject, DomainProjectRepository
+from domain_atlas.domain.qa import QARepository
 from domain_atlas.domain.source_candidates import SourceCandidateRepository
 from domain_atlas.domain.sources import ChunkRepository, CreateSource, SourceRepository
 from domain_atlas.ingestion.service import IngestionService
 from domain_atlas.providers.chat import OpenAICompatibleChatProvider
 from domain_atlas.providers.embeddings import OpenAICompatibleEmbeddingProvider
 from domain_atlas.providers.vector_index import ChromaVectorIndex, VectorIndex
+from domain_atlas.qa.service import RetrievalQAService
 from domain_atlas.workflow.build import KnowledgeBuildWorkflow
 
 templates = Jinja2Templates(directory="src/domain_atlas/web/templates")
@@ -57,6 +59,9 @@ def create_app(
     def artifact_repository() -> KnowledgeArtifactRepository:
         return KnowledgeArtifactRepository(app_settings.database_path)
 
+    def qa_repository() -> QARepository:
+        return QARepository(app_settings.database_path)
+
     def source_discovery_provider() -> ExaSearchProvider:
         return discovery_provider or ExaSearchProvider(api_key=app_settings.exa_api_key)
 
@@ -84,6 +89,26 @@ def create_app(
             data_dir=app_settings.data_dir,
             embedding_provider=embedder,
             vector_index=index,
+        )
+
+    def retrieval_qa_service() -> RetrievalQAService:
+        embedder = embedding_provider or OpenAICompatibleEmbeddingProvider(
+            api_key=app_settings.embedding_api_key,
+            base_url=app_settings.embedding_base_url,
+            model=app_settings.embedding_model,
+            dimensions=app_settings.embedding_dimensions,
+        )
+        index = vector_index or ChromaVectorIndex(app_settings.chroma_path)
+        chat = chat_provider or OpenAICompatibleChatProvider(
+            api_key=app_settings.llm_api_key,
+            base_url=app_settings.llm_base_url,
+            model=app_settings.chat_model,
+        )
+        return RetrievalQAService(
+            database_path=app_settings.database_path,
+            embedding_provider=embedder,
+            vector_index=index,
+            chat_provider=chat,
         )
 
     @app.get("/health")
@@ -310,6 +335,32 @@ def create_app(
             request,
             "learning_path.html",
             {"app_name": app_settings.app_name, "project": project, "modules": modules},
+        )
+
+    @app.get("/domains/{project_id}/qa", response_class=HTMLResponse)
+    def qa_page(request: Request, project_id: int) -> HTMLResponse:
+        project = project_repository().get(project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Domain project not found.")
+        records = qa_repository().list_for_project(project_id)
+        return templates.TemplateResponse(
+            request,
+            "qa.html",
+            {"app_name": app_settings.app_name, "project": project, "records": records},
+        )
+
+    @app.post("/domains/{project_id}/qa")
+    def ask_question(project_id: int, question: str = Form(...)) -> RedirectResponse:
+        project = project_repository().get(project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Domain project not found.")
+        try:
+            retrieval_qa_service().answer(project_id=project_id, question=question)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return RedirectResponse(
+            url=f"/domains/{project_id}/qa",
+            status_code=status.HTTP_303_SEE_OTHER,
         )
 
     return app

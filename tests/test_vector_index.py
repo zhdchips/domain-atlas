@@ -25,3 +25,8 @@ def test_chroma_vector_index_upserts_chunks(tmp_path):
     client = chromadb.PersistentClient(path=str(tmp_path / "chroma"))
     collection = client.get_collection("domain_1_chunks")
     assert collection.count() == 1
+
+    hits = index.query(project_id=1, query_embedding=[0.1, 0.2], limit=1)
+    assert len(hits) == 1
+    assert hits[0].citation_label == "S1-C1"
+    assert hits[0].text == "hello world"

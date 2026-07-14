@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="intro">
+  <p class="eyebrow">检索问答</p>
+  <h1>{{ project.name }}</h1>
+  <p>只基于已摄取知识库回答；证据不足时会明确说明。</p>
+</section>
+
+<section class="panel">
+  <h2>提问</h2>
+  <form action="/domains/{{ project.id }}/qa" method="post" class="form-grid">
+    <label>
+      <span>问题</span>
+      <textarea name="question" rows="3" required placeholder="例如：这个领域最核心的概念是什么？"></textarea>
+    </label>
+    <button type="submit">回答</button>
+  </form>
+</section>
+
+<section class="artifact-list">
+  {% for record in records %}
+    <article class="panel">
+      <p class="eyebrow">{{ record.evidence_status }}</p>
+      <h2>{{ record.question }}</h2>
+      <p>{{ record.answer }}</p>
+      <p class="muted">Citations: {{ ", ".join(record.citations) }}</p>
+    </article>
+  {% else %}
+    <article class="panel">
+      <p class="muted">还没有问答记录。</p>
+    </article>
+  {% endfor %}
+</section>
+{% endblock %}
