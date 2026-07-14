@@ -128,7 +128,8 @@ button {
 .project-list,
 .workflow-grid,
 .status-grid,
-.candidate-list {
+.candidate-list,
+.source-list {
   display: grid;
   gap: 12px;
 }
@@ -166,7 +167,8 @@ button {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.candidate-item {
+.candidate-item,
+.source-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 16px;
@@ -199,8 +201,21 @@ button {
   color: #334155;
 }
 
-.candidate-item small {
+.candidate-item small,
+.source-item small {
   color: #64748b;
+}
+
+.source-item p {
+  margin: 6px 0;
+  color: #475569;
+  overflow-wrap: anywhere;
+}
+
+.two-column {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
 }
 
 .status-pill,
@@ -224,7 +239,9 @@ button {
   .form-row,
   .status-grid,
   .workflow-grid,
-  .candidate-item {
+  .candidate-item,
+  .source-item,
+  .two-column {
     grid-template-columns: 1fr;
   }
 }

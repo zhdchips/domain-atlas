@@ -27,15 +27,16 @@
 - [x] Add search and confirmation UI.
 - [x] Persist source candidates.
 - [x] Add mocked provider tests.
-- [ ] Commit and push phase result.
+- [x] Commit phase result.
+- [ ] Push phase result. Blocked by missing GitHub credentials in this environment.
 
 ## Phase 4: Ingestion And Indexing
 
-- [ ] Implement URL, Markdown, and PDF loaders.
-- [ ] Add checksum and raw/normalized storage.
-- [ ] Implement chunking with stable IDs and citation metadata.
-- [ ] Implement embedding adapter and Chroma indexing.
-- [ ] Add fixture ingestion tests.
+- [x] Implement URL, Markdown, and PDF loaders.
+- [x] Add checksum and raw/normalized storage.
+- [x] Implement chunking with stable IDs and citation metadata.
+- [x] Implement embedding adapter and Chroma indexing.
+- [x] Add fixture ingestion tests.
 - [ ] Commit and push phase result.
 
 ## Phase 5: Knowledge Build

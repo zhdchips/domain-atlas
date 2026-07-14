@@ -48,6 +48,42 @@ CREATE TABLE IF NOT EXISTS source_candidates (
 
 CREATE INDEX IF NOT EXISTS idx_source_candidates_project
 ON source_candidates(project_id, status, authority_score DESC);
+
+CREATE TABLE IF NOT EXISTS sources (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES domain_projects(id) ON DELETE CASCADE,
+    source_type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    locator TEXT NOT NULL,
+    raw_path TEXT NOT NULL DEFAULT '',
+    normalized_path TEXT NOT NULL DEFAULT '',
+    checksum TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'pending',
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_sources_project
+ON sources(project_id, status, id DESC);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sources_project_locator
+ON sources(project_id, locator);
+
+CREATE TABLE IF NOT EXISTS chunks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chunk_uid TEXT NOT NULL UNIQUE,
+    project_id INTEGER NOT NULL REFERENCES domain_projects(id) ON DELETE CASCADE,
+    source_id INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+    ordinal INTEGER NOT NULL,
+    text TEXT NOT NULL,
+    citation_label TEXT NOT NULL,
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_chunks_project
+ON chunks(project_id, source_id, ordinal);
 """
 
 

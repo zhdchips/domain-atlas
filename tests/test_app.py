@@ -27,6 +27,19 @@ class FakeDiscoveryProvider:
         ]
 
 
+class FakeEmbeddingProvider:
+    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        return [[1.0, float(len(text))] for text in texts]
+
+
+class FakeVectorIndex:
+    def __init__(self):
+        self.calls = []
+
+    def upsert_chunks(self, *, project_id: int, chunks, embeddings) -> None:
+        self.calls.append((project_id, len(chunks), len(embeddings)))
+
+
 def test_health_route_returns_ok(tmp_path):
     app = create_app(Settings(data_dir=tmp_path))
     client = TestClient(app)
@@ -121,3 +134,53 @@ def test_discover_sources_lists_candidates_and_confirm_accepts(tmp_path):
     assert confirm.status_code == 303
     accepted_dashboard = client.get("/domains/1")
     assert "已确认" in accepted_dashboard.text
+    assert "Agent Docs" in accepted_dashboard.text
+    assert "pending" in accepted_dashboard.text
+
+
+def test_add_url_source_route_lists_pending_source(tmp_path):
+    app = create_app(Settings(data_dir=tmp_path))
+    client = TestClient(app)
+    client.post("/domains", data={"name": "LLM Agents"})
+
+    response = client.post(
+        "/domains/1/sources/url",
+        data={"url": "https://docs.example.com/agents", "title": "Agent Docs"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    dashboard = client.get("/domains/1")
+    assert "Agent Docs" in dashboard.text
+    assert "https://docs.example.com/agents" in dashboard.text
+    assert "pending" in dashboard.text
+
+
+def test_upload_markdown_and_ingest_from_dashboard(tmp_path):
+    vector_index = FakeVectorIndex()
+    app = create_app(
+        Settings(data_dir=tmp_path),
+        embedding_provider=FakeEmbeddingProvider(),
+        vector_index=vector_index,
+    )
+    client = TestClient(app)
+    client.post("/domains", data={"name": "LLM Agents"})
+
+    upload = client.post(
+        "/domains/1/sources/file",
+        files={"file": ("agents.md", b"# Agents\n\nAgents use tools.", "text/markdown")},
+        follow_redirects=False,
+    )
+
+    assert upload.status_code == 303
+    before = client.get("/domains/1")
+    assert "agents" in before.text
+    assert "pending" in before.text
+
+    ingest = client.post("/domains/1/sources/1/ingest", follow_redirects=False)
+
+    assert ingest.status_code == 303
+    after = client.get("/domains/1")
+    assert "已摄取" in after.text
+    assert "Chunks" in after.text
+    assert vector_index.calls == [(1, 1, 1)]

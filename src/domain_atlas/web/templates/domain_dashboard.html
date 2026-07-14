@@ -20,6 +20,10 @@
     <span>构建状态</span>
     <strong>{{ project.build_status }}</strong>
   </div>
+  <div class="metric">
+    <span>Chunks</span>
+    <strong>{{ chunk_count }}</strong>
+  </div>
 </section>
 
 <section class="workflow-grid">
@@ -85,6 +89,56 @@
     </div>
   {% else %}
     <p class="muted">还没有候选资料。先搜索一组权威来源，再选择要摄取的资料。</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>手动添加资料</h2>
+  <div class="two-column">
+    <form action="/domains/{{ project.id }}/sources/url" method="post" class="form-grid">
+      <label>
+        <span>URL</span>
+        <input name="url" type="url" required placeholder="https://example.com">
+      </label>
+      <label>
+        <span>标题</span>
+        <input name="title" placeholder="可选">
+      </label>
+      <button type="submit">添加 URL</button>
+    </form>
+    <form action="/domains/{{ project.id }}/sources/file" method="post" enctype="multipart/form-data" class="form-grid">
+      <label>
+        <span>Markdown / PDF</span>
+        <input name="file" type="file" accept=".md,.markdown,.pdf" required>
+      </label>
+      <button type="submit">上传文件</button>
+    </form>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>资料列表</h2>
+  {% if sources %}
+    <div class="source-list">
+      {% for source in sources %}
+        <article class="source-item">
+          <div>
+            <strong>{{ source.title }}</strong>
+            <p>{{ source.locator }}</p>
+            <small>类型 {{ source.source_type }} · 状态 {{ source.status }}</small>
+          </div>
+          {% if source.status != "ingested" %}
+            <form action="/domains/{{ project.id }}/sources/{{ source.id }}/ingest" method="post">
+              <button type="submit">摄取</button>
+            </form>
+          {% else %}
+            <span class="accepted-label">已摄取</span>
+          {% endif %}
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="muted">还没有资料。可以从候选确认，也可以手动添加 URL、Markdown 或 PDF。</p>
   {% endif %}
 </section>
 {% endblock %}
