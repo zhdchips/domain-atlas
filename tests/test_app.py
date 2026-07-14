@@ -40,6 +40,63 @@ class FakeVectorIndex:
         self.calls.append((project_id, len(chunks), len(embeddings)))
 
 
+class FakeChatProvider:
+    def complete_json(self, *, system_prompt: str, user_prompt: str):
+        return {
+            "source_profiles": [
+                {
+                    "source_id": 1,
+                    "summary": "资料介绍 Agent。",
+                    "authority_note": "测试资料。",
+                    "coverage_note": "基础覆盖。",
+                    "citations": ["S1-C1"],
+                }
+            ],
+            "concepts": [
+                {
+                    "name": "Agent",
+                    "definition": "Agent 使用工具完成任务。",
+                    "prerequisites": [],
+                    "related": ["Tool Use"],
+                    "citations": ["S1-C1"],
+                }
+            ],
+            "concept_edges": [
+                {
+                    "source": "Agent",
+                    "target": "Tool Use",
+                    "relation": "related",
+                    "citations": ["S1-C1"],
+                }
+            ],
+            "wiki_pages": [
+                {
+                    "title": "Agent",
+                    "topic_path": "核心概念/Agent",
+                    "summary": "Agent 使用工具完成任务。",
+                    "body_markdown": "## Agent\nAgent 使用工具完成任务。[S1-C1]",
+                    "citations": ["S1-C1"],
+                }
+            ],
+            "learning_modules": [
+                {
+                    "stage": stage,
+                    "title": title,
+                    "objectives": ["建立理解"],
+                    "readings": ["Agent [S1-C1]"],
+                    "key_concepts": ["Agent"],
+                    "check_questions": ["什么是 Agent？"],
+                    "practice_task": "解释 Agent。",
+                    "citations": ["S1-C1"],
+                }
+                for stage, title in enumerate(
+                    ["入门认知", "核心概念", "关键方法", "实践应用", "进阶专题"],
+                    start=1,
+                )
+            ],
+        }
+
+
 def test_health_route_returns_ok(tmp_path):
     app = create_app(Settings(data_dir=tmp_path))
     client = TestClient(app)
@@ -184,3 +241,30 @@ def test_upload_markdown_and_ingest_from_dashboard(tmp_path):
     assert "已摄取" in after.text
     assert "Chunks" in after.text
     assert vector_index.calls == [(1, 1, 1)]
+
+
+def test_build_knowledge_route_renders_wiki_and_learning_path(tmp_path):
+    app = create_app(
+        Settings(data_dir=tmp_path),
+        chat_provider=FakeChatProvider(),
+        embedding_provider=FakeEmbeddingProvider(),
+        vector_index=FakeVectorIndex(),
+    )
+    client = TestClient(app)
+    client.post("/domains", data={"name": "LLM Agents"})
+    client.post(
+        "/domains/1/sources/file",
+        files={"file": ("agents.md", b"# Agents\n\nAgents use tools.", "text/markdown")},
+    )
+    client.post("/domains/1/sources/1/ingest")
+
+    build = client.post("/domains/1/build", follow_redirects=False)
+
+    assert build.status_code == 303
+    dashboard = client.get("/domains/1")
+    assert "completed" in dashboard.text
+    wiki = client.get("/domains/1/wiki")
+    assert "Agent 使用工具完成任务" in wiki.text
+    path = client.get("/domains/1/path")
+    assert "入门认知" in path.text
+    assert "进阶专题" in path.text

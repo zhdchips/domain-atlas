@@ -84,6 +84,90 @@ CREATE TABLE IF NOT EXISTS chunks (
 
 CREATE INDEX IF NOT EXISTS idx_chunks_project
 ON chunks(project_id, source_id, ordinal);
+
+CREATE TABLE IF NOT EXISTS workflow_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES domain_projects(id) ON DELETE CASCADE,
+    workflow_name TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'running',
+    error TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS workflow_steps (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id INTEGER NOT NULL REFERENCES workflow_runs(id) ON DELETE CASCADE,
+    step_name TEXT NOT NULL,
+    status TEXT NOT NULL,
+    output_json TEXT NOT NULL DEFAULT '{}',
+    error TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS source_profiles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES domain_projects(id) ON DELETE CASCADE,
+    source_id INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+    summary TEXT NOT NULL,
+    authority_note TEXT NOT NULL DEFAULT '',
+    coverage_note TEXT NOT NULL DEFAULT '',
+    citations_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS concepts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES domain_projects(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    definition TEXT NOT NULL,
+    prerequisites_json TEXT NOT NULL DEFAULT '[]',
+    related_json TEXT NOT NULL DEFAULT '[]',
+    citations_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS concept_edges (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES domain_projects(id) ON DELETE CASCADE,
+    source_concept TEXT NOT NULL,
+    target_concept TEXT NOT NULL,
+    relation TEXT NOT NULL,
+    citations_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS wiki_pages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES domain_projects(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    topic_path TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    body_markdown TEXT NOT NULL,
+    citations_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS learning_modules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES domain_projects(id) ON DELETE CASCADE,
+    stage INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    objectives_json TEXT NOT NULL DEFAULT '[]',
+    readings_json TEXT NOT NULL DEFAULT '[]',
+    key_concepts_json TEXT NOT NULL DEFAULT '[]',
+    check_questions_json TEXT NOT NULL DEFAULT '[]',
+    practice_task TEXT NOT NULL DEFAULT '',
+    citations_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_wiki_pages_project
+ON wiki_pages(project_id, topic_path);
+
+CREATE INDEX IF NOT EXISTS idx_learning_modules_project
+ON learning_modules(project_id, stage);
 """
 
 

@@ -24,6 +24,10 @@
     <span>Chunks</span>
     <strong>{{ chunk_count }}</strong>
   </div>
+  <div class="metric">
+    <span>Wiki</span>
+    <strong>{{ wiki_count }}</strong>
+  </div>
 </section>
 
 <section class="workflow-grid">
@@ -43,6 +47,18 @@
     <strong>问答</strong>
     <span>基于知识库检索回答，并显示 citation。</span>
   </a>
+</section>
+
+<section class="panel">
+  <h2>知识构建</h2>
+  <form action="/domains/{{ project.id }}/build" method="post" class="form-grid">
+    <p class="muted">基于已摄取 chunks 生成 source profile、概念、百科式 Wiki、概念关系和五阶段学习路线。</p>
+    <button type="submit">构建知识库</button>
+  </form>
+  <div class="inline-links">
+    <a href="/domains/{{ project.id }}/wiki">查看 Wiki</a>
+    <a href="/domains/{{ project.id }}/path">查看学习路线</a>
+  </div>
 </section>
 
 <section id="sources" class="panel">

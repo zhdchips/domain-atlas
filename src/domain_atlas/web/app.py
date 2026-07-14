@@ -13,12 +13,15 @@ from fastapi.templating import Jinja2Templates
 from domain_atlas.core.db import initialize_database
 from domain_atlas.core.settings import Settings, get_settings
 from domain_atlas.discovery.exa import ExaSearchProvider, SourceDiscoveryError
+from domain_atlas.domain.artifacts import KnowledgeArtifactRepository
 from domain_atlas.domain.projects import CreateDomainProject, DomainProjectRepository
 from domain_atlas.domain.source_candidates import SourceCandidateRepository
 from domain_atlas.domain.sources import ChunkRepository, CreateSource, SourceRepository
 from domain_atlas.ingestion.service import IngestionService
+from domain_atlas.providers.chat import OpenAICompatibleChatProvider
 from domain_atlas.providers.embeddings import OpenAICompatibleEmbeddingProvider
 from domain_atlas.providers.vector_index import ChromaVectorIndex, VectorIndex
+from domain_atlas.workflow.build import KnowledgeBuildWorkflow
 
 templates = Jinja2Templates(directory="src/domain_atlas/web/templates")
 static_files = StaticFiles(directory="src/domain_atlas/web/static")
@@ -27,6 +30,7 @@ static_files = StaticFiles(directory="src/domain_atlas/web/static")
 def create_app(
     settings: Settings | None = None,
     discovery_provider: ExaSearchProvider | None = None,
+    chat_provider: object | None = None,
     embedding_provider: object | None = None,
     vector_index: VectorIndex | None = None,
 ) -> FastAPI:
@@ -50,8 +54,22 @@ def create_app(
     def chunk_repository() -> ChunkRepository:
         return ChunkRepository(app_settings.database_path)
 
+    def artifact_repository() -> KnowledgeArtifactRepository:
+        return KnowledgeArtifactRepository(app_settings.database_path)
+
     def source_discovery_provider() -> ExaSearchProvider:
         return discovery_provider or ExaSearchProvider(api_key=app_settings.exa_api_key)
+
+    def knowledge_build_workflow() -> KnowledgeBuildWorkflow:
+        chat = chat_provider or OpenAICompatibleChatProvider(
+            api_key=app_settings.llm_api_key,
+            base_url=app_settings.llm_base_url,
+            model=app_settings.chat_model,
+        )
+        return KnowledgeBuildWorkflow(
+            database_path=app_settings.database_path,
+            chat_provider=chat,
+        )
 
     def source_ingestion_service() -> IngestionService:
         embedder = embedding_provider or OpenAICompatibleEmbeddingProvider(
@@ -116,6 +134,7 @@ def create_app(
         )
         sources = source_repository().list_for_project(project_id)
         chunk_count = chunk_repository().count_for_project(project_id)
+        wiki_count = artifact_repository().count_wiki_pages(project_id)
 
         return templates.TemplateResponse(
             request,
@@ -126,6 +145,7 @@ def create_app(
                 "candidates": candidates,
                 "sources": sources,
                 "chunk_count": chunk_count,
+                "wiki_count": wiki_count,
                 "search_max_results": app_settings.search_max_results,
             },
         )
@@ -252,6 +272,44 @@ def create_app(
         return RedirectResponse(
             url=f"/domains/{project_id}",
             status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    @app.post("/domains/{project_id}/build")
+    def build_knowledge(project_id: int) -> RedirectResponse:
+        project = project_repository().get(project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Domain project not found.")
+        try:
+            knowledge_build_workflow().run(project_id)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return RedirectResponse(
+            url=f"/domains/{project_id}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    @app.get("/domains/{project_id}/wiki", response_class=HTMLResponse)
+    def wiki_pages(request: Request, project_id: int) -> HTMLResponse:
+        project = project_repository().get(project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Domain project not found.")
+        pages = artifact_repository().list_wiki_pages(project_id)
+        return templates.TemplateResponse(
+            request,
+            "wiki.html",
+            {"app_name": app_settings.app_name, "project": project, "pages": pages},
+        )
+
+    @app.get("/domains/{project_id}/path", response_class=HTMLResponse)
+    def learning_path(request: Request, project_id: int) -> HTMLResponse:
+        project = project_repository().get(project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Domain project not found.")
+        modules = artifact_repository().list_learning_modules(project_id)
+        return templates.TemplateResponse(
+            request,
+            "learning_path.html",
+            {"app_name": app_settings.app_name, "project": project, "modules": modules},
         )
 
     return app

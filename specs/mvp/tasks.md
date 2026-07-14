@@ -37,16 +37,17 @@
 - [x] Implement chunking with stable IDs and citation metadata.
 - [x] Implement embedding adapter and Chroma indexing.
 - [x] Add fixture ingestion tests.
-- [ ] Commit and push phase result.
+- [x] Commit phase result.
+- [ ] Push phase result. Blocked by missing GitHub credentials in this environment.
 
 ## Phase 5: Knowledge Build
 
-- [ ] Implement lightweight workflow runner.
-- [ ] Add source profile generation.
-- [ ] Add concept extraction and concept edges.
-- [ ] Add encyclopedia-style Wiki generation.
-- [ ] Add five-stage learning path generation.
-- [ ] Add artifact contract tests with mocked LLM.
+- [x] Implement lightweight workflow runner.
+- [x] Add source profile generation.
+- [x] Add concept extraction and concept edges.
+- [x] Add encyclopedia-style Wiki generation.
+- [x] Add five-stage learning path generation.
+- [x] Add artifact contract tests with mocked LLM.
 - [ ] Commit and push phase result.
 
 ## Phase 6: Retrieval QA

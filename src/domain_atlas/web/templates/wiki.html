@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="intro">
+  <p class="eyebrow">LLM Wiki</p>
+  <h1>{{ project.name }}</h1>
+  <p>百科式领域条目，保留 citations 以便追溯到摄取资料。</p>
+</section>
+
+{% if pages %}
+  <section class="artifact-list">
+    {% for page in pages %}
+      <article class="panel">
+        <h2>{{ page.title }}</h2>
+        <p class="muted">{{ page.topic_path }}</p>
+        <p>{{ page.summary }}</p>
+        <pre class="markdown-body">{{ page.body_markdown }}</pre>
+        <p class="muted">Citations: {{ ", ".join(page.citations) }}</p>
+      </article>
+    {% endfor %}
+  </section>
+{% else %}
+  <section class="panel">
+    <p class="muted">还没有 Wiki 页面。请先摄取资料并执行知识构建。</p>
+  </section>
+{% endif %}
+{% endblock %}

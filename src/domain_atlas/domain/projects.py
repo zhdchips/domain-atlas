@@ -80,6 +80,22 @@ class DomainProjectRepository:
             ).fetchone()
         return _row_to_project(row) if row else None
 
+    def update_build_status(self, project_id: int, build_status: str) -> DomainProject:
+        with connect(self.database_path) as connection:
+            connection.execute(
+                """
+                UPDATE domain_projects
+                SET build_status = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (build_status, project_id),
+            )
+            row = connection.execute(
+                "SELECT * FROM domain_projects WHERE id = ?",
+                (project_id,),
+            ).fetchone()
+        return _row_to_project(row)
+
 
 def _row_to_project(row) -> DomainProject:
     return DomainProject(

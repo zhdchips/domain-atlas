@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="intro">
+  <p class="eyebrow">学习路线</p>
+  <h1>{{ project.name }}</h1>
+  <p>默认五阶段：入门认知、核心概念、关键方法、实践应用、进阶专题。</p>
+</section>
+
+{% if modules %}
+  <section class="artifact-list">
+    {% for module in modules %}
+      <article class="panel">
+        <p class="eyebrow">阶段 {{ module.stage }}</p>
+        <h2>{{ module.title }}</h2>
+        <h3>目标</h3>
+        <ul>
+          {% for objective in module.objectives %}<li>{{ objective }}</li>{% endfor %}
+        </ul>
+        <h3>阅读材料</h3>
+        <ul>
+          {% for reading in module.readings %}<li>{{ reading }}</li>{% endfor %}
+        </ul>
+        <h3>关键概念</h3>
+        <ul>
+          {% for concept in module.key_concepts %}<li>{{ concept }}</li>{% endfor %}
+        </ul>
+        <h3>检查问题</h3>
+        <ul>
+          {% for question in module.check_questions %}<li>{{ question }}</li>{% endfor %}
+        </ul>
+        <h3>实践任务</h3>
+        <p>{{ module.practice_task }}</p>
+        <p class="muted">Citations: {{ ", ".join(module.citations) }}</p>
+      </article>
+    {% endfor %}
+  </section>
+{% else %}
+  <section class="panel">
+    <p class="muted">还没有学习路线。请先摄取资料并执行知识构建。</p>
+  </section>
+{% endif %}
+{% endblock %}

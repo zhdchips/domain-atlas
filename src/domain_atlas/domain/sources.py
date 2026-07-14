@@ -244,6 +244,21 @@ class ChunkRepository:
             ).fetchone()
         return int(row["count"])
 
+    def list_for_project(self, project_id: int, *, limit: int | None = None) -> list[Chunk]:
+        query = """
+            SELECT *
+            FROM chunks
+            WHERE project_id = ?
+            ORDER BY source_id ASC, ordinal ASC
+        """
+        params: list[int] = [project_id]
+        if limit is not None:
+            query += " LIMIT ?"
+            params.append(limit)
+        with connect(self.database_path) as connection:
+            rows = connection.execute(query, params).fetchall()
+        return [_row_to_chunk(row) for row in rows]
+
 
 def _row_to_source(row) -> Source:
     return Source(
