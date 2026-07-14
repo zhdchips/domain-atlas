@@ -76,10 +76,11 @@ def _check_chat(env: dict[str, str], client: httpx.Client) -> None:
     if not key or not base_url or not model:
         raise RuntimeError("LLM_API_KEY, LLM_BASE_URL, or CHAT_MODEL is missing")
     endpoint = f"{base_url}/chat/completions" if base_url.endswith("/v1") else f"{base_url}/v1/chat/completions"
-    response = client.post(
+    response = _post_with_retries(
+        client,
         endpoint,
         headers={"Authorization": f"Bearer {key}"},
-        json={
+        json_body={
             "model": model,
             "messages": [{"role": "user", "content": "Reply with exactly: OK"}],
             "temperature": 0,
@@ -124,6 +125,25 @@ def _raise_for_status(response: httpx.Response) -> None:
         except Exception:
             body = response.text[:300]
         raise RuntimeError(f"HTTP {response.status_code}: {body}")
+
+
+def _post_with_retries(
+    client: httpx.Client,
+    url: str,
+    *,
+    headers: dict[str, str],
+    json_body: dict[str, object],
+    max_retries: int = 2,
+) -> httpx.Response:
+    attempts = max_retries + 1
+    for attempt in range(attempts):
+        response = client.post(url, headers=headers, json=json_body)
+        if response.status_code not in {429, 500, 502, 503, 504}:
+            return response
+        if attempt + 1 >= attempts:
+            return response
+        time.sleep(1.0 * (2**attempt))
+    return response
 
 
 def _safe_error(exc: Exception) -> str:

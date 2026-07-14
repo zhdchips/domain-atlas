@@ -35,3 +35,37 @@ def test_openai_compatible_chat_provider_parses_json_content():
         "ok": True,
         "items": [1],
     }
+
+
+def test_chat_provider_retries_transient_overload():
+    expected_key = "not-a-real-key"
+    calls = {"count": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return httpx.Response(
+                503,
+                json={
+                    "error": {
+                        "message": "Server Overloaded",
+                        "code": "service_unavailable_error",
+                    }
+                },
+            )
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": '{"ok": true}'}}]},
+        )
+
+    provider = OpenAICompatibleChatProvider(
+        api_key=expected_key,
+        base_url="https://llm.example.com",
+        model="test-chat",
+        max_retries=1,
+        retry_delay_seconds=0,
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    assert provider.complete_json(system_prompt="system", user_prompt="user") == {"ok": True}
+    assert calls["count"] == 2
