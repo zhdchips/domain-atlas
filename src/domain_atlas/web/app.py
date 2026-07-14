@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Form, HTTPException, Request, status
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from domain_atlas.core.db import initialize_database
 from domain_atlas.core.settings import Settings, get_settings
+from domain_atlas.domain.projects import CreateDomainProject, DomainProjectRepository
 
 templates = Jinja2Templates(directory="src/domain_atlas/web/templates")
 static_files = StaticFiles(directory="src/domain_atlas/web/static")
@@ -16,9 +18,14 @@ static_files = StaticFiles(directory="src/domain_atlas/web/static")
 def create_app(settings: Settings | None = None) -> FastAPI:
     """Create the Domain Atlas web app."""
     app_settings = settings or get_settings()
+    initialize_database(app_settings.database_path)
+
     app = FastAPI(title=app_settings.app_name)
     app.state.settings = app_settings
     app.mount("/static", static_files, name="static")
+
+    def project_repository() -> DomainProjectRepository:
+        return DomainProjectRepository(app_settings.database_path)
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -26,12 +33,49 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/", response_class=HTMLResponse)
     def home(request: Request) -> HTMLResponse:
+        projects = project_repository().list_recent()
         return templates.TemplateResponse(
             request,
             "home.html",
             {
                 "app_name": app_settings.app_name,
-                "phase": "SDD MVP Skeleton",
+                "projects": projects,
+                "default_language": app_settings.default_language,
+            },
+        )
+
+    @app.post("/domains")
+    def create_domain(
+        name: str = Form(...),
+        goal: str = Form(""),
+        level: str = Form("beginner"),
+        language: str = Form("zh"),
+    ) -> RedirectResponse:
+        project = project_repository().create(
+            CreateDomainProject(
+                name=name,
+                goal=goal,
+                level=level,
+                language=language,
+            )
+        )
+        return RedirectResponse(
+            url=f"/domains/{project.id}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    @app.get("/domains/{project_id}", response_class=HTMLResponse)
+    def domain_dashboard(request: Request, project_id: int) -> HTMLResponse:
+        project = project_repository().get(project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Domain project not found.")
+
+        return templates.TemplateResponse(
+            request,
+            "domain_dashboard.html",
+            {
+                "app_name": app_settings.app_name,
+                "project": project,
             },
         )
 

@@ -13,6 +13,7 @@ body {
   height: 56px;
   display: flex;
   align-items: center;
+  gap: 24px;
   padding: 0 24px;
   border-bottom: 1px solid #dde2ea;
   background: #ffffff;
@@ -22,6 +23,17 @@ body {
   color: #111827;
   font-weight: 700;
   text-decoration: none;
+}
+
+.nav {
+  display: flex;
+  gap: 16px;
+}
+
+.nav a {
+  color: #475569;
+  text-decoration: none;
+  font-size: 14px;
 }
 
 .page {
@@ -48,4 +60,115 @@ body {
 
 .muted {
   color: #64748b;
+}
+
+.eyebrow {
+  color: #2563eb;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.panel {
+  margin-top: 32px;
+  padding: 24px;
+  background: #ffffff;
+  border: 1px solid #dde2ea;
+  border-radius: 8px;
+}
+
+.panel h2 {
+  margin: 0 0 18px;
+  font-size: 20px;
+}
+
+.form-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.form-row {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+label {
+  display: grid;
+  gap: 8px;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+input,
+textarea,
+select {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 10px 12px;
+  color: #111827;
+  font: inherit;
+  background: #ffffff;
+}
+
+button {
+  justify-self: start;
+  border: 0;
+  border-radius: 6px;
+  padding: 10px 16px;
+  background: #1d4ed8;
+  color: #ffffff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.project-list,
+.workflow-grid,
+.status-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.project-item,
+.workflow-item,
+.metric {
+  display: grid;
+  gap: 6px;
+  padding: 16px;
+  border: 1px solid #dde2ea;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1f2937;
+  text-decoration: none;
+}
+
+.project-item span,
+.workflow-item span,
+.metric span {
+  color: #64748b;
+}
+
+.project-item small {
+  color: #64748b;
+}
+
+.status-grid {
+  margin-top: 32px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.workflow-grid {
+  margin-top: 24px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 720px) {
+  .form-row,
+  .status-grid,
+  .workflow-grid {
+    grid-template-columns: 1fr;
+  }
 }

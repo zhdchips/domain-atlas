@@ -3,7 +3,55 @@
 {% block content %}
 <section class="intro">
   <h1>Domain Atlas</h1>
-  <p>本地优先的领域学习 Agent 系统。</p>
-  <p class="muted">{{ phase }}</p>
+  <p>把权威资料整理成百科式 Wiki、学习路线和带引用问答。</p>
+</section>
+
+<section class="panel">
+  <h2>创建领域项目</h2>
+  <form action="/domains" method="post" class="form-grid">
+    <label>
+      <span>领域名称</span>
+      <input name="name" required placeholder="例如：强化学习、合成生物学、LLM Agents">
+    </label>
+    <label>
+      <span>学习目标</span>
+      <textarea name="goal" rows="3" placeholder="可选：你希望掌握到什么程度？"></textarea>
+    </label>
+    <div class="form-row">
+      <label>
+        <span>当前水平</span>
+        <select name="level">
+          <option value="beginner">入门</option>
+          <option value="intermediate">有基础</option>
+          <option value="advanced">进阶</option>
+        </select>
+      </label>
+      <label>
+        <span>语言</span>
+        <select name="language">
+          <option value="zh" {% if default_language == "zh" %}selected{% endif %}>中文</option>
+          <option value="en" {% if default_language == "en" %}selected{% endif %}>English</option>
+        </select>
+      </label>
+    </div>
+    <button type="submit">创建项目</button>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>已有项目</h2>
+  {% if projects %}
+    <div class="project-list">
+      {% for project in projects %}
+        <a class="project-item" href="/domains/{{ project.id }}">
+          <strong>{{ project.name }}</strong>
+          <span>{{ project.goal or "尚未设置学习目标" }}</span>
+          <small>语言 {{ project.language }} · 状态 {{ project.status }} · 构建 {{ project.build_status }}</small>
+        </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="muted">还没有项目。先创建一个领域，Domain Atlas 会从这里开始搭地图。</p>
+  {% endif %}
 </section>
 {% endblock %}

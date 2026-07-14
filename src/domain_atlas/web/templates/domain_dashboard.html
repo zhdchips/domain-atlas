@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="intro">
+  <p class="eyebrow">领域项目</p>
+  <h1>{{ project.name }}</h1>
+  <p>{{ project.goal or "尚未设置学习目标。" }}</p>
+</section>
+
+<section class="status-grid">
+  <div class="metric">
+    <span>语言</span>
+    <strong>{{ project.language }}</strong>
+  </div>
+  <div class="metric">
+    <span>项目状态</span>
+    <strong>{{ project.status }}</strong>
+  </div>
+  <div class="metric">
+    <span>构建状态</span>
+    <strong>{{ project.build_status }}</strong>
+  </div>
+</section>
+
+<section class="workflow-grid">
+  <a class="workflow-item" href="/domains/{{ project.id }}#sources">
+    <strong>资料</strong>
+    <span>搜索候选、导入 URL/Markdown/PDF，并追踪 provenance。</span>
+  </a>
+  <a class="workflow-item" href="/domains/{{ project.id }}#wiki">
+    <strong>Wiki</strong>
+    <span>百科式领域条目会在知识构建后出现在这里。</span>
+  </a>
+  <a class="workflow-item" href="/domains/{{ project.id }}#path">
+    <strong>学习路线</strong>
+    <span>五阶段路线：入门、核心概念、关键方法、实践应用、进阶专题。</span>
+  </a>
+  <a class="workflow-item" href="/domains/{{ project.id }}#qa">
+    <strong>问答</strong>
+    <span>基于知识库检索回答，并显示 citation。</span>
+  </a>
+</section>
+{% endblock %}

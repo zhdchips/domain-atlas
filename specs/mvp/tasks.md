@@ -8,14 +8,15 @@
 - [x] Add FastAPI app factory with health and home routes.
 - [x] Add settings loader for local paths and provider env names.
 - [x] Add basic pytest coverage.
-- [x] Commit and push phase result.
+- [x] Commit phase result.
+- [ ] Push phase result. Blocked by missing GitHub credentials in this environment.
 
 ## Phase 2: Configuration, SQLite, And Base UI
 
-- [ ] Add SQLite connection and schema initialization.
-- [ ] Implement domain project repository.
-- [ ] Add create/list project routes and templates.
-- [ ] Add tests for project persistence and dashboard rendering.
+- [x] Add SQLite connection and schema initialization.
+- [x] Implement domain project repository.
+- [x] Add create/list project routes and templates.
+- [x] Add tests for project persistence and dashboard rendering.
 - [ ] Commit and push phase result.
 
 ## Phase 3: Exa Source Discovery
