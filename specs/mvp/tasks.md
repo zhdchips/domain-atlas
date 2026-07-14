@@ -58,12 +58,14 @@
 - [x] Add insufficient-evidence behavior.
 - [x] Persist QA records and render QA UI.
 - [x] Add QA integration tests.
-- [ ] Commit and push phase result.
+- [x] Commit phase result.
+- [ ] Push phase result. Blocked by missing GitHub credentials in this environment.
 
 ## Phase 7: Hardening
 
-- [ ] Add README quickstart and architecture notes.
-- [ ] Add live smoke command for configured providers.
-- [ ] Run full tests and manual app smoke.
-- [ ] Verify ignored secret/runtime files.
-- [ ] Commit and push final MVP result.
+- [x] Add README quickstart and architecture notes.
+- [x] Add live smoke command for configured providers.
+- [x] Run full tests and manual app smoke.
+- [x] Verify ignored secret/runtime files.
+- [x] Commit final MVP result.
+- [ ] Push final MVP result. Blocked by missing GitHub credentials in this environment.
