@@ -20,6 +20,7 @@ class OpenAICompatibleEmbeddingProvider:
         model: str,
         dimensions: int | None = None,
         timeout_seconds: float = 45.0,
+        max_batch_size: int = 8,
         client: httpx.Client | None = None,
     ) -> None:
         self.api_key = api_key
@@ -27,6 +28,7 @@ class OpenAICompatibleEmbeddingProvider:
         self.model = model
         self.dimensions = dimensions
         self.timeout_seconds = timeout_seconds
+        self.max_batch_size = max(1, max_batch_size)
         self.client = client
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
@@ -35,6 +37,12 @@ class OpenAICompatibleEmbeddingProvider:
         if not self.api_key.strip() or not self.base_url.strip():
             raise EmbeddingProviderError("Embedding provider is not configured.")
 
+        vectors: list[list[float]] = []
+        for start in range(0, len(texts), self.max_batch_size):
+            vectors.extend(self._embed_batch(texts[start : start + self.max_batch_size]))
+        return vectors
+
+    def _embed_batch(self, texts: list[str]) -> list[list[float]]:
         body: dict[str, Any] = {"model": self.model, "input": texts}
         if self.dimensions:
             body["dimensions"] = self.dimensions

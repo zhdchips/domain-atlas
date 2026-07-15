@@ -99,3 +99,34 @@ def test_chat_provider_retries_transient_overload():
 
     assert provider.complete_json(system_prompt="system", user_prompt="user") == {"ok": True}
     assert calls["count"] == 2
+
+
+def test_chat_provider_retries_invalid_json_content():
+    calls = {"count": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["count"] += 1
+        body = request.read()
+        if calls["count"] == 1:
+            assert b"Your previous response was not parseable JSON" not in body
+            return httpx.Response(
+                200,
+                json={"choices": [{"message": {"content": '{"ok": true'}}]},
+            )
+        assert b"Your previous response was not parseable JSON" in body
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": '{"ok": true}'}}]},
+        )
+
+    provider = OpenAICompatibleChatProvider(
+        api_key="not-a-real-key",
+        base_url="https://llm.example.com",
+        model="test-chat",
+        json_retries=1,
+        retry_delay_seconds=0,
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    assert provider.complete_json(system_prompt="system", user_prompt="user") == {"ok": True}
+    assert calls["count"] == 2

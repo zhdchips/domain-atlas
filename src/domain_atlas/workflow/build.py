@@ -148,15 +148,18 @@ Use the cited chunks below as the only evidence:
 
 Return a JSON object with exactly these keys:
 - source_profiles: array of objects with source_id, summary, authority_note, coverage_note, citations.
-- concepts: array of objects with name, definition, prerequisites, related, citations.
-- concept_edges: array of objects with source, target, relation, citations.
-- wiki_pages: array of objects with title, topic_path, summary, body_markdown, citations.
+- concepts: 8 to 12 objects with name, definition, prerequisites, related, citations.
+- concept_edges: focused array of objects with source, target, relation, citations.
+- wiki_pages: at most 3 curated objects with title, topic_path, summary, body_markdown, citations.
+  Do not create index, log, source, concept, or template pages; the system will create those deterministically.
+  Use wiki_pages only for synthesis, entity, or query pages that add cross-source insight.
   Each wiki page should include page_type, path, stable slug, and sections array when possible.
-  Use page_type values: source, concept, entity, synthesis, query.
-  Use paths like wiki/sources/name, wiki/concepts/name, wiki/entities/name, wiki/synthesis/name.
+  Use page_type values: entity, synthesis, query.
+  Use paths like wiki/entities/name, wiki/synthesis/name, wiki/queries/name.
   Each section should include heading, body_markdown, citations, source_citation_labels, source_chunk_uids, and links.
   Use [[Wiki Links]] inside section bodies where useful.
 - learning_modules: exactly five objects with stage, title, objectives, readings, key_concepts, check_questions, practice_task, citations.
+Keep the response compact and valid JSON. Prefer concise arrays and short encyclopedia-style paragraphs.
 """.strip()
 
 

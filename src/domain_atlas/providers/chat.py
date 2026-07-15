@@ -24,6 +24,7 @@ class OpenAICompatibleChatProvider:
         timeout_seconds: float = 60.0,
         temperature: float = 0.0,
         max_retries: int = 2,
+        json_retries: int = 1,
         retry_delay_seconds: float = 1.0,
         client: httpx.Client | None = None,
     ) -> None:
@@ -33,6 +34,7 @@ class OpenAICompatibleChatProvider:
         self.timeout_seconds = timeout_seconds
         self.temperature = temperature
         self.max_retries = max_retries
+        self.json_retries = max(0, json_retries)
         self.retry_delay_seconds = retry_delay_seconds
         self.client = client
 
@@ -56,20 +58,31 @@ class OpenAICompatibleChatProvider:
         }
         headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
 
-        response = self._post_with_retries(endpoint=endpoint, headers=headers, body=body)
+        attempts = self.json_retries + 1
+        last_error: ChatProviderError | None = None
+        for attempt in range(attempts):
+            response = self._post_with_retries(endpoint=endpoint, headers=headers, body=body)
 
-        if response.status_code >= 400:
-            message = _provider_error_message(response)
-            raise ChatProviderError(
-                f"Chat completion failed with HTTP {response.status_code}: {message}"
-            )
+            if response.status_code >= 400:
+                message = _provider_error_message(response)
+                raise ChatProviderError(
+                    f"Chat completion failed with HTTP {response.status_code}: {message}"
+                )
 
-        try:
-            payload = response.json()
-            content = payload["choices"][0]["message"]["content"]
-        except (KeyError, IndexError, TypeError, ValueError) as exc:
-            raise ChatProviderError("Chat completion response shape was invalid.") from exc
-        return _parse_json_object(str(content))
+            try:
+                payload = response.json()
+                content = payload["choices"][0]["message"]["content"]
+            except (KeyError, IndexError, TypeError, ValueError) as exc:
+                raise ChatProviderError("Chat completion response shape was invalid.") from exc
+            try:
+                return _parse_json_object(str(content))
+            except ChatProviderError as exc:
+                last_error = exc
+                if attempt + 1 >= attempts:
+                    break
+                body = _retry_json_body(body)
+                _sleep_before_retry(self.retry_delay_seconds, attempt)
+        raise last_error or ChatProviderError("Chat completion did not return valid JSON.")
 
     def _post_with_retries(
         self,
@@ -173,6 +186,23 @@ def _provider_error_message(response: httpx.Response) -> str:
             if parts:
                 return " / ".join(parts)[:240]
     return json.dumps(payload, ensure_ascii=False)[:240]
+
+
+def _retry_json_body(body: dict[str, Any]) -> dict[str, Any]:
+    retry_body = dict(body)
+    messages = list(retry_body.get("messages") or [])
+    messages.append(
+        {
+            "role": "user",
+            "content": (
+                "Your previous response was not parseable JSON. "
+                "Return the same requested JSON object again, with no markdown, no commentary, "
+                "and no trailing text. Ensure every string is escaped correctly."
+            ),
+        }
+    )
+    retry_body["messages"] = messages
+    return retry_body
 
 
 def _sleep_before_retry(base_delay: float, attempt: int) -> None:
