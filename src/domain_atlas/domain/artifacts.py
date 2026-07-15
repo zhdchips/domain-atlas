@@ -81,6 +81,20 @@ class LearningModule:
     citations: list[str]
 
 
+@dataclass(frozen=True)
+class LearningGuide:
+    id: int
+    project_id: int
+    summary: str
+    question_answers: list[dict[str, Any]]
+    mainline: list[dict[str, Any]]
+    core_concepts: list[dict[str, Any]]
+    branches: list[dict[str, Any]]
+    details: list[dict[str, Any]]
+    citations: list[str]
+    created_at: str
+
+
 class KnowledgeArtifactRepository:
     """Persist generated knowledge artifacts for a project."""
 
@@ -96,6 +110,7 @@ class KnowledgeArtifactRepository:
                 "wiki_links",
                 "wiki_sections",
                 "wiki_pages",
+                "learning_guides",
                 "learning_modules",
             ):
                 connection.execute(f"DELETE FROM {table} WHERE project_id = ?", (project_id,))
@@ -247,6 +262,34 @@ class KnowledgeArtifactRepository:
                             (project_id, slug, _slug(target), target),
                         )
 
+            guide = payload.get("learning_guide")
+            if isinstance(guide, dict):
+                connection.execute(
+                    """
+                    INSERT INTO learning_guides (
+                        project_id,
+                        summary,
+                        question_answers_json,
+                        mainline_json,
+                        core_concepts_json,
+                        branches_json,
+                        details_json,
+                        citations_json
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        project_id,
+                        _str(guide.get("summary")),
+                        _json_structured_list(guide.get("question_answers")),
+                        _json_structured_list(guide.get("mainline")),
+                        _json_structured_list(guide.get("core_concepts")),
+                        _json_structured_list(guide.get("branches")),
+                        _json_structured_list(guide.get("details")),
+                        _json_list(guide.get("citations")),
+                    ),
+                )
+
             for module in _list(payload.get("learning_modules")):
                 connection.execute(
                     """
@@ -360,6 +403,14 @@ class KnowledgeArtifactRepository:
             for row in rows
         ]
 
+    def get_learning_guide(self, project_id: int) -> LearningGuide | None:
+        with connect(self.database_path) as connection:
+            row = connection.execute(
+                "SELECT * FROM learning_guides WHERE project_id = ?",
+                (project_id,),
+            ).fetchone()
+        return _row_to_learning_guide(row) if row else None
+
     def list_learning_modules(self, project_id: int) -> list[LearningModule]:
         with connect(self.database_path) as connection:
             rows = connection.execute(
@@ -406,6 +457,10 @@ def _string_list(value: Any) -> list[str]:
 def _json_list(value: Any) -> str:
     items = value if isinstance(value, list) else []
     return json.dumps([str(item) for item in items], ensure_ascii=False)
+
+
+def _json_structured_list(value: Any) -> str:
+    return json.dumps(value if isinstance(value, list) else [], ensure_ascii=False)
 
 
 def _page_type(page: dict[str, Any]) -> str:
@@ -509,6 +564,31 @@ def _row_to_page(row) -> WikiPage:
         created_at=str(row["created_at"]),
         updated_at=str(row["updated_at"] or row["created_at"]),
     )
+
+
+def _row_to_learning_guide(row) -> LearningGuide:
+    return LearningGuide(
+        id=int(row["id"]),
+        project_id=int(row["project_id"]),
+        summary=str(row["summary"]),
+        question_answers=_json_dict_list(row["question_answers_json"]),
+        mainline=_json_dict_list(row["mainline_json"]),
+        core_concepts=_json_dict_list(row["core_concepts_json"]),
+        branches=_json_dict_list(row["branches_json"]),
+        details=_json_dict_list(row["details_json"]),
+        citations=json.loads(str(row["citations_json"] or "[]")),
+        created_at=str(row["created_at"]),
+    )
+
+
+def _json_dict_list(value: Any) -> list[dict[str, Any]]:
+    try:
+        parsed = json.loads(str(value or "[]"))
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [item for item in parsed if isinstance(item, dict)]
 
 
 def _row_to_section(row) -> WikiSection:

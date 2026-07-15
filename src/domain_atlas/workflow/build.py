@@ -25,6 +25,20 @@ class EmbeddingProvider(Protocol):
         ...
 
 
+REQUIRED_GUIDE_QUESTIONS = [
+    "是什么",
+    "为什么存在",
+    "如何工作",
+    "有哪些组成",
+    "有哪些流派/类型/方法论分支",
+    "代表人物/组织/关键贡献者",
+    "经典案例",
+    "最佳实践",
+    "失败案例/常见误区",
+    "未来趋势",
+]
+
+
 class KnowledgeBuildWorkflow:
     """Compile ingested chunks into structured Domain Atlas artifacts."""
 
@@ -158,7 +172,15 @@ Return a JSON object with exactly these keys:
   Use paths like wiki/entities/name, wiki/synthesis/name, wiki/queries/name.
   Each section should include heading, body_markdown, citations, source_citation_labels, source_chunk_uids, and links.
   Use [[Wiki Links]] inside section bodies where useful.
+- learning_guide: object with summary, question_answers, mainline, core_concepts, branches, details, citations.
+  question_answers must answer exactly these ten questions, in order: {", ".join(REQUIRED_GUIDE_QUESTIONS)}.
+  Each question answer object must include question, answer, citations. Answers must contain concrete domain knowledge from the chunks, not generic study advice.
+  mainline: 5 to 8 objects with title, explanation, citations. Explain the main narrative a learner should follow.
+  core_concepts: 8 to 12 objects with name, explanation, depends_on, citations. Use dependency-aware concepts.
+  branches: 3 to 6 objects with name, description, when_to_study, citations.
+  details: 3 to 6 objects with title, description, practice_or_example, citations.
 - learning_modules: exactly five objects with stage, title, objectives, readings, key_concepts, check_questions, practice_task, citations.
+  Modules should build from the learning_guide: start with mainline and core concepts, then branch into details.
 Keep the response compact and valid JSON. Prefer concise arrays and short encyclopedia-style paragraphs.
 """.strip()
 
@@ -179,6 +201,7 @@ def _validate_payload(payload: dict[str, Any]) -> None:
         "concepts",
         "concept_edges",
         "wiki_pages",
+        "learning_guide",
         "learning_modules",
     }
     missing = sorted(required - set(payload))
@@ -186,6 +209,15 @@ def _validate_payload(payload: dict[str, Any]) -> None:
         raise ValueError(f"Knowledge build payload missing keys: {', '.join(missing)}")
     if len(payload.get("learning_modules") or []) != 5:
         raise ValueError("Knowledge build must return exactly five learning modules.")
+    guide = payload.get("learning_guide")
+    if not isinstance(guide, dict):
+        raise ValueError("Knowledge build must return a learning guide object.")
+    question_answers = guide.get("question_answers") or []
+    if len(question_answers) != len(REQUIRED_GUIDE_QUESTIONS):
+        raise ValueError("Knowledge build learning guide must answer exactly ten key questions.")
+    questions = [str(item.get("question", "")) for item in question_answers if isinstance(item, dict)]
+    if questions != REQUIRED_GUIDE_QUESTIONS:
+        raise ValueError("Knowledge build learning guide key questions are missing or out of order.")
 
 
 def _with_workspace_pages(

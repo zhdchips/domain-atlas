@@ -121,6 +121,66 @@ def test_artifact_repository_persists_typed_workspace_paths(tmp_path):
     assert source_page.title == "Source Doc"
 
 
+def test_artifact_repository_persists_learning_guide(tmp_path):
+    database_path = tmp_path / "domain_atlas.sqlite3"
+    initialize_database(database_path)
+    project = DomainProjectRepository(database_path).create(CreateDomainProject(name="Learning Guide"))
+    repository = KnowledgeArtifactRepository(database_path)
+
+    repository.replace_project_artifacts(
+        project.id,
+        {
+            "wiki_pages": [],
+            "source_profiles": [],
+            "concepts": [],
+            "concept_edges": [],
+            "learning_guide": {
+                "summary": "领域速览。",
+                "question_answers": [
+                    {"question": "是什么", "answer": "领域定义。", "citations": ["S1-C1"]}
+                ],
+                "mainline": [
+                    {"title": "主线", "explanation": "先理解定义。", "citations": ["S1-C1"]}
+                ],
+                "core_concepts": [
+                    {
+                        "name": "核心概念",
+                        "explanation": "领域基础。",
+                        "depends_on": [],
+                        "citations": ["S1-C1"],
+                    }
+                ],
+                "branches": [
+                    {
+                        "name": "支线",
+                        "description": "进阶方向。",
+                        "when_to_study": "掌握主线之后。",
+                        "citations": ["S1-C1"],
+                    }
+                ],
+                "details": [
+                    {
+                        "title": "细节",
+                        "description": "可实践的细节。",
+                        "practice_or_example": "写一段总结。",
+                        "citations": ["S1-C1"],
+                    }
+                ],
+                "citations": ["S1-C1"],
+            },
+            "learning_modules": [],
+        },
+    )
+
+    guide = repository.get_learning_guide(project.id)
+
+    assert guide is not None
+    assert guide.summary == "领域速览。"
+    assert guide.question_answers[0]["question"] == "是什么"
+    assert guide.core_concepts[0]["depends_on"] == []
+    assert guide.citations == ["S1-C1"]
+
+
 def test_wiki_section_uids_are_project_scoped_and_deduplicated(tmp_path):
     database_path = tmp_path / "domain_atlas.sqlite3"
     initialize_database(database_path)
@@ -205,6 +265,38 @@ def test_wiki_page_workspace_columns_migrate_old_database(tmp_path):
     assert page is not None
     assert page.page_type == "concept"
     assert page.updated_at
+
+
+def test_learning_guides_table_is_created_for_existing_database(tmp_path):
+    database_path = tmp_path / "domain_atlas.sqlite3"
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE domain_projects (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                goal TEXT NOT NULL DEFAULT '',
+                level TEXT NOT NULL DEFAULT 'beginner',
+                language TEXT NOT NULL DEFAULT 'zh',
+                status TEXT NOT NULL DEFAULT 'draft',
+                build_status TEXT NOT NULL DEFAULT 'not_started',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
+    initialize_database(database_path)
+
+    with sqlite3.connect(database_path) as connection:
+        tables = {
+            str(row[0])
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            ).fetchall()
+        }
+
+    assert "learning_guides" in tables
 
 
 def test_wiki_sections_global_uid_constraint_migrates_to_project_scope(tmp_path):

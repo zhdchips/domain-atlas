@@ -49,6 +49,9 @@ def main() -> int:
             page.goto(f"{base_url}/domains/{project_id}/wiki/index", wait_until="networkidle")
             page.locator(".wiki-workspace").wait_for(state="visible", timeout=5000)
             _assert_wiki_layout(page)
+            page.goto(f"{base_url}/domains/{project_id}/path", wait_until="networkidle")
+            page.locator(".qa-grid").wait_for(state="visible", timeout=5000)
+            _assert_learning_guide_layout(page)
             browser.close()
     except PlaywrightError as exc:
         print(f"FAIL browser-e2e: Playwright could not run Chromium: {exc}")
@@ -64,7 +67,7 @@ def main() -> int:
             _stop_server(server)
 
     shutil.rmtree(workdir, ignore_errors=True)
-    print("PASS browser-e2e wiki layout")
+    print("PASS browser-e2e wiki and learning guide layout")
     return 0
 
 
@@ -83,7 +86,23 @@ def _create_wiki_fixture(settings: Settings) -> int:
             "source_profiles": [],
             "concepts": [],
             "concept_edges": [],
-            "learning_modules": [],
+            "learning_guide": _learning_guide_payload(),
+            "learning_modules": [
+                {
+                    "stage": stage,
+                    "title": title,
+                    "objectives": ["理解领域主线"],
+                    "readings": ["Wiki Index [S1-C1]"],
+                    "key_concepts": ["Provenance"],
+                    "check_questions": ["为什么需要 provenance？"],
+                    "practice_task": "用一段话说明 citation 和 provenance 的关系。",
+                    "citations": ["S1-C1"],
+                }
+                for stage, title in enumerate(
+                    ["入门认知", "核心概念", "关键方法", "实践应用", "进阶专题"],
+                    start=1,
+                )
+            ],
             "wiki_pages": [
                 _page("index", "wiki/index", "Wiki Index", "Wiki 工作区的中心目录。"),
                 _page("log", "wiki/log", "Wiki Log", "Wiki 工作区的构建日志。"),
@@ -103,6 +122,75 @@ def _create_wiki_fixture(settings: Settings) -> int:
         },
     )
     return project.id
+
+
+def _learning_guide_payload() -> dict[str, Any]:
+    questions = [
+        "是什么",
+        "为什么存在",
+        "如何工作",
+        "有哪些组成",
+        "有哪些流派/类型/方法论分支",
+        "代表人物/组织/关键贡献者",
+        "经典案例",
+        "最佳实践",
+        "失败案例/常见误区",
+        "未来趋势",
+    ]
+    return {
+        "summary": "Domain Atlas 是用于生成可溯源领域 Wiki 和学习导览的系统。[S1-C1]",
+        "question_answers": [
+            {
+                "question": question,
+                "answer": f"{question}：学习者应围绕资料摄取、Wiki 结构、citation 和 provenance 建立知识地图。[S1-C1]",
+                "citations": ["S1-C1"],
+            }
+            for question in questions
+        ],
+        "mainline": [
+            {
+                "title": "从资料到可溯源 Wiki",
+                "explanation": "先摄取权威资料，再生成 Wiki 页面、段落和引用证据。[S1-C1]",
+                "citations": ["S1-C1"],
+            },
+            {
+                "title": "从 Wiki 到学习路线",
+                "explanation": "学习路线基于主线概念展开，并延伸到支线主题。[S1-C1]",
+                "citations": ["S1-C1"],
+            },
+        ],
+        "core_concepts": [
+            {
+                "name": "Provenance",
+                "explanation": "记录答案和页面内容可追溯到哪些证据。[S1-C1]",
+                "depends_on": ["Citation"],
+                "citations": ["S1-C1"],
+            },
+            {
+                "name": "WikiSection",
+                "explanation": "可检索、可嵌入、可引用的 Wiki 段落。[S1-C1]",
+                "depends_on": ["Wiki Page"],
+                "citations": ["S1-C1"],
+            },
+        ],
+        "branches": [
+            {
+                "name": "检索问答",
+                "description": "围绕 WikiSection 和 citation 生成可溯源答案。[S1-C1]",
+                "when_to_study": "理解 Wiki 工作区后。",
+                "citations": ["S1-C1"],
+            }
+        ],
+        "details": [
+            {
+                "title": "引用完整性",
+                "description": "检查页面和答案是否保留证据标签。[S1-C1]",
+                "practice_or_example": "验证一个回答至少包含一个 Wiki citation。",
+                "citations": ["S1-C1"],
+            }
+        ],
+        "citations": ["S1-C1"],
+    }
 
 
 def _page(page_type: str, path: str, title: str, summary: str) -> dict[str, Any]:
@@ -217,6 +305,62 @@ def _assert_wiki_layout(page) -> None:
         "verified wiki layout "
         f"columns={metrics['workspaceColumns']} "
         f"tree={metrics['treeWidth']:.0f}px article={metrics['articleWidth']:.0f}px"
+    )
+
+
+def _assert_learning_guide_layout(page) -> None:
+    metrics = page.evaluate(
+        """
+        () => {
+          const qaGrid = document.querySelector(".qa-grid");
+          const columns = document.querySelector(".learning-columns");
+          const firstCard = document.querySelector(".qa-card");
+          const hero = document.querySelector(".learning-guide-hero");
+          const qaBox = qaGrid.getBoundingClientRect();
+          const columnsBox = columns.getBoundingClientRect();
+          return {
+            text: document.body.innerText,
+            qaDisplay: getComputedStyle(qaGrid).display,
+            qaColumns: getComputedStyle(qaGrid).gridTemplateColumns,
+            columnsDisplay: getComputedStyle(columns).display,
+            columnsTemplate: getComputedStyle(columns).gridTemplateColumns,
+            qaCount: document.querySelectorAll(".qa-card").length,
+            moduleCount: document.querySelectorAll(".learning-module").length,
+            firstCardHeight: firstCard.getBoundingClientRect().height,
+            heroWidth: hero.getBoundingClientRect().width,
+            qaWidth: qaBox.width,
+            columnsWidth: columnsBox.width,
+          };
+        }
+        """
+    )
+    failures: list[str] = []
+    if "领域速览" not in metrics["text"] or "关键问题" not in metrics["text"]:
+        failures.append("learning guide semantic headings are missing")
+    if "未来趋势" not in metrics["text"]:
+        failures.append("ten-question guide does not include future trends")
+    if metrics["qaDisplay"] != "grid":
+        failures.append(f"qa grid display is {metrics['qaDisplay']!r}, expected 'grid'")
+    if metrics["columnsDisplay"] != "grid":
+        failures.append(f"learning columns display is {metrics['columnsDisplay']!r}, expected 'grid'")
+    if metrics["qaCount"] != 10:
+        failures.append(f"expected 10 question cards, got {metrics['qaCount']}")
+    if metrics["moduleCount"] != 5:
+        failures.append(f"expected 5 learning modules, got {metrics['moduleCount']}")
+    if metrics["firstCardHeight"] < 80:
+        failures.append(f"first question card is too short: {metrics['firstCardHeight']:.1f}")
+    if metrics["heroWidth"] < 700 or metrics["qaWidth"] < 700 or metrics["columnsWidth"] < 700:
+        failures.append(
+            "learning guide content is unexpectedly narrow: "
+            f"hero={metrics['heroWidth']:.1f} qa={metrics['qaWidth']:.1f} "
+            f"columns={metrics['columnsWidth']:.1f}"
+        )
+    if failures:
+        raise RuntimeError("; ".join(failures))
+    print(
+        "verified learning guide layout "
+        f"qa_columns={metrics['qaColumns']} "
+        f"content_columns={metrics['columnsTemplate']}"
     )
 
 

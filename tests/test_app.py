@@ -8,6 +8,20 @@ from domain_atlas.providers.vector_index import RetrievedChunk, RetrievedWikiSec
 from domain_atlas.web.app import create_app
 
 
+GUIDE_QUESTIONS = [
+    "是什么",
+    "为什么存在",
+    "如何工作",
+    "有哪些组成",
+    "有哪些流派/类型/方法论分支",
+    "代表人物/组织/关键贡献者",
+    "经典案例",
+    "最佳实践",
+    "失败案例/常见误区",
+    "未来趋势",
+]
+
+
 class FakeDiscoveryProvider:
     def search(self, query: str, limit: int) -> list[SourceCandidateDraft]:
         assert query
@@ -109,6 +123,49 @@ class FakeChatProvider:
                     "citations": ["S1-C1"],
                 }
             ],
+            "learning_guide": {
+                "summary": "Agent 是使用工具完成任务的目标导向系统。[S1-C1]",
+                "question_answers": [
+                    {
+                        "question": question,
+                        "answer": f"{question}：Agent 通过规划、工具调用和反馈来完成任务。[S1-C1]",
+                        "citations": ["S1-C1"],
+                    }
+                    for question in GUIDE_QUESTIONS
+                ],
+                "mainline": [
+                    {
+                        "title": "目标、规划、工具、反馈",
+                        "explanation": "学习主线从目标拆解进入工具调用，再理解反馈修正。[S1-C1]",
+                        "citations": ["S1-C1"],
+                    }
+                ],
+                "core_concepts": [
+                    {
+                        "name": "Agent",
+                        "explanation": "Agent 使用工具完成任务。[S1-C1]",
+                        "depends_on": [],
+                        "citations": ["S1-C1"],
+                    }
+                ],
+                "branches": [
+                    {
+                        "name": "工具使用",
+                        "description": "关注 Agent 如何选择并调用工具。[S1-C1]",
+                        "when_to_study": "掌握基础定义后。",
+                        "citations": ["S1-C1"],
+                    }
+                ],
+                "details": [
+                    {
+                        "title": "反馈修正",
+                        "description": "Agent 根据工具结果调整下一步动作。[S1-C1]",
+                        "practice_or_example": "解释一次工具调用后的反馈修正。",
+                        "citations": ["S1-C1"],
+                    }
+                ],
+                "citations": ["S1-C1"],
+            },
             "learning_modules": [
                 {
                     "stage": stage,
@@ -317,6 +374,13 @@ def test_build_knowledge_route_renders_wiki_and_learning_path(tmp_path):
     assert client.get("/domains/1/wiki/index").status_code == 200
     assert client.get("/domains/1/wiki/wiki/index").status_code == 200
     path = client.get("/domains/1/path")
+    assert "学习导览" in path.text
+    assert "领域速览" in path.text
+    assert "关键问题" in path.text
+    assert "领域主线" in path.text
+    assert "支线拓展" in path.text
+    assert "为什么存在" in path.text
+    assert "目标、规划、工具、反馈" in path.text
     assert "入门认知" in path.text
     assert "进阶专题" in path.text
     assert any(call[0] == "wiki" and call[1] == 1 and call[2] >= 7 for call in vector_index.calls)

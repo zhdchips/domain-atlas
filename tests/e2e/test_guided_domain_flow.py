@@ -77,6 +77,12 @@ def test_guided_domain_flow_navigation_and_qa_are_deterministic(tmp_path):
 
     learning_path = client.get("/domains/1/path")
     assert learning_path.status_code == 200
+    assert "领域速览" in learning_path.text
+    assert "关键问题" in learning_path.text
+    assert "领域主线" in learning_path.text
+    assert "支线拓展" in learning_path.text
+    assert "为什么存在" in learning_path.text
+    assert "从数据建设到治理闭环" in learning_path.text
     assert "入门认知" in learning_path.text
     assert "画出 Dataphin 的核心对象关系" in learning_path.text
 
@@ -241,6 +247,20 @@ class DeterministicQAChatProvider:
         }
 
 
+GUIDE_QUESTIONS = [
+    "是什么",
+    "为什么存在",
+    "如何工作",
+    "有哪些组成",
+    "有哪些流派/类型/方法论分支",
+    "代表人物/组织/关键贡献者",
+    "经典案例",
+    "最佳实践",
+    "失败案例/常见误区",
+    "未来趋势",
+]
+
+
 def _artifact_payload(source_id: int) -> dict:
     return {
         "source_profiles": [
@@ -352,6 +372,49 @@ def _artifact_payload(source_id: int) -> dict:
                 "citations": [],
             },
         ],
+        "learning_guide": {
+            "summary": "Dataphin 是一体化数据建设与治理平台，连接数据建设、治理和资产管理。[S1-C1]",
+            "question_answers": [
+                {
+                    "question": question,
+                    "answer": f"{question}：Dataphin 学习应围绕数据建设、治理、标准和资产流转展开。[S1-C1]",
+                    "citations": ["S1-C1"],
+                }
+                for question in GUIDE_QUESTIONS
+            ],
+            "mainline": [
+                {
+                    "title": "从数据建设到治理闭环",
+                    "explanation": "先理解平台定位，再串起数据标准、建模、治理和资产管理。[S1-C1]",
+                    "citations": ["S1-C1"],
+                }
+            ],
+            "core_concepts": [
+                {
+                    "name": "Dataphin",
+                    "explanation": "一体化数据建设与治理平台。[S1-C1]",
+                    "depends_on": [],
+                    "citations": ["S1-C1"],
+                }
+            ],
+            "branches": [
+                {
+                    "name": "数据治理",
+                    "description": "围绕标准、质量和资产管理展开。[S1-C1]",
+                    "when_to_study": "掌握 Dataphin 定位后。",
+                    "citations": ["S1-C1"],
+                }
+            ],
+            "details": [
+                {
+                    "title": "核心对象关系",
+                    "description": "把业务、数据标准和资产对象串成关系图。[S1-C1]",
+                    "practice_or_example": "画出 Dataphin 的核心对象关系。",
+                    "citations": ["S1-C1"],
+                }
+            ],
+            "citations": ["S1-C1"],
+        },
         "learning_modules": [
             {
                 "stage": stage,

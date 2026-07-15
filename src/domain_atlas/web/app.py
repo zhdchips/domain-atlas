@@ -414,11 +414,18 @@ def create_app(
         project = project_repository().get(project_id)
         if project is None:
             raise HTTPException(status_code=404, detail="Domain project not found.")
-        modules = artifact_repository().list_learning_modules(project_id)
+        repository = artifact_repository()
+        guide = repository.get_learning_guide(project_id)
+        modules = repository.list_learning_modules(project_id)
         return templates.TemplateResponse(
             request,
             "learning_path.html",
-            {"app_name": app_settings.app_name, "project": project, "modules": modules},
+            {
+                "app_name": app_settings.app_name,
+                "project": project,
+                "guide": guide,
+                "modules": modules,
+            },
         )
 
     @app.get("/domains/{project_id}/qa", response_class=HTMLResponse)

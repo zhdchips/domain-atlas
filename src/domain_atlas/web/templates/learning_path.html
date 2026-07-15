@@ -2,33 +2,145 @@
 
 {% block content %}
 <section class="intro">
-  <p class="eyebrow">学习路线</p>
+  <p class="eyebrow">学习导览</p>
   <h1>{{ project.name }}</h1>
-  <p>默认五阶段：入门认知、核心概念、关键方法、实践应用、进阶专题。</p>
+  <p>先理解领域是什么、为什么存在、如何工作，再沿主线进入核心概念、支线和实践细节。</p>
 </section>
+
+{% if guide %}
+  <section class="panel learning-guide-hero">
+    <p class="eyebrow">领域速览</p>
+    <h2>先建立整体心智模型</h2>
+    <p>{{ guide.summary }}</p>
+    {% if guide.citations %}
+      <p class="muted">Citations: {{ ", ".join(guide.citations) }}</p>
+    {% endif %}
+  </section>
+
+  <section class="panel">
+    <p class="eyebrow">关键问题</p>
+    <h2>理解这个领域前先回答什么</h2>
+    <div class="qa-grid">
+      {% for item in guide.question_answers %}
+        <article class="qa-card">
+          <h3>{{ item.get("question", "问题") }}</h3>
+          <p>{{ item.get("answer", "") }}</p>
+          {% if item.get("citations") %}
+            <small>Citations: {{ ", ".join(item.get("citations")) }}</small>
+          {% endif %}
+        </article>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="learning-columns">
+    <article class="panel">
+      <p class="eyebrow">领域主线</p>
+      <h2>抓住主干叙事</h2>
+      <ol class="guide-list">
+        {% for item in guide.mainline %}
+          <li>
+            <strong>{{ item.get("title", "主线节点") }}</strong>
+            <span>{{ item.get("explanation", "") }}</span>
+            {% if item.get("citations") %}<small>{{ ", ".join(item.get("citations")) }}</small>{% endif %}
+          </li>
+        {% endfor %}
+      </ol>
+    </article>
+
+    <article class="panel">
+      <p class="eyebrow">核心概念</p>
+      <h2>先掌握这些依赖点</h2>
+      <div class="concept-stack">
+        {% for concept in guide.core_concepts %}
+          <section>
+            <h3>{{ concept.get("name", "概念") }}</h3>
+            <p>{{ concept.get("explanation", "") }}</p>
+            {% if concept.get("depends_on") %}
+              <small>依赖：{{ ", ".join(concept.get("depends_on")) }}</small>
+            {% endif %}
+            {% if concept.get("citations") %}
+              <small>Citations: {{ ", ".join(concept.get("citations")) }}</small>
+            {% endif %}
+          </section>
+        {% endfor %}
+      </div>
+    </article>
+  </section>
+
+  <section class="learning-columns">
+    <article class="panel">
+      <p class="eyebrow">支线拓展</p>
+      <h2>主线之外的方向</h2>
+      <div class="concept-stack">
+        {% for branch in guide.branches %}
+          <section>
+            <h3>{{ branch.get("name", "支线") }}</h3>
+            <p>{{ branch.get("description", "") }}</p>
+            {% if branch.get("when_to_study") %}<small>学习时机：{{ branch.get("when_to_study") }}</small>{% endif %}
+            {% if branch.get("citations") %}<small>Citations: {{ ", ".join(branch.get("citations")) }}</small>{% endif %}
+          </section>
+        {% endfor %}
+      </div>
+    </article>
+
+    <article class="panel">
+      <p class="eyebrow">细节深化</p>
+      <h2>进阶专题和实践线索</h2>
+      <div class="concept-stack">
+        {% for detail in guide.details %}
+          <section>
+            <h3>{{ detail.get("title", "细节") }}</h3>
+            <p>{{ detail.get("description", "") }}</p>
+            {% if detail.get("practice_or_example") %}<small>实践/例子：{{ detail.get("practice_or_example") }}</small>{% endif %}
+            {% if detail.get("citations") %}<small>Citations: {{ ", ".join(detail.get("citations")) }}</small>{% endif %}
+          </section>
+        {% endfor %}
+      </div>
+    </article>
+  </section>
+{% else %}
+  <section class="panel">
+    <p class="muted">这个项目还没有新的学习导览。请重新执行知识构建以生成领域速览、关键问题、主线、核心概念和支线拓展。</p>
+  </section>
+{% endif %}
 
 {% if modules %}
   <section class="artifact-list">
+    <div>
+      <p class="eyebrow">阶段式学习路线</p>
+      <h2>从主干到支线逐步推进</h2>
+    </div>
     {% for module in modules %}
-      <article class="panel">
+      <article class="panel learning-module">
         <p class="eyebrow">阶段 {{ module.stage }}</p>
         <h2>{{ module.title }}</h2>
-        <h3>目标</h3>
-        <ul>
-          {% for objective in module.objectives %}<li>{{ objective }}</li>{% endfor %}
-        </ul>
-        <h3>阅读材料</h3>
-        <ul>
-          {% for reading in module.readings %}<li>{{ reading }}</li>{% endfor %}
-        </ul>
-        <h3>关键概念</h3>
-        <ul>
-          {% for concept in module.key_concepts %}<li>{{ concept }}</li>{% endfor %}
-        </ul>
-        <h3>检查问题</h3>
-        <ul>
-          {% for question in module.check_questions %}<li>{{ question }}</li>{% endfor %}
-        </ul>
+        <div class="module-grid">
+          <section>
+            <h3>目标</h3>
+            <ul>
+              {% for objective in module.objectives %}<li>{{ objective }}</li>{% endfor %}
+            </ul>
+          </section>
+          <section>
+            <h3>阅读材料</h3>
+            <ul>
+              {% for reading in module.readings %}<li>{{ reading }}</li>{% endfor %}
+            </ul>
+          </section>
+          <section>
+            <h3>关键概念</h3>
+            <ul>
+              {% for concept in module.key_concepts %}<li>{{ concept }}</li>{% endfor %}
+            </ul>
+          </section>
+          <section>
+            <h3>检查问题</h3>
+            <ul>
+              {% for question in module.check_questions %}<li>{{ question }}</li>{% endfor %}
+            </ul>
+          </section>
+        </div>
         <h3>实践任务</h3>
         <p>{{ module.practice_task }}</p>
         <p class="muted">Citations: {{ ", ".join(module.citations) }}</p>

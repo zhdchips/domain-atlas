@@ -108,6 +108,7 @@ def _run_live_e2e(workdir: Path) -> int:
     artifacts = KnowledgeArtifactRepository(settings.database_path)
     pages = artifacts.list_wiki_pages(project_id)
     sections = artifacts.list_wiki_sections(project_id)
+    guide = artifacts.get_learning_guide(project_id)
     modules = artifacts.list_learning_modules(project_id)
     concept_count = _count_rows(settings.database_path, "concepts", project_id)
     paths = {page.path for page in pages}
@@ -123,11 +124,21 @@ def _run_live_e2e(workdir: Path) -> int:
         raise RuntimeError(f"expected more than 8 wiki sections to exercise embedding batching, got {len(sections)}")
     if len(modules) != 5:
         raise RuntimeError(f"expected 5 learning modules, got {len(modules)}")
+    if guide is None:
+        raise RuntimeError("build did not create a learning guide")
+    if len(guide.question_answers) != 10:
+        raise RuntimeError(f"expected 10 guide question answers, got {len(guide.question_answers)}")
+    guide_questions = {str(item.get("question")) for item in guide.question_answers}
+    if "是什么" not in guide_questions or "未来趋势" not in guide_questions:
+        raise RuntimeError(f"guide is missing required key questions: {sorted(guide_questions)}")
+    if not guide.mainline or not guide.core_concepts:
+        raise RuntimeError("guide did not include mainline and core concepts")
     if concept_count < 6:
         raise RuntimeError(f"expected at least 6 concepts, got {concept_count}")
     print(
         "built artifacts "
-        f"pages={len(pages)} sections={len(sections)} modules={len(modules)} concepts={concept_count}"
+        f"pages={len(pages)} sections={len(sections)} modules={len(modules)} "
+        f"guide_questions={len(guide.question_answers)} concepts={concept_count}"
     )
 
     for route in ("wiki", "path", "qa"):

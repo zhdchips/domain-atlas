@@ -14,6 +14,20 @@ class FakeChatProvider:
         return build_payload()
 
 
+GUIDE_QUESTIONS = [
+    "是什么",
+    "为什么存在",
+    "如何工作",
+    "有哪些组成",
+    "有哪些流派/类型/方法论分支",
+    "代表人物/组织/关键贡献者",
+    "经典案例",
+    "最佳实践",
+    "失败案例/常见误区",
+    "未来趋势",
+]
+
+
 def build_payload():
     return {
         "source_profiles": [
@@ -51,6 +65,7 @@ def build_payload():
                 "citations": ["S1-C1"],
             }
         ],
+        "learning_guide": _learning_guide_payload(),
         "learning_modules": [
             {
                 "stage": stage,
@@ -67,6 +82,52 @@ def build_payload():
                 start=1,
             )
         ],
+    }
+
+
+def _learning_guide_payload():
+    return {
+        "summary": "Agent 是围绕目标规划、调用工具并利用反馈完成任务的系统。[S1-C1]",
+        "question_answers": [
+            {
+                "question": question,
+                "answer": f"{question}：Agent 学习需要围绕规划、工具使用和反馈闭环展开。[S1-C1]",
+                "citations": ["S1-C1"],
+            }
+            for question in GUIDE_QUESTIONS
+        ],
+        "mainline": [
+            {
+                "title": "从目标到工具执行",
+                "explanation": "先理解 Agent 如何把目标拆成步骤，再通过工具完成外部动作。[S1-C1]",
+                "citations": ["S1-C1"],
+            }
+        ],
+        "core_concepts": [
+            {
+                "name": "Agent",
+                "explanation": "能够规划并使用工具完成任务的系统。[S1-C1]",
+                "depends_on": [],
+                "citations": ["S1-C1"],
+            }
+        ],
+        "branches": [
+            {
+                "name": "Tool Use",
+                "description": "研究 Agent 如何选择和调用外部工具。[S1-C1]",
+                "when_to_study": "理解 Agent 基本闭环之后。",
+                "citations": ["S1-C1"],
+            }
+        ],
+        "details": [
+            {
+                "title": "工具失败处理",
+                "description": "关注工具调用失败后的重试、降级和证据保留。[S1-C1]",
+                "practice_or_example": "模拟一次工具失败并写出恢复步骤。",
+                "citations": ["S1-C1"],
+            }
+        ],
+        "citations": ["S1-C1"],
     }
 
 
@@ -102,6 +163,7 @@ def test_knowledge_build_workflow_persists_artifacts(tmp_path):
 
     repository = KnowledgeArtifactRepository(database_path)
     pages = repository.list_wiki_pages(project.id)
+    guide = repository.get_learning_guide(project.id)
     modules = repository.list_learning_modules(project.id)
     updated_project = DomainProjectRepository(database_path).get(project.id)
     paths = {page.path: page for page in pages}
@@ -116,6 +178,9 @@ def test_knowledge_build_workflow_persists_artifacts(tmp_path):
     agent_page = paths["wiki/concepts/agent"]
     assert agent_page.title == "Agent"
     assert agent_page.citations == ["S1-C1"]
+    assert guide is not None
+    assert guide.summary.startswith("Agent 是围绕目标")
+    assert [item["question"] for item in guide.question_answers] == GUIDE_QUESTIONS
     assert len(modules) == 5
     assert modules[0].title == "入门认知"
     assert updated_project is not None

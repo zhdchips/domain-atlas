@@ -180,6 +180,19 @@ CREATE TABLE IF NOT EXISTS wiki_links (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS learning_guides (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL UNIQUE REFERENCES domain_projects(id) ON DELETE CASCADE,
+    summary TEXT NOT NULL DEFAULT '',
+    question_answers_json TEXT NOT NULL DEFAULT '[]',
+    mainline_json TEXT NOT NULL DEFAULT '[]',
+    core_concepts_json TEXT NOT NULL DEFAULT '[]',
+    branches_json TEXT NOT NULL DEFAULT '[]',
+    details_json TEXT NOT NULL DEFAULT '[]',
+    citations_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS learning_modules (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id INTEGER NOT NULL REFERENCES domain_projects(id) ON DELETE CASCADE,
@@ -208,6 +221,9 @@ ON wiki_links(project_id, source_page_slug, target_page_slug);
 
 CREATE INDEX IF NOT EXISTS idx_learning_modules_project
 ON learning_modules(project_id, stage);
+
+CREATE INDEX IF NOT EXISTS idx_learning_guides_project
+ON learning_guides(project_id);
 
 CREATE TABLE IF NOT EXISTS qa_records (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
