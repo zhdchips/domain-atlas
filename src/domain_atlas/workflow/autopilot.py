@@ -141,20 +141,35 @@ class AutopilotWorkflow:
             )
 
             source_ids: list[int] = []
+            failed_sources: list[dict[str, object]] = []
             for candidate in selected:
                 accepted = self.candidate_repository.accept(project_id, candidate.id)
                 if accepted is None:
                     continue
                 source = self._source_from_candidate(project_id, accepted)
+                try:
+                    self.ingestion_runner.ingest_source(source.id)
+                except Exception as exc:
+                    failed_sources.append(
+                        {
+                            "source_id": source.id,
+                            "candidate_id": candidate.id,
+                            "title": candidate.title,
+                            "url": candidate.url,
+                            "error": str(exc),
+                        }
+                    )
+                    continue
                 source_ids.append(source.id)
-                self.ingestion_runner.ingest_source(source.id)
 
             self.workflow_repository.record_step(
                 run_id,
                 step_name="ingest_sources",
-                status="completed",
-                output={"source_ids": source_ids},
+                status="completed" if source_ids else "failed",
+                output={"source_ids": source_ids, "failed_sources": failed_sources},
             )
+            if not source_ids:
+                raise ValueError("All selected sources failed ingestion.")
             self.build_runner.run(project_id)
             self.workflow_repository.record_step(
                 run_id,

@@ -28,6 +28,17 @@ class FakeIngestionRunner:
         self.source_ids.append(source_id)
 
 
+class PartiallyFailingIngestionRunner:
+    def __init__(self, failing_source_id: int) -> None:
+        self.failing_source_id = failing_source_id
+        self.source_ids: list[int] = []
+
+    def ingest_source(self, source_id: int):
+        if source_id == self.failing_source_id:
+            raise ValueError("URL fetch failed.")
+        self.source_ids.append(source_id)
+
+
 class FakeBuildRunner:
     def __init__(self) -> None:
         self.project_ids: list[int] = []
@@ -117,6 +128,36 @@ def test_autopilot_workflow_creates_sources_ingests_and_builds(tmp_path):
         "ingest_sources",
         "build_knowledge",
     ]
+
+
+def test_autopilot_continues_when_one_source_fails_ingestion(tmp_path):
+    database_path = tmp_path / "domain_atlas.sqlite3"
+    initialize_database(database_path)
+    project = DomainProjectRepository(database_path).create(
+        CreateDomainProject(name="Dataphin", interaction_mode="guided")
+    )
+    drafts = [
+        _draft("docs", "https://help.aliyun.com/dataphin", "official_docs", 0.95),
+        _draft("product", "https://www.alibabacloud.com/product/dataphin", "official_docs", 0.8),
+    ]
+    build = FakeBuildRunner()
+
+    result = AutopilotWorkflow(
+        database_path=database_path,
+        discovery_provider=FakeDiscoveryProvider(drafts),
+        ingestion_runner=PartiallyFailingIngestionRunner(failing_source_id=1),
+        build_runner=build,
+        search_limit=12,
+    ).run(project.id)
+
+    assert result.source_ids == [2]
+    assert build.project_ids == [project.id]
+
+    runs = WorkflowRepository(database_path).list_for_project(project.id)
+    ingest_step = next(step for step in runs[0].steps if step.step_name == "ingest_sources")
+    assert ingest_step.output["source_ids"] == [2]
+    assert ingest_step.output["failed_sources"][0]["source_id"] == 1
+    assert ingest_step.output["failed_sources"][0]["error"] == "URL fetch failed."
 
 
 def _draft(
