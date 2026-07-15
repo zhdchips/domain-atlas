@@ -48,6 +48,8 @@ def test_chroma_vector_index_upserts_and_queries_wiki_sections(tmp_path):
         source_chunk_uids=["chunk:1"],
         source_citation_labels=["S1-C1"],
         links=["Tool Use"],
+        page_type="concept",
+        page_path="wiki/concepts/agent",
     )
 
     index.upsert_wiki_sections(project_id=1, sections=[section], embeddings=[[0.1, 0.2]])
@@ -56,4 +58,6 @@ def test_chroma_vector_index_upserts_and_queries_wiki_sections(tmp_path):
     assert len(hits) == 1
     assert hits[0].section_uid == "agent#1"
     assert hits[0].page_slug == "agent"
+    assert hits[0].metadata["page_type"] == "concept"
+    assert hits[0].metadata["page_path"] == "wiki/concepts/agent"
     assert hits[0].source_citation_labels == ["S1-C1"]

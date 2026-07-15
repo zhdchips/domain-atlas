@@ -174,6 +174,8 @@ class ChromaVectorIndex:
                     "project_id": section.project_id,
                     "page_id": section.page_id,
                     "page_slug": section.page_slug,
+                    "page_type": section.page_type,
+                    "page_path": section.page_path,
                     "heading": section.heading,
                     "ordinal": section.ordinal,
                     "citations": "|".join(section.citations),

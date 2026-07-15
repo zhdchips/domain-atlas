@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sqlite3
+
 from domain_atlas.core.db import initialize_database
 from domain_atlas.domain.artifacts import KnowledgeArtifactRepository
 from domain_atlas.domain.projects import CreateDomainProject, DomainProjectRepository
@@ -65,10 +67,96 @@ def test_artifact_repository_persists_wiki_sections_and_links(tmp_path):
     links = repository.list_wiki_links(project.id)
 
     assert [page.slug for page in pages] == ["agent", "tool-use"]
+    assert pages[0].page_type == "concept"
+    assert pages[0].path == "wiki/concepts/agent"
+    assert pages[0].updated_at
     assert sections[0].section_uid == "agent#definition"
     assert sections[0].source_citation_labels == ["S1-C1"]
     assert links[0].source_page_slug == "agent"
     assert links[0].target_page_slug == "tool-use"
+
+
+def test_artifact_repository_persists_typed_workspace_paths(tmp_path):
+    database_path = tmp_path / "domain_atlas.sqlite3"
+    initialize_database(database_path)
+    project = DomainProjectRepository(database_path).create(CreateDomainProject(name="LLM Wiki"))
+    repository = KnowledgeArtifactRepository(database_path)
+
+    repository.replace_project_artifacts(
+        project.id,
+        {
+            "wiki_pages": [
+                {
+                    "slug": "index",
+                    "page_type": "index",
+                    "path": "wiki/index",
+                    "title": "Wiki Index",
+                    "topic_path": "index",
+                    "summary": "索引。",
+                    "body_markdown": "# Wiki Index",
+                },
+                {
+                    "slug": "source-doc",
+                    "page_type": "source",
+                    "path": "wiki/sources/source-doc",
+                    "title": "Source Doc",
+                    "topic_path": "sources/Source Doc",
+                    "summary": "来源摘要。",
+                    "body_markdown": "来源摘要。",
+                },
+            ],
+            "source_profiles": [],
+            "concepts": [],
+            "concept_edges": [],
+            "learning_modules": [],
+        },
+    )
+
+    groups = repository.list_wiki_page_groups(project.id)
+    source_page = repository.get_wiki_page_by_path(project.id, "wiki/sources/source-doc")
+
+    assert groups["index"][0].path == "wiki/index"
+    assert groups["source"][0].page_type == "source"
+    assert source_page is not None
+    assert source_page.title == "Source Doc"
+
+
+def test_wiki_page_workspace_columns_migrate_old_database(tmp_path):
+    database_path = tmp_path / "domain_atlas.sqlite3"
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE wiki_pages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id INTEGER NOT NULL,
+                slug TEXT NOT NULL DEFAULT '',
+                title TEXT NOT NULL,
+                topic_path TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                body_markdown TEXT NOT NULL,
+                citations_json TEXT NOT NULL DEFAULT '[]',
+                revision INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO wiki_pages (
+                project_id, slug, title, topic_path, summary, body_markdown, citations_json
+            )
+            VALUES (1, 'agent', 'Agent', 'Agent', 'summary', 'body', '[]')
+            """
+        )
+
+    initialize_database(database_path)
+
+    repository = KnowledgeArtifactRepository(database_path)
+    page = repository.get_wiki_page_by_path(1, "wiki/concepts/agent")
+
+    assert page is not None
+    assert page.page_type == "concept"
+    assert page.updated_at
 
 
 def test_wiki_lint_detects_missing_citations_orphans_and_duplicate_slugs(tmp_path):

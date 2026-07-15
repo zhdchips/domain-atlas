@@ -267,6 +267,84 @@ button {
   white-space: pre-wrap;
 }
 
+.wiki-workspace {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 24px;
+  margin-top: 32px;
+  align-items: start;
+}
+
+.wiki-tree {
+  display: grid;
+  gap: 16px;
+  position: sticky;
+  top: 24px;
+}
+
+.wiki-tree-group {
+  display: grid;
+  gap: 8px;
+}
+
+.wiki-tree-group h2 {
+  margin: 0;
+  color: #334155;
+  font-size: 14px;
+  text-transform: uppercase;
+}
+
+.wiki-tree-link {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid #dde2ea;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1f2937;
+  text-decoration: none;
+}
+
+.wiki-tree-link.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.wiki-tree-link span {
+  color: #64748b;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.wiki-page {
+  margin-top: 0;
+}
+
+.metadata-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.metadata-grid div {
+  padding: 12px;
+  border: 1px solid #dde2ea;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.metadata-grid dt {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.metadata-grid dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+
 .two-column {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -296,7 +374,13 @@ button {
   .workflow-grid,
   .candidate-item,
   .source-item,
-  .two-column {
+  .two-column,
+  .wiki-workspace,
+  .metadata-grid {
     grid-template-columns: 1fr;
+  }
+
+  .wiki-tree {
+    position: static;
   }
 }

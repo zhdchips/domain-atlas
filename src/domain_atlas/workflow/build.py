@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import re
+from copy import deepcopy
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -72,6 +75,16 @@ class KnowledgeBuildWorkflow:
                 user_prompt=user_prompt,
             )
             _validate_payload(payload)
+            sources = [
+                self.source_repository.get(source_id)
+                for source_id in sorted({chunk.source_id for chunk in chunks})
+            ]
+            payload = _with_workspace_pages(
+                payload=payload,
+                domain_name=project.name,
+                chunks=chunks,
+                sources=[source for source in sources if source is not None],
+            )
             self.workflow_repository.record_step(
                 run_id,
                 step_name="generate_artifacts",
@@ -138,7 +151,9 @@ Return a JSON object with exactly these keys:
 - concepts: array of objects with name, definition, prerequisites, related, citations.
 - concept_edges: array of objects with source, target, relation, citations.
 - wiki_pages: array of objects with title, topic_path, summary, body_markdown, citations.
-  Each wiki page should include a stable slug and sections array when possible.
+  Each wiki page should include page_type, path, stable slug, and sections array when possible.
+  Use page_type values: source, concept, entity, synthesis, query.
+  Use paths like wiki/sources/name, wiki/concepts/name, wiki/entities/name, wiki/synthesis/name.
   Each section should include heading, body_markdown, citations, source_citation_labels, source_chunk_uids, and links.
   Use [[Wiki Links]] inside section bodies where useful.
 - learning_modules: exactly five objects with stage, title, objectives, readings, key_concepts, check_questions, practice_task, citations.
@@ -168,3 +183,319 @@ def _validate_payload(payload: dict[str, Any]) -> None:
         raise ValueError(f"Knowledge build payload missing keys: {', '.join(missing)}")
     if len(payload.get("learning_modules") or []) != 5:
         raise ValueError("Knowledge build must return exactly five learning modules.")
+
+
+def _with_workspace_pages(
+    *,
+    payload: dict[str, Any],
+    domain_name: str,
+    chunks,
+    sources,
+) -> dict[str, Any]:
+    workspace = deepcopy(payload)
+    pages = [page for page in workspace.get("wiki_pages", []) if isinstance(page, dict)]
+    normalized_pages = [_normalize_page(page) for page in pages]
+
+    for page in _source_pages(workspace.get("source_profiles"), sources):
+        _append_page_if_missing(normalized_pages, page)
+    for page in _concept_pages(workspace.get("concepts")):
+        _append_page_if_missing(normalized_pages, page)
+    _append_page_if_missing(normalized_pages, _synthesis_page(domain_name, normalized_pages))
+    _append_page_if_missing(normalized_pages, _template_page("source"))
+    _append_page_if_missing(normalized_pages, _template_page("concept"))
+
+    index_page = _index_page(domain_name, normalized_pages)
+    log_page = _log_page(
+        domain_name=domain_name,
+        source_count=len(sources),
+        chunk_count=len(chunks),
+        page_count=len(normalized_pages) + 2,
+    )
+    normalized_pages = [
+        page
+        for page in normalized_pages
+        if page.get("path") not in {"wiki/index", "wiki/log"}
+    ]
+    workspace["wiki_pages"] = [index_page, log_page, *normalized_pages]
+    return workspace
+
+
+def _normalize_page(page: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(page)
+    title = _str(normalized.get("title")) or "Untitled"
+    page_type = _page_type(normalized)
+    slug = _slug(normalized.get("slug") or title)
+    normalized["title"] = title
+    normalized["slug"] = slug
+    normalized["page_type"] = page_type
+    normalized["path"] = _page_path(normalized, page_type=page_type, slug=slug)
+    normalized["topic_path"] = _str(normalized.get("topic_path")) or normalized["path"]
+    normalized["summary"] = _str(normalized.get("summary"))
+    normalized["body_markdown"] = _str(normalized.get("body_markdown"))
+    normalized["citations"] = _string_list(normalized.get("citations"))
+    return normalized
+
+
+def _source_pages(source_profiles, sources) -> list[dict[str, Any]]:
+    source_by_id = {source.id: source for source in sources}
+    pages: list[dict[str, Any]] = []
+    for profile in source_profiles if isinstance(source_profiles, list) else []:
+        if not isinstance(profile, dict):
+            continue
+        source_id = int(profile.get("source_id") or 0)
+        source = source_by_id.get(source_id)
+        title = source.title if source else f"Source {source_id}"
+        slug = _slug(f"source-{source_id}-{title or 'untitled'}")
+        citations = _string_list(profile.get("citations"))
+        pages.append(
+            {
+                "title": title,
+                "slug": slug,
+                "page_type": "source",
+                "path": f"wiki/sources/{slug}",
+                "topic_path": f"sources/{title}",
+                "summary": _str(profile.get("summary")),
+                "body_markdown": (
+                    f"# {title}\n\n"
+                    f"{_str(profile.get('summary'))}\n\n"
+                    f"## Authority\n{_str(profile.get('authority_note'))}\n\n"
+                    f"## Coverage\n{_str(profile.get('coverage_note'))}"
+                ).strip(),
+                "citations": citations,
+                "sections": [
+                    {
+                        "section_uid": f"{slug}#source",
+                        "heading": "Source summary",
+                        "body_markdown": _str(profile.get("summary")),
+                        "citations": citations,
+                        "source_citation_labels": citations,
+                    }
+                ],
+            }
+        )
+    return pages
+
+
+def _concept_pages(concepts) -> list[dict[str, Any]]:
+    pages: list[dict[str, Any]] = []
+    for concept in concepts if isinstance(concepts, list) else []:
+        if not isinstance(concept, dict):
+            continue
+        name = _str(concept.get("name"))
+        if not name:
+            continue
+        slug = _slug(name)
+        citations = _string_list(concept.get("citations"))
+        related = _string_list(concept.get("related"))
+        prerequisites = _string_list(concept.get("prerequisites"))
+        pages.append(
+            {
+                "title": name,
+                "slug": slug,
+                "page_type": "concept",
+                "path": f"wiki/concepts/{slug}",
+                "topic_path": f"concepts/{name}",
+                "summary": _str(concept.get("definition")),
+                "body_markdown": (
+                    f"# {name}\n\n"
+                    f"{_str(concept.get('definition'))}\n\n"
+                    f"## Prerequisites\n{_bullets(prerequisites)}\n\n"
+                    f"## Related\n{_bullets(related)}"
+                ).strip(),
+                "citations": citations,
+                "sections": [
+                    {
+                        "section_uid": f"{slug}#definition",
+                        "heading": "Definition",
+                        "body_markdown": _str(concept.get("definition")),
+                        "citations": citations,
+                        "source_citation_labels": citations,
+                    }
+                ],
+            }
+        )
+    return pages
+
+
+def _synthesis_page(domain_name: str, pages: list[dict[str, Any]]) -> dict[str, Any]:
+    source_summaries = [
+        f"- [[{page['title']}]] — {page.get('summary', '')}"
+        for page in pages
+        if page.get("page_type") in {"source", "concept"}
+    ][:12]
+    body = (
+        f"# {domain_name} synthesis\n\n"
+        "This page synthesizes the current Wiki workspace across source and concept pages.\n\n"
+        + "\n".join(source_summaries)
+    ).strip()
+    return {
+        "title": f"{domain_name} synthesis",
+        "slug": "overview",
+        "page_type": "synthesis",
+        "path": "wiki/synthesis/overview",
+        "topic_path": "synthesis/overview",
+        "summary": f"Cross-source synthesis for {domain_name}.",
+        "body_markdown": body,
+        "citations": [],
+        "sections": [
+            {
+                "section_uid": "synthesis-overview#1",
+                "heading": "Overview",
+                "body_markdown": body,
+                "citations": [],
+            }
+        ],
+    }
+
+
+def _template_page(template_type: str) -> dict[str, Any]:
+    title = f"{template_type.title()} page template"
+    slug = f"{template_type}-template"
+    body = (
+        f"# {title}\n\n"
+        "## Purpose\nDescribe what this page type captures.\n\n"
+        "## Required metadata\n- title\n- page_type\n- path\n- citations\n\n"
+        "## Body\nUse cited, concise Wiki prose."
+    )
+    return {
+        "title": title,
+        "slug": slug,
+        "page_type": "template",
+        "path": f"wiki/templates/{template_type}",
+        "topic_path": f"templates/{template_type}",
+        "summary": f"Template for {template_type} pages.",
+        "body_markdown": body,
+        "citations": [],
+        "sections": [
+            {
+                "section_uid": f"template-{template_type}#1",
+                "heading": "Template",
+                "body_markdown": body,
+                "citations": [],
+            }
+        ],
+    }
+
+
+def _index_page(domain_name: str, pages: list[dict[str, Any]]) -> dict[str, Any]:
+    lines = [f"# {domain_name} Wiki Index", "", "Read this page first to orient the workspace."]
+    for page_type in ("source", "concept", "entity", "synthesis", "template", "query"):
+        typed = [page for page in pages if page.get("page_type") == page_type]
+        lines.extend(["", f"## {page_type}", ""])
+        if not typed:
+            lines.append("- No pages yet.")
+        for page in sorted(typed, key=lambda item: item.get("path", "")):
+            lines.append(
+                f"- [[{page.get('title', 'Untitled')}]] — {page.get('summary', '')} (`{page.get('path', '')}`)"
+            )
+    body = "\n".join(lines).strip()
+    return {
+        "title": "Wiki Index",
+        "slug": "index",
+        "page_type": "index",
+        "path": "wiki/index",
+        "topic_path": "index",
+        "summary": "Central catalog of the Wiki workspace.",
+        "body_markdown": body,
+        "citations": [],
+        "sections": [
+            {
+                "section_uid": "index#1",
+                "heading": "Wiki Index",
+                "body_markdown": body,
+                "citations": [],
+            }
+        ],
+    }
+
+
+def _log_page(*, domain_name: str, source_count: int, chunk_count: int, page_count: int) -> dict[str, Any]:
+    timestamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
+    body = (
+        f"# Wiki Log\n\n"
+        f"## [{timestamp}] build | {domain_name}\n\n"
+        f"- Sources: {source_count}\n"
+        f"- Chunks: {chunk_count}\n"
+        f"- Wiki pages: {page_count}\n"
+        "- Action: compiled workspace pages, refreshed index, and preserved provenance."
+    )
+    return {
+        "title": "Wiki Log",
+        "slug": "log",
+        "page_type": "log",
+        "path": "wiki/log",
+        "topic_path": "log",
+        "summary": "Chronological build and maintenance log.",
+        "body_markdown": body,
+        "citations": [],
+        "sections": [
+            {
+                "section_uid": "log#1",
+                "heading": "Build log",
+                "body_markdown": body,
+                "citations": [],
+            }
+        ],
+    }
+
+
+def _append_page_if_missing(pages: list[dict[str, Any]], page: dict[str, Any]) -> None:
+    paths = {item.get("path") for item in pages}
+    if page.get("path") not in paths:
+        pages.append(_normalize_page(page))
+
+
+def _page_type(page: dict[str, Any]) -> str:
+    raw = _str(page.get("page_type") or page.get("type")).lower()
+    if raw in {"index", "log", "source", "concept", "entity", "synthesis", "template", "query"}:
+        return raw
+    path = _str(page.get("path")).lower()
+    if path.startswith("wiki/sources/"):
+        return "source"
+    if path.startswith("wiki/entities/"):
+        return "entity"
+    if path.startswith("wiki/synthesis/"):
+        return "synthesis"
+    if path.startswith("wiki/templates/"):
+        return "template"
+    if path == "wiki/index":
+        return "index"
+    if path == "wiki/log":
+        return "log"
+    return "concept"
+
+
+def _page_path(page: dict[str, Any], *, page_type: str, slug: str) -> str:
+    path = _str(page.get("path")).strip("/")
+    if path:
+        return path if path.startswith("wiki/") else f"wiki/{path}"
+    if page_type in {"index", "log"}:
+        return f"wiki/{page_type}"
+    folder = {
+        "source": "sources",
+        "concept": "concepts",
+        "entity": "entities",
+        "synthesis": "synthesis",
+        "template": "templates",
+        "query": "queries",
+    }.get(page_type, "concepts")
+    return f"wiki/{folder}/{slug}"
+
+
+def _str(value: Any) -> str:
+    return value.strip() if isinstance(value, str) else ""
+
+
+def _string_list(value: Any) -> list[str]:
+    return [str(item).strip() for item in value if str(item).strip()] if isinstance(value, list) else []
+
+
+def _bullets(items: list[str]) -> str:
+    return "\n".join(f"- {item}" for item in items) if items else "- None yet."
+
+
+def _slug(value: Any) -> str:
+    text = _str(value).lower()
+    text = re.sub(r"\[\[|\]\]", "", text)
+    text = re.sub(r"[^0-9a-zA-Z\u4e00-\u9fff]+", "-", text)
+    return text.strip("-") or "untitled"

@@ -309,10 +309,13 @@ def test_build_knowledge_route_renders_wiki_and_learning_path(tmp_path):
     assert "completed" in dashboard.text
     wiki = client.get("/domains/1/wiki")
     assert "Agent 使用工具完成任务" in wiki.text
+    assert "LLM Wiki Workspace" in wiki.text
+    assert "wiki/index" in wiki.text
+    assert "templates" in wiki.text
     path = client.get("/domains/1/path")
     assert "入门认知" in path.text
     assert "进阶专题" in path.text
-    assert ("wiki", 1, 1, 1) in vector_index.calls
+    assert any(call[0] == "wiki" and call[1] == 1 and call[2] >= 7 for call in vector_index.calls)
 
 
 def test_qa_route_records_cited_answer(tmp_path):

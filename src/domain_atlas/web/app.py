@@ -13,7 +13,7 @@ from fastapi.templating import Jinja2Templates
 from domain_atlas.core.db import initialize_database
 from domain_atlas.core.settings import Settings, get_settings
 from domain_atlas.discovery.exa import ExaSearchProvider, SourceDiscoveryError
-from domain_atlas.domain.artifacts import KnowledgeArtifactRepository
+from domain_atlas.domain.artifacts import PAGE_TYPE_ORDER, KnowledgeArtifactRepository
 from domain_atlas.domain.projects import CreateDomainProject, DomainProjectRepository
 from domain_atlas.domain.qa import QARepository
 from domain_atlas.domain.source_candidates import SourceCandidateRepository
@@ -361,11 +361,49 @@ def create_app(
         project = project_repository().get(project_id)
         if project is None:
             raise HTTPException(status_code=404, detail="Domain project not found.")
-        pages = artifact_repository().list_wiki_pages(project_id)
+        repository = artifact_repository()
+        pages = repository.list_wiki_pages(project_id)
+        groups = repository.list_wiki_page_groups(project_id)
+        selected_page = repository.get_wiki_page_by_path(project_id, "wiki/index")
+        if selected_page is None and pages:
+            selected_page = pages[0]
         return templates.TemplateResponse(
             request,
             "wiki.html",
-            {"app_name": app_settings.app_name, "project": project, "pages": pages},
+            {
+                "app_name": app_settings.app_name,
+                "project": project,
+                "pages": pages,
+                "groups": groups,
+                "selected_page": selected_page,
+                "page_type_order": list(PAGE_TYPE_ORDER),
+                "page_type_labels": _page_type_labels(),
+            },
+        )
+
+    @app.get("/domains/{project_id}/wiki/{page_path:path}", response_class=HTMLResponse)
+    def wiki_page_detail(request: Request, project_id: int, page_path: str) -> HTMLResponse:
+        project = project_repository().get(project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Domain project not found.")
+        repository = artifact_repository()
+        pages = repository.list_wiki_pages(project_id)
+        groups = repository.list_wiki_page_groups(project_id)
+        selected_page = repository.get_wiki_page_by_path(project_id, page_path)
+        if selected_page is None:
+            raise HTTPException(status_code=404, detail="Wiki page not found.")
+        return templates.TemplateResponse(
+            request,
+            "wiki.html",
+            {
+                "app_name": app_settings.app_name,
+                "project": project,
+                "pages": pages,
+                "groups": groups,
+                "selected_page": selected_page,
+                "page_type_order": list(PAGE_TYPE_ORDER),
+                "page_type_labels": _page_type_labels(),
+            },
         )
 
     @app.get("/domains/{project_id}/path", response_class=HTMLResponse)
@@ -415,3 +453,16 @@ def _source_type_from_suffix(suffix: str) -> str | None:
     if suffix == ".pdf":
         return "pdf"
     return None
+
+
+def _page_type_labels() -> dict[str, str]:
+    return {
+        "index": "index",
+        "log": "log",
+        "source": "sources",
+        "concept": "concepts",
+        "entity": "entities",
+        "synthesis": "synthesis",
+        "template": "templates",
+        "query": "queries",
+    }

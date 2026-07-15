@@ -11,17 +11,33 @@ from typing import Any
 from domain_atlas.core.db import connect
 
 
+PAGE_TYPE_ORDER = {
+    "index": 0,
+    "log": 1,
+    "source": 2,
+    "concept": 3,
+    "entity": 4,
+    "synthesis": 5,
+    "template": 6,
+    "query": 7,
+}
+
+
 @dataclass(frozen=True)
 class WikiPage:
     id: int
     project_id: int
     slug: str
+    page_type: str
+    path: str
     title: str
     topic_path: str
     summary: str
     body_markdown: str
     citations: list[str]
     revision: int
+    created_at: str
+    updated_at: str
 
 
 @dataclass(frozen=True)
@@ -38,6 +54,8 @@ class WikiSection:
     source_chunk_uids: list[str]
     source_citation_labels: list[str]
     links: list[str]
+    page_type: str = "concept"
+    page_path: str = ""
 
 
 @dataclass(frozen=True)
@@ -139,17 +157,30 @@ class KnowledgeArtifactRepository:
                 title = _str(page.get("title"))
                 topic_path = _str(page.get("topic_path")) or title
                 slug = _slug(page.get("slug") or topic_path or title)
+                page_type = _page_type(page)
+                path = _page_path(page=page, page_type=page_type, slug=slug)
                 page_citations = _string_list(page.get("citations"))
                 cursor = connection.execute(
                     """
                     INSERT INTO wiki_pages (
-                        project_id, slug, title, topic_path, summary, body_markdown, citations_json, revision
+                        project_id,
+                        slug,
+                        page_type,
+                        path,
+                        title,
+                        topic_path,
+                        summary,
+                        body_markdown,
+                        citations_json,
+                        revision
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         project_id,
                         slug,
+                        page_type,
+                        path,
                         title,
                         topic_path,
                         _str(page.get("summary")),
@@ -244,32 +275,60 @@ class KnowledgeArtifactRepository:
     def list_wiki_pages(self, project_id: int) -> list[WikiPage]:
         with connect(self.database_path) as connection:
             rows = connection.execute(
-                "SELECT * FROM wiki_pages WHERE project_id = ? ORDER BY topic_path ASC, id ASC",
+                """
+                SELECT *
+                FROM wiki_pages
+                WHERE project_id = ?
+                ORDER BY
+                    CASE page_type
+                        WHEN 'index' THEN 0
+                        WHEN 'log' THEN 1
+                        WHEN 'source' THEN 2
+                        WHEN 'concept' THEN 3
+                        WHEN 'entity' THEN 4
+                        WHEN 'synthesis' THEN 5
+                        WHEN 'template' THEN 6
+                        WHEN 'query' THEN 7
+                        ELSE 99
+                    END,
+                    path ASC,
+                    id ASC
+                """,
                 (project_id,),
             ).fetchall()
-        return [
-            WikiPage(
-                id=int(row["id"]),
-                project_id=int(row["project_id"]),
-                slug=str(row["slug"]),
-                title=str(row["title"]),
-                topic_path=str(row["topic_path"]),
-                summary=str(row["summary"]),
-                body_markdown=str(row["body_markdown"]),
-                citations=json.loads(str(row["citations_json"] or "[]")),
-                revision=int(row["revision"]),
-            )
-            for row in rows
-        ]
+        return [_row_to_page(row) for row in rows]
+
+    def list_wiki_page_groups(self, project_id: int) -> dict[str, list[WikiPage]]:
+        groups: dict[str, list[WikiPage]] = {page_type: [] for page_type in PAGE_TYPE_ORDER}
+        for page in self.list_wiki_pages(project_id):
+            groups.setdefault(page.page_type, []).append(page)
+        return groups
+
+    def get_wiki_page_by_path(self, project_id: int, path: str) -> WikiPage | None:
+        normalized = _normalize_path(path)
+        with connect(self.database_path) as connection:
+            row = connection.execute(
+                """
+                SELECT *
+                FROM wiki_pages
+                WHERE project_id = ? AND path = ?
+                """,
+                (project_id, normalized),
+            ).fetchone()
+        return _row_to_page(row) if row else None
 
     def list_wiki_sections(self, project_id: int) -> list[WikiSection]:
         with connect(self.database_path) as connection:
             rows = connection.execute(
                 """
-                SELECT *
+                SELECT
+                    wiki_sections.*,
+                    wiki_pages.page_type AS page_type,
+                    wiki_pages.path AS page_path
                 FROM wiki_sections
-                WHERE project_id = ?
-                ORDER BY page_slug ASC, ordinal ASC
+                JOIN wiki_pages ON wiki_pages.id = wiki_sections.page_id
+                WHERE wiki_sections.project_id = ?
+                ORDER BY wiki_pages.path ASC, wiki_sections.ordinal ASC
                 """,
                 (project_id,),
             ).fetchall()
@@ -345,6 +404,56 @@ def _json_list(value: Any) -> str:
     return json.dumps([str(item) for item in items], ensure_ascii=False)
 
 
+def _page_type(page: dict[str, Any]) -> str:
+    raw = _str(page.get("page_type") or page.get("type")).lower()
+    if raw in PAGE_TYPE_ORDER:
+        return raw
+    path = _str(page.get("path")).lower()
+    if path.startswith("wiki/index"):
+        return "index"
+    if path.startswith("wiki/log"):
+        return "log"
+    if path.startswith("wiki/sources/"):
+        return "source"
+    if path.startswith("wiki/entities/"):
+        return "entity"
+    if path.startswith("wiki/synthesis/"):
+        return "synthesis"
+    if path.startswith("wiki/templates/"):
+        return "template"
+    if path.startswith("wiki/queries/"):
+        return "query"
+    if page.get("source_id") is not None:
+        return "source"
+    return "concept"
+
+
+def _page_path(*, page: dict[str, Any], page_type: str, slug: str) -> str:
+    explicit = _normalize_path(_str(page.get("path")))
+    if explicit:
+        return explicit
+    folder = {
+        "index": "",
+        "log": "",
+        "source": "sources",
+        "concept": "concepts",
+        "entity": "entities",
+        "synthesis": "synthesis",
+        "template": "templates",
+        "query": "queries",
+    }.get(page_type, "concepts")
+    if page_type in {"index", "log"}:
+        return f"wiki/{page_type}"
+    return f"wiki/{folder}/{slug}"
+
+
+def _normalize_path(path: str) -> str:
+    normalized = path.strip().strip("/")
+    if not normalized:
+        return ""
+    return normalized if normalized.startswith("wiki/") else f"wiki/{normalized}"
+
+
 def _sections_for_page(page: dict[str, Any], default_citations: list[str]) -> list[dict[str, Any]]:
     sections = page.get("sections")
     if isinstance(sections, list) and sections:
@@ -370,7 +479,26 @@ def _slug(value: Any) -> str:
     return text.strip("-") or "untitled"
 
 
+def _row_to_page(row) -> WikiPage:
+    return WikiPage(
+        id=int(row["id"]),
+        project_id=int(row["project_id"]),
+        slug=str(row["slug"]),
+        page_type=str(row["page_type"] or "concept"),
+        path=str(row["path"] or ""),
+        title=str(row["title"]),
+        topic_path=str(row["topic_path"]),
+        summary=str(row["summary"]),
+        body_markdown=str(row["body_markdown"]),
+        citations=json.loads(str(row["citations_json"] or "[]")),
+        revision=int(row["revision"]),
+        created_at=str(row["created_at"]),
+        updated_at=str(row["updated_at"] or row["created_at"]),
+    )
+
+
 def _row_to_section(row) -> WikiSection:
+    keys = set(row.keys())
     return WikiSection(
         id=int(row["id"]),
         section_uid=str(row["section_uid"]),
@@ -384,4 +512,6 @@ def _row_to_section(row) -> WikiSection:
         source_chunk_uids=json.loads(str(row["source_chunk_uids_json"] or "[]")),
         source_citation_labels=json.loads(str(row["source_citation_labels_json"] or "[]")),
         links=json.loads(str(row["links_json"] or "[]")),
+        page_type=str(row["page_type"] or "concept") if "page_type" in keys else "concept",
+        page_path=str(row["page_path"] or "") if "page_path" in keys else "",
     )

@@ -135,3 +135,13 @@
 - [x] Add layered regression runner for fast, e2e, and live checks.
 - [x] Commit phase result.
 - [x] Push deferred by user for now.
+
+## Phase 15: Wiki Workspace
+
+- [x] Track detailed SDD in `specs/iterations/2026-07-15-wiki-workspace/`.
+- [x] Add typed Wiki page metadata and workspace paths.
+- [x] Ensure builds create index, log, source, concept, synthesis, and template pages.
+- [x] Upgrade Wiki UI to workspace browsing.
+- [x] Update deterministic E2E and regression coverage.
+- [x] Commit phase result.
+- [x] Push deferred by user for now.

@@ -57,8 +57,21 @@ def test_guided_domain_flow_navigation_and_qa_are_deterministic(tmp_path):
 
     wiki = client.get("/domains/1/wiki")
     assert wiki.status_code == 200
+    assert "LLM Wiki Workspace" in wiki.text
+    assert "wiki/index" in wiki.text
+    assert "wiki/log" in wiki.text
+    assert "sources" in wiki.text
+    assert "concepts" in wiki.text
+    assert "entities" in wiki.text
+    assert "synthesis" in wiki.text
+    assert "templates" in wiki.text
+    assert "queries" in wiki.text
     assert "Dataphin 入门" in wiki.text
-    assert "Dataphin 是一体化数据建设与治理平台" in wiki.text
+    assert "Central catalog" in wiki.text
+
+    concept_page = client.get("/domains/1/wiki/wiki/concepts/dataphin")
+    assert concept_page.status_code == 200
+    assert "Dataphin 是一体化数据建设与治理平台" in concept_page.text
 
     learning_path = client.get("/domains/1/path")
     assert learning_path.status_code == 200
@@ -256,8 +269,40 @@ def _artifact_payload(source_id: int) -> dict:
         ],
         "wiki_pages": [
             {
+                "title": "Wiki Index",
+                "slug": "index",
+                "page_type": "index",
+                "path": "wiki/index",
+                "topic_path": "index",
+                "summary": "Central catalog of the Wiki workspace.",
+                "body_markdown": "# Wiki Index\n\n- [[Dataphin 入门]] — Dataphin 是一体化数据建设与治理平台。",
+                "citations": [],
+            },
+            {
+                "title": "Wiki Log",
+                "slug": "log",
+                "page_type": "log",
+                "path": "wiki/log",
+                "topic_path": "log",
+                "summary": "Chronological build log.",
+                "body_markdown": "# Wiki Log\n\n## build\n- Sources: 1\n- Chunks: 1",
+                "citations": [],
+            },
+            {
+                "title": "Dataphin Docs",
+                "slug": "source-1-dataphin-docs",
+                "page_type": "source",
+                "path": "wiki/sources/source-1-dataphin-docs",
+                "topic_path": "sources/Dataphin Docs",
+                "summary": "Dataphin 文档。",
+                "body_markdown": "# Dataphin Docs\n\nDataphin 文档。",
+                "citations": ["S1-C1"],
+            },
+            {
                 "title": "Dataphin 入门",
                 "slug": "dataphin",
+                "page_type": "concept",
+                "path": "wiki/concepts/dataphin",
                 "topic_path": "Dataphin/入门",
                 "summary": "Dataphin 是一体化数据建设与治理平台。",
                 "body_markdown": "# Dataphin 入门\n\nDataphin 是一体化数据建设与治理平台。[S1-C1]",
@@ -273,7 +318,37 @@ def _artifact_payload(source_id: int) -> dict:
                         "links": [],
                     }
                 ],
-            }
+            },
+            {
+                "title": "Dataphin synthesis",
+                "slug": "overview",
+                "page_type": "synthesis",
+                "path": "wiki/synthesis/overview",
+                "topic_path": "synthesis/overview",
+                "summary": "跨页面综合总结。",
+                "body_markdown": "# Dataphin synthesis\n\nDataphin 连接数据建设与治理。",
+                "citations": ["S1-C1"],
+            },
+            {
+                "title": "Source page template",
+                "slug": "source-template",
+                "page_type": "template",
+                "path": "wiki/templates/source",
+                "topic_path": "templates/source",
+                "summary": "Template for source pages.",
+                "body_markdown": "# Source page template",
+                "citations": [],
+            },
+            {
+                "title": "Concept page template",
+                "slug": "concept-template",
+                "page_type": "template",
+                "path": "wiki/templates/concept",
+                "topic_path": "templates/concept",
+                "summary": "Template for concept pages.",
+                "body_markdown": "# Concept page template",
+                "citations": [],
+            },
         ],
         "learning_modules": [
             {

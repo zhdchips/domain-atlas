@@ -104,9 +104,18 @@ def test_knowledge_build_workflow_persists_artifacts(tmp_path):
     pages = repository.list_wiki_pages(project.id)
     modules = repository.list_learning_modules(project.id)
     updated_project = DomainProjectRepository(database_path).get(project.id)
+    paths = {page.path: page for page in pages}
 
-    assert pages[0].title == "Agent"
-    assert pages[0].citations == ["S1-C1"]
+    assert paths["wiki/index"].title == "Wiki Index"
+    assert paths["wiki/log"].page_type == "log"
+    assert paths["wiki/templates/source"].page_type == "template"
+    assert paths["wiki/templates/concept"].page_type == "template"
+    assert any(page.page_type == "source" for page in pages)
+    assert any(page.path == "wiki/concepts/agent" for page in pages)
+    assert paths["wiki/synthesis/overview"].page_type == "synthesis"
+    agent_page = paths["wiki/concepts/agent"]
+    assert agent_page.title == "Agent"
+    assert agent_page.citations == ["S1-C1"]
     assert len(modules) == 5
     assert modules[0].title == "入门认知"
     assert updated_project is not None

@@ -10,6 +10,7 @@ Domain Atlas treats the generated Wiki as the primary knowledge layer:
 
 - Sources and chunks are the evidence layer. They preserve raw provenance, citation labels, and embeddings for source-level fallback.
 - Wiki pages and Wiki sections are the learning layer. They keep stable slugs, topic paths, section citations, source chunk provenance, and Wiki links.
+- Wiki workspace pages add Karpathy-style organization with typed paths such as `wiki/index`, `wiki/log`, `wiki/sources/...`, `wiki/concepts/...`, `wiki/synthesis/...`, and `wiki/templates/...`.
 - QA searches Wiki sections first, then falls back to source chunks only when Wiki evidence is missing.
 - Wiki lint checks missing section citations, duplicate slugs/topic paths, and orphaned pages.
 
@@ -63,6 +64,10 @@ uv run python scripts/regression.py --live
 ```
 
 Fast and E2E checks are deterministic and do not call live providers. Live checks verify configured external provider availability. See `specs/iterations/2026-07-15-layered-regression/` for the SDD strategy and maintenance checklist.
+
+## Wiki Workspace
+
+The Wiki UI follows the Karpathy-style LLM Wiki pattern as a Web workspace over SQLite. It groups pages by type, shows `index` first, keeps a build `log`, and exposes source, concept, synthesis, and template pages with stable `wiki/...` paths. Markdown vault export is intentionally deferred; see `specs/iterations/2026-07-15-wiki-workspace/`.
 
 ## MVP Flow
 

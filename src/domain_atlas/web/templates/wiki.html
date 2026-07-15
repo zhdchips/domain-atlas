@@ -2,22 +2,63 @@
 
 {% block content %}
 <section class="intro">
-  <p class="eyebrow">LLM Wiki</p>
+  <p class="eyebrow">LLM Wiki Workspace</p>
   <h1>{{ project.name }}</h1>
-  <p>百科式领域条目，保留 citations 以便追溯到摄取资料。</p>
+  <p>Karpathy-style workspace：index、log、sources、concepts、entities、synthesis 和 templates。</p>
 </section>
 
 {% if pages %}
-  <section class="artifact-list">
-    {% for page in pages %}
-      <article class="panel">
-        <h2>{{ page.title }}</h2>
-        <p class="muted">{{ page.topic_path }}</p>
-        <p>{{ page.summary }}</p>
-        <pre class="markdown-body">{{ page.body_markdown }}</pre>
-        <p class="muted">Citations: {{ ", ".join(page.citations) }}</p>
-      </article>
-    {% endfor %}
+  <section class="wiki-workspace">
+    <aside class="wiki-tree">
+      {% for page_type in page_type_order %}
+        <section class="wiki-tree-group">
+          <h2>{{ page_type_labels.get(page_type, page_type) }}</h2>
+          {% set typed_pages = groups.get(page_type, []) %}
+          {% if typed_pages %}
+            {% for page in typed_pages %}
+              <a
+                class="wiki-tree-link{% if selected_page and selected_page.path == page.path %} active{% endif %}"
+                href="/domains/{{ project.id }}/wiki/{{ page.path }}"
+              >
+                <strong>{{ page.title }}</strong>
+                <span>{{ page.path }}</span>
+              </a>
+            {% endfor %}
+          {% else %}
+            <p class="muted">暂无页面</p>
+          {% endif %}
+        </section>
+      {% endfor %}
+    </aside>
+
+    <article class="panel wiki-page">
+      {% if selected_page %}
+        <p class="eyebrow">{{ selected_page.path }}</p>
+        <h2>{{ selected_page.title }}</h2>
+        <dl class="metadata-grid">
+          <div>
+            <dt>type</dt>
+            <dd>{{ selected_page.page_type }}</dd>
+          </div>
+          <div>
+            <dt>revision</dt>
+            <dd>{{ selected_page.revision }}</dd>
+          </div>
+          <div>
+            <dt>updated</dt>
+            <dd>{{ selected_page.updated_at }}</dd>
+          </div>
+          <div>
+            <dt>citations</dt>
+            <dd>{{ ", ".join(selected_page.citations) if selected_page.citations else "none" }}</dd>
+          </div>
+        </dl>
+        <p>{{ selected_page.summary }}</p>
+        <pre class="markdown-body">{{ selected_page.body_markdown }}</pre>
+      {% else %}
+        <p class="muted">还没有可展示的 Wiki 页面。</p>
+      {% endif %}
+    </article>
   </section>
 {% else %}
   <section class="panel">

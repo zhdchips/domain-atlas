@@ -139,7 +139,10 @@ def _wiki_system_prompt() -> str:
 
 def _wiki_user_prompt(question: str, retrieved: list[RetrievedWikiSection]) -> str:
     context = "\n\n".join(
-        f"[W:{section.section_uid}] page={section.page_slug} heading={section.heading}\n"
+        f"[W:{section.section_uid}] page={section.page_slug} "
+        f"type={section.metadata.get('page_type', '')} "
+        f"path={section.metadata.get('page_path', '')} "
+        f"heading={section.heading}\n"
         f"{section.body_markdown}\n"
         f"Source provenance: {', '.join(section.source_citation_labels)}"
         for section in retrieved

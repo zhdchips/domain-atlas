@@ -143,13 +143,16 @@ CREATE TABLE IF NOT EXISTS wiki_pages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id INTEGER NOT NULL REFERENCES domain_projects(id) ON DELETE CASCADE,
     slug TEXT NOT NULL DEFAULT '',
+    page_type TEXT NOT NULL DEFAULT 'concept',
+    path TEXT NOT NULL DEFAULT '',
     title TEXT NOT NULL,
     topic_path TEXT NOT NULL,
     summary TEXT NOT NULL,
     body_markdown TEXT NOT NULL,
     citations_json TEXT NOT NULL DEFAULT '[]',
     revision INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS wiki_sections (
@@ -225,11 +228,39 @@ def initialize_database(database_path: Path) -> None:
     with connect(database_path) as connection:
         connection.executescript(SCHEMA)
         _ensure_column(connection, "wiki_pages", "slug", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(connection, "wiki_pages", "page_type", "TEXT NOT NULL DEFAULT 'concept'")
+        _ensure_column(connection, "wiki_pages", "path", "TEXT NOT NULL DEFAULT ''")
         _ensure_column(connection, "wiki_pages", "revision", "INTEGER NOT NULL DEFAULT 1")
+        _ensure_column(
+            connection,
+            "wiki_pages",
+            "updated_at",
+            "TEXT NOT NULL DEFAULT ''",
+        )
+        connection.execute(
+            """
+            UPDATE wiki_pages
+            SET path = 'wiki/concepts/' || COALESCE(NULLIF(slug, ''), id)
+            WHERE path = ''
+            """
+        )
+        connection.execute(
+            """
+            UPDATE wiki_pages
+            SET updated_at = created_at
+            WHERE updated_at = ''
+            """
+        )
         connection.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_wiki_pages_slug
             ON wiki_pages(project_id, slug)
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_wiki_pages_workspace
+            ON wiki_pages(project_id, page_type, path)
             """
         )
         _ensure_column(
