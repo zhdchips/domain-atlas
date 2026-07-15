@@ -68,6 +68,8 @@ def test_guided_domain_flow_navigation_and_qa_are_deterministic(tmp_path):
     assert "queries" in wiki.text
     assert "Dataphin 入门" in wiki.text
     assert "Central catalog" in wiki.text
+    assert 'href="/domains/1/wiki/index"' in wiki.text
+    assert "/domains/1/wiki/wiki/index" not in wiki.text
 
     concept_page = client.get("/domains/1/wiki/wiki/concepts/dataphin")
     assert concept_page.status_code == 200

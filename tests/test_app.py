@@ -311,7 +311,11 @@ def test_build_knowledge_route_renders_wiki_and_learning_path(tmp_path):
     assert "Agent 使用工具完成任务" in wiki.text
     assert "LLM Wiki Workspace" in wiki.text
     assert "wiki/index" in wiki.text
+    assert 'href="/domains/1/wiki/index"' in wiki.text
+    assert "/domains/1/wiki/wiki/index" not in wiki.text
     assert "templates" in wiki.text
+    assert client.get("/domains/1/wiki/index").status_code == 200
+    assert client.get("/domains/1/wiki/wiki/index").status_code == 200
     path = client.get("/domains/1/path")
     assert "入门认知" in path.text
     assert "进阶专题" in path.text

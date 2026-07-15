@@ -322,22 +322,22 @@ def _concept_pages(concepts) -> list[dict[str, Any]]:
 
 def _synthesis_page(domain_name: str, pages: list[dict[str, Any]]) -> dict[str, Any]:
     source_summaries = [
-        f"- [[{page['title']}]] — {page.get('summary', '')}"
+        f"- [[{page['title']}]] - {page.get('summary', '')}"
         for page in pages
         if page.get("page_type") in {"source", "concept"}
     ][:12]
     body = (
-        f"# {domain_name} synthesis\n\n"
-        "This page synthesizes the current Wiki workspace across source and concept pages.\n\n"
+        f"# {domain_name} 综合页\n\n"
+        "本页汇总当前 Wiki 工作区中的资料页和概念页，用于快速把握领域主干。\n\n"
         + "\n".join(source_summaries)
     ).strip()
     return {
-        "title": f"{domain_name} synthesis",
+        "title": f"{domain_name} 综合页",
         "slug": "overview",
         "page_type": "synthesis",
         "path": "wiki/synthesis/overview",
         "topic_path": "synthesis/overview",
-        "summary": f"Cross-source synthesis for {domain_name}.",
+        "summary": f"{domain_name} 的跨资料综合索引。",
         "body_markdown": body,
         "citations": [],
         "sections": [
@@ -352,13 +352,14 @@ def _synthesis_page(domain_name: str, pages: list[dict[str, Any]]) -> dict[str, 
 
 
 def _template_page(template_type: str) -> dict[str, Any]:
-    title = f"{template_type.title()} page template"
+    label = {"source": "资料页", "concept": "概念页"}.get(template_type, template_type)
+    title = f"{label}模板"
     slug = f"{template_type}-template"
     body = (
         f"# {title}\n\n"
-        "## Purpose\nDescribe what this page type captures.\n\n"
-        "## Required metadata\n- title\n- page_type\n- path\n- citations\n\n"
-        "## Body\nUse cited, concise Wiki prose."
+        "## 用途\n说明该类型页面应该沉淀哪些信息。\n\n"
+        "## 必要属性\n- title\n- page_type\n- path\n- citations\n\n"
+        "## 正文要求\n使用简洁、百科式、带引用的 Wiki 文字。"
     )
     return {
         "title": title,
@@ -366,7 +367,7 @@ def _template_page(template_type: str) -> dict[str, Any]:
         "page_type": "template",
         "path": f"wiki/templates/{template_type}",
         "topic_path": f"templates/{template_type}",
-        "summary": f"Template for {template_type} pages.",
+        "summary": f"{label}的结构模板。",
         "body_markdown": body,
         "citations": [],
         "sections": [
@@ -381,15 +382,23 @@ def _template_page(template_type: str) -> dict[str, Any]:
 
 
 def _index_page(domain_name: str, pages: list[dict[str, Any]]) -> dict[str, Any]:
-    lines = [f"# {domain_name} Wiki Index", "", "Read this page first to orient the workspace."]
+    labels = {
+        "source": "资料摘要",
+        "concept": "概念条目",
+        "entity": "实体条目",
+        "synthesis": "综合页",
+        "template": "模板",
+        "query": "查询页",
+    }
+    lines = [f"# {domain_name} Wiki 索引", "", "本页是 Wiki 工作区入口。先读这里，再进入具体页面。"]
     for page_type in ("source", "concept", "entity", "synthesis", "template", "query"):
         typed = [page for page in pages if page.get("page_type") == page_type]
-        lines.extend(["", f"## {page_type}", ""])
+        lines.extend(["", f"## {labels.get(page_type, page_type)}", ""])
         if not typed:
-            lines.append("- No pages yet.")
+            lines.append("- 暂无页面。")
         for page in sorted(typed, key=lambda item: item.get("path", "")):
             lines.append(
-                f"- [[{page.get('title', 'Untitled')}]] — {page.get('summary', '')} (`{page.get('path', '')}`)"
+                f"- [[{page.get('title', '未命名页面')}]] - {page.get('summary', '')} (`{page.get('path', '')}`)"
             )
     body = "\n".join(lines).strip()
     return {
@@ -398,7 +407,7 @@ def _index_page(domain_name: str, pages: list[dict[str, Any]]) -> dict[str, Any]
         "page_type": "index",
         "path": "wiki/index",
         "topic_path": "index",
-        "summary": "Central catalog of the Wiki workspace.",
+        "summary": "Wiki 工作区的中心目录。",
         "body_markdown": body,
         "citations": [],
         "sections": [
@@ -415,12 +424,12 @@ def _index_page(domain_name: str, pages: list[dict[str, Any]]) -> dict[str, Any]
 def _log_page(*, domain_name: str, source_count: int, chunk_count: int, page_count: int) -> dict[str, Any]:
     timestamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
     body = (
-        f"# Wiki Log\n\n"
-        f"## [{timestamp}] build | {domain_name}\n\n"
-        f"- Sources: {source_count}\n"
-        f"- Chunks: {chunk_count}\n"
-        f"- Wiki pages: {page_count}\n"
-        "- Action: compiled workspace pages, refreshed index, and preserved provenance."
+        f"# Wiki 日志\n\n"
+        f"## [{timestamp}] 构建 | {domain_name}\n\n"
+        f"- 资料数: {source_count}\n"
+        f"- 切片数: {chunk_count}\n"
+        f"- Wiki 页面数: {page_count}\n"
+        "- 动作: 生成工作区页面，刷新索引，并保留 provenance。"
     )
     return {
         "title": "Wiki Log",
@@ -428,7 +437,7 @@ def _log_page(*, domain_name: str, source_count: int, chunk_count: int, page_cou
         "page_type": "log",
         "path": "wiki/log",
         "topic_path": "log",
-        "summary": "Chronological build and maintenance log.",
+        "summary": "Wiki 工作区的构建与维护日志。",
         "body_markdown": body,
         "citations": [],
         "sections": [
