@@ -11,6 +11,8 @@ def test_openai_compatible_chat_provider_parses_json_content():
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url == "https://llm.example.com/v1/chat/completions"
         assert request.headers["authorization"] == f"Bearer {expected_key}"
+        body = request.read()
+        assert b'"response_format":{"type":"json_object"}' in body
         return httpx.Response(
             200,
             json={
@@ -34,6 +36,34 @@ def test_openai_compatible_chat_provider_parses_json_content():
     assert provider.complete_json(system_prompt="system", user_prompt="user") == {
         "ok": True,
         "items": [1],
+    }
+
+
+def test_chat_provider_extracts_json_object_from_surrounding_text():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": '好的，下面是 JSON：\n{"ok": true, "text": "brace } inside"}\n完成。'
+                        }
+                    }
+                ]
+            },
+        )
+
+    provider = OpenAICompatibleChatProvider(
+        api_key="not-a-real-key",
+        base_url="https://llm.example.com",
+        model="test-chat",
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    assert provider.complete_json(system_prompt="system", user_prompt="user") == {
+        "ok": True,
+        "text": "brace } inside",
     }
 
 

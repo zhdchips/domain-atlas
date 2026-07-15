@@ -52,6 +52,7 @@ class OpenAICompatibleChatProvider:
                 {"role": "user", "content": user_prompt},
             ],
             "temperature": self.temperature,
+            "response_format": {"type": "json_object"},
         }
         headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
 
@@ -112,13 +113,50 @@ def _parse_json_object(content: str) -> dict[str, Any]:
     if stripped.startswith("```"):
         stripped = re.sub(r"^```(?:json)?", "", stripped).strip()
         stripped = re.sub(r"```$", "", stripped).strip()
-    try:
-        data = json.loads(stripped)
-    except json.JSONDecodeError as exc:
-        raise ChatProviderError("Chat completion did not return valid JSON.") from exc
+    data = _loads_json_object(stripped)
     if not isinstance(data, dict):
         raise ChatProviderError("Chat completion JSON must be an object.")
     return data
+
+
+def _loads_json_object(content: str) -> Any:
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError as original_error:
+        candidate = _extract_first_json_object(content)
+        if not candidate:
+            raise ChatProviderError("Chat completion did not return valid JSON.") from original_error
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError as exc:
+            raise ChatProviderError("Chat completion did not return valid JSON.") from exc
+
+
+def _extract_first_json_object(content: str) -> str:
+    start = content.find("{")
+    if start < 0:
+        return ""
+    depth = 0
+    in_string = False
+    escaped = False
+    for index, char in enumerate(content[start:], start=start):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return content[start : index + 1]
+    return ""
 
 
 def _provider_error_message(response: httpx.Response) -> str:
