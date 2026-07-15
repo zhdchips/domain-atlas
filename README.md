@@ -60,10 +60,21 @@ Domain Atlas uses layered regression checks:
 ```bash
 uv run python scripts/regression.py --fast
 uv run python scripts/regression.py --e2e
+uv run python scripts/regression.py --browser-e2e
 uv run python scripts/regression.py --live
+uv run python scripts/regression.py --live-e2e
 ```
 
-Fast and E2E checks are deterministic and do not call live providers. Live checks verify configured external provider availability. See `specs/iterations/2026-07-15-layered-regression/` for the SDD strategy and maintenance checklist.
+Fast and E2E checks are deterministic and do not call live providers. Browser E2E uses Playwright against a deterministic local Wiki project and catches real CSS/layout regressions. Live checks verify configured external provider availability, while live E2E runs the fixed Markdown-to-Wiki build through the configured LLM and embedding providers.
+
+Before the first browser E2E run:
+
+```bash
+uv sync --extra dev
+uv run python -m playwright install chromium
+```
+
+At the end of an SDD iteration, run at least `--fast` and `--browser-e2e`; run `--live-e2e` when the iteration touches ingestion, build, embeddings, QA, or provider-facing behavior. See `specs/iterations/2026-07-15-layered-regression/` for the SDD strategy and maintenance checklist.
 
 ## Wiki Workspace
 
