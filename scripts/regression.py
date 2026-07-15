@@ -13,13 +13,20 @@ def main() -> int:
     group.add_argument("--fast", action="store_true", help="Run the default deterministic test suite.")
     group.add_argument("--e2e", action="store_true", help="Run deterministic end-to-end tests.")
     group.add_argument("--live", action="store_true", help="Run live provider smoke checks.")
+    group.add_argument(
+        "--live-e2e",
+        action="store_true",
+        help="Run a fixed live E2E domain build with configured providers.",
+    )
     args = parser.parse_args()
 
     if args.fast:
         return _run("fast", [sys.executable, "-m", "pytest"])
     if args.e2e:
         return _run("e2e", [sys.executable, "-m", "pytest", "tests/e2e"])
-    return _run("live", [sys.executable, "scripts/smoke_providers.py"])
+    if args.live:
+        return _run("live", [sys.executable, "scripts/smoke_providers.py"])
+    return _run("live-e2e", [sys.executable, "scripts/live_e2e_domain_build.py"])
 
 
 def _run(layer: str, command: list[str]) -> int:
