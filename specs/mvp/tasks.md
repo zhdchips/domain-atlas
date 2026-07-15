@@ -69,3 +69,60 @@
 - [x] Verify ignored secret/runtime files.
 - [x] Commit final MVP result.
 - [x] Push deferred by user for now.
+
+## Phase 8: LLM Wiki Upgrade SDD
+
+- [x] Update spec for Wiki-first architecture and guided/expert interaction modes.
+- [x] Update plan for Wiki sections, Wiki-first QA, lint, and autopilot phases.
+- [x] Add implementation tasks for this iteration.
+- [ ] Commit phase result.
+- [x] Push deferred by user for now.
+
+## Phase 9: Wiki Sections, Links, Index, And Lint
+
+- [ ] Add SQLite schema for wiki sections and wiki links.
+- [ ] Extend artifact repository to persist sections, slugs, links, backlinks, and source provenance.
+- [ ] Update knowledge build workflow to accept sectioned Wiki payloads.
+- [ ] Add Wiki section vector indexing and retrieval helpers.
+- [ ] Add Wiki lint service for missing citations, orphan pages, and duplicate slugs/topic paths.
+- [ ] Add tests for section persistence, links/backlinks, indexing, and lint.
+- [ ] Commit phase result.
+- [x] Push deferred by user for now.
+
+## Phase 10: Wiki-First QA
+
+- [ ] Update QA service to retrieve Wiki sections first.
+- [ ] Preserve source chunk provenance in QA records.
+- [ ] Add insufficient-evidence behavior for missing Wiki evidence.
+- [ ] Update QA UI to show Wiki citations and source provenance.
+- [ ] Add tests proving QA uses Wiki sections before source chunks.
+- [ ] Commit phase result.
+- [x] Push deferred by user for now.
+
+## Phase 11: Interaction Modes
+
+- [ ] Add `interaction_mode` to DomainProject schema and model.
+- [ ] Add expert/guided mode selector in project creation UI.
+- [ ] Preserve expert mode manual flows.
+- [ ] Add tests for interaction mode defaults and persistence.
+- [ ] Commit phase result.
+- [x] Push deferred by user for now.
+
+## Phase 12: Guided Autopilot
+
+- [ ] Add candidate filtering policy for guided mode.
+- [ ] Implement autopilot workflow for search, filtering, source creation, ingestion, and build.
+- [ ] Persist transparent workflow steps and auto-accepted candidates.
+- [ ] Add guided mode UI action and result status.
+- [ ] Add tests for filtering and mocked autopilot execution.
+- [ ] Commit phase result.
+- [x] Push deferred by user for now.
+
+## Phase 13: Final Hardening
+
+- [ ] Update README with LLM Wiki architecture and interaction modes.
+- [ ] Run full pytest suite.
+- [ ] Run provider smoke if `.env` is configured.
+- [ ] Verify ignored secret/runtime files.
+- [ ] Commit final iteration result.
+- [x] Push deferred by user for now.

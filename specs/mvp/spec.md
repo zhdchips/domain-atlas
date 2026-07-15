@@ -16,8 +16,8 @@ Primary workflow:
 2. Discover candidate authoritative sources with Exa, or add URL, Markdown, and PDF sources manually.
 3. Confirm search candidates before ingestion.
 4. Ingest accepted sources into normalized text, chunks, metadata, checksums, and Chroma embeddings.
-5. Build domain artifacts: source profiles, concepts, encyclopedia-style Wiki pages, concept graph edges, and a five-stage learning path.
-6. Ask questions and receive answers grounded in retrieved chunks with citations.
+5. Build a persistent LLM Wiki: source profiles, concepts, sectioned Wiki pages, concept graph edges, and a five-stage learning path.
+6. Ask questions against the Wiki-first knowledge layer, with source chunk provenance retained for citations.
 
 ## Functional Requirements
 
@@ -25,8 +25,11 @@ Primary workflow:
 
 - The app must support creating and listing domain projects.
 - A project must store name, optional goal, level, language, status, timestamps, and build state.
+- A project must store an `interaction_mode` value. Supported values are `expert` and `guided`.
 - The default language must be Chinese, while `language` remains explicit for future switching.
 - A project dashboard must expose source management, Wiki, learning path, and QA entry points.
+- Expert mode must preserve manual search, confirmation, ingestion, and build controls.
+- Guided mode must offer one-click autopilot discovery, filtering, ingestion, and knowledge build.
 
 ### Source Discovery
 
@@ -42,26 +45,48 @@ Primary workflow:
 - Chunking must create stable chunk IDs and citation metadata.
 - Chunk embeddings must be written to local Chroma using the configured Qwen/DashScope embedding model.
 
-### Knowledge Build
+### LLM Wiki Knowledge Build
 
 - The build workflow must be a lightweight in-process pipeline, not LangGraph.
-- The build workflow must produce source profiles, concepts, Wiki pages, concept graph edges, and learning modules.
+- The build workflow must compile source chunks into a persistent LLM Wiki, not just one-off generated artifacts.
+- Wiki pages must contain stable slugs, topic paths, and sectioned encyclopedia content.
+- Wiki sections must preserve section-level citations and source chunk provenance.
+- Wiki pages and sections should include structured wiki links/backlinks where the model can infer related pages.
 - Wiki pages must use an encyclopedia-entry style, not a tutorial tone.
 - The learning path must have five default stages: introductory orientation, core concepts, key methods, practical applications, and advanced topics.
 - Generated artifacts must preserve citation/provenance links wherever evidence is available.
 
 ### Retrieval QA
 
-- QA must retrieve project chunks from Chroma.
-- Answers must include citations to source chunks.
+- QA must retrieve from Wiki sections first.
+- Source chunks remain the evidence/provenance layer and may be consulted after Wiki retrieval.
+- Answers must include Wiki section citations and retain source chunk provenance.
 - If retrieved evidence is insufficient, the app must clearly state that the current knowledge base is insufficient and suggest missing source types.
 - QA records must be persisted.
+
+### Wiki Health
+
+- The app must provide basic Wiki lint/health checks.
+- Lint must detect Wiki sections without citations.
+- Lint must detect duplicate page slugs or topic paths.
+- Lint must detect orphan Wiki pages with no inbound backlinks, excluding the first/root page when appropriate.
+- Lint output must be readable in tests and available to the UI.
+
+### Guided Autopilot
+
+- Guided mode must automatically search Exa candidates, filter authoritative sources, create URL sources, ingest them, and run the knowledge build.
+- Autopilot must select at most five sources by default.
+- Autopilot must require `authority_score >= 0.65`.
+- Autopilot must prioritize `official_docs`, `paper`, `institution`, `repository`, and `encyclopedia` source types.
+- Autopilot must accept at most two sources from the same domain.
+- If no candidates pass filtering, autopilot must stop without ingestion and record a recoverable workflow failure.
+- Autopilot must persist discovered candidates and mark auto-accepted candidates transparently.
 
 ### UI
 
 - The UI must use FastAPI, Jinja, and HTMX.
 - The MVP UI must prioritize clarity and repeated-use workflow over brand-heavy presentation.
-- Required pages: project list/create, project dashboard, search candidate confirmation, source list, Wiki, learning path, and QA.
+- Required pages: project list/create, project dashboard, search candidate confirmation, source list, Wiki, Wiki lint, learning path, and QA.
 
 ## Non-Functional Requirements
 
@@ -87,6 +112,8 @@ Primary workflow:
 - A user can search Exa candidates and choose which ones to ingest.
 - A user can ingest URL, Markdown, and PDF sources.
 - The system can build encyclopedia-style Wiki pages and a five-stage learning path.
-- The system can answer questions with citations and persist QA records.
-- Tests cover configuration, project creation, source discovery normalization, chunk/provenance behavior, artifact generation contracts, and QA insufficiency behavior.
+- The system can store sectioned Wiki pages with slugs, links, backlinks, section citations, and source provenance.
+- The system can answer Wiki-first questions with citations and persist QA records.
+- The system can run guided autopilot from search through ingestion and build.
+- Tests cover configuration, project creation, source discovery normalization, chunk/provenance behavior, Wiki section contracts, Wiki-first QA, guided/autopilot filtering, and QA insufficiency behavior.
 - Smoke commands can verify Exa search, DeepSeek chat, and Qwen/DashScope embeddings from the local `.env`.
