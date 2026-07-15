@@ -194,9 +194,6 @@ CREATE TABLE IF NOT EXISTS learning_modules (
 CREATE INDEX IF NOT EXISTS idx_wiki_pages_project
 ON wiki_pages(project_id, topic_path);
 
-CREATE INDEX IF NOT EXISTS idx_wiki_pages_slug
-ON wiki_pages(project_id, slug);
-
 CREATE INDEX IF NOT EXISTS idx_wiki_sections_project
 ON wiki_sections(project_id, page_slug, ordinal);
 
@@ -229,6 +226,12 @@ def initialize_database(database_path: Path) -> None:
         connection.executescript(SCHEMA)
         _ensure_column(connection, "wiki_pages", "slug", "TEXT NOT NULL DEFAULT ''")
         _ensure_column(connection, "wiki_pages", "revision", "INTEGER NOT NULL DEFAULT 1")
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_wiki_pages_slug
+            ON wiki_pages(project_id, slug)
+            """
+        )
         _ensure_column(
             connection,
             "domain_projects",
