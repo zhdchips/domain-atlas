@@ -24,6 +24,7 @@ from domain_atlas.providers.embeddings import OpenAICompatibleEmbeddingProvider
 from domain_atlas.providers.vector_index import ChromaVectorIndex, VectorIndex
 from domain_atlas.qa.service import RetrievalQAService
 from domain_atlas.workflow.build import KnowledgeBuildWorkflow
+from domain_atlas.workflow.autopilot import AutopilotWorkflow
 
 templates = Jinja2Templates(directory="src/domain_atlas/web/templates")
 static_files = StaticFiles(directory="src/domain_atlas/web/static")
@@ -117,6 +118,15 @@ def create_app(
             embedding_provider=embedder,
             vector_index=index,
             chat_provider=chat,
+        )
+
+    def autopilot_workflow() -> AutopilotWorkflow:
+        return AutopilotWorkflow(
+            database_path=app_settings.database_path,
+            discovery_provider=source_discovery_provider(),
+            ingestion_runner=source_ingestion_service(),
+            build_runner=knowledge_build_workflow(),
+            search_limit=app_settings.search_max_results,
         )
 
     @app.get("/health")
@@ -316,6 +326,20 @@ def create_app(
             raise HTTPException(status_code=404, detail="Domain project not found.")
         try:
             knowledge_build_workflow().run(project_id)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return RedirectResponse(
+            url=f"/domains/{project_id}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    @app.post("/domains/{project_id}/autopilot")
+    def run_autopilot(project_id: int) -> RedirectResponse:
+        project = project_repository().get(project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Domain project not found.")
+        try:
+            autopilot_workflow().run(project_id)
         except Exception as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return RedirectResponse(

@@ -75,7 +75,7 @@
 - [x] Update spec for Wiki-first architecture and guided/expert interaction modes.
 - [x] Update plan for Wiki sections, Wiki-first QA, lint, and autopilot phases.
 - [x] Add implementation tasks for this iteration.
-- [ ] Commit phase result.
+- [x] Commit phase result.
 - [x] Push deferred by user for now.
 
 ## Phase 9: Wiki Sections, Links, Index, And Lint
@@ -110,12 +110,12 @@
 
 ## Phase 12: Guided Autopilot
 
-- [ ] Add candidate filtering policy for guided mode.
-- [ ] Implement autopilot workflow for search, filtering, source creation, ingestion, and build.
-- [ ] Persist transparent workflow steps and auto-accepted candidates.
-- [ ] Add guided mode UI action and result status.
-- [ ] Add tests for filtering and mocked autopilot execution.
-- [ ] Commit phase result.
+- [x] Add candidate filtering policy for guided mode.
+- [x] Implement autopilot workflow for search, filtering, source creation, ingestion, and build.
+- [x] Persist transparent workflow steps and auto-accepted candidates.
+- [x] Add guided mode UI action and result status.
+- [x] Add tests for filtering and mocked autopilot execution.
+- [x] Commit phase result.
 - [x] Push deferred by user for now.
 
 ## Phase 13: Final Hardening
