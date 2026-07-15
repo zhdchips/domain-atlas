@@ -29,6 +29,9 @@ from domain_atlas.workflow.autopilot import AutopilotWorkflow
 
 templates = Jinja2Templates(directory="src/domain_atlas/web/templates")
 static_files = StaticFiles(directory="src/domain_atlas/web/static")
+templates.env.globals["static_version"] = lambda: str(
+    int(Path("src/domain_atlas/web/static/styles.css").stat().st_mtime)
+)
 
 
 def create_app(
