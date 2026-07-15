@@ -40,6 +40,9 @@ class FakeVectorIndex:
     def upsert_chunks(self, *, project_id: int, chunks, embeddings) -> None:
         self.calls.append((project_id, len(chunks), len(embeddings)))
 
+    def upsert_wiki_sections(self, *, project_id: int, sections, embeddings) -> None:
+        self.calls.append(("wiki", project_id, len(sections), len(embeddings)))
+
     def query(self, *, project_id: int, query_embedding: list[float], limit: int):
         return [
             RetrievedChunk(
@@ -266,11 +269,12 @@ def test_upload_markdown_and_ingest_from_dashboard(tmp_path):
 
 
 def test_build_knowledge_route_renders_wiki_and_learning_path(tmp_path):
+    vector_index = FakeVectorIndex()
     app = create_app(
         Settings(data_dir=tmp_path),
         chat_provider=FakeChatProvider(),
         embedding_provider=FakeEmbeddingProvider(),
-        vector_index=FakeVectorIndex(),
+        vector_index=vector_index,
     )
     client = TestClient(app)
     client.post("/domains", data={"name": "LLM Agents"})
@@ -290,6 +294,7 @@ def test_build_knowledge_route_renders_wiki_and_learning_path(tmp_path):
     path = client.get("/domains/1/path")
     assert "入门认知" in path.text
     assert "进阶专题" in path.text
+    assert ("wiki", 1, 1, 1) in vector_index.calls
 
 
 def test_qa_route_records_cited_answer(tmp_path):

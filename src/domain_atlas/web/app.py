@@ -74,6 +74,14 @@ def create_app(
         return KnowledgeBuildWorkflow(
             database_path=app_settings.database_path,
             chat_provider=chat,
+            embedding_provider=embedding_provider
+            or OpenAICompatibleEmbeddingProvider(
+                api_key=app_settings.embedding_api_key,
+                base_url=app_settings.embedding_base_url,
+                model=app_settings.embedding_model,
+                dimensions=app_settings.embedding_dimensions,
+            ),
+            vector_index=vector_index or ChromaVectorIndex(app_settings.chroma_path),
         )
 
     def source_ingestion_service() -> IngestionService:

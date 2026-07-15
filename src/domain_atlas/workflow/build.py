@@ -9,6 +9,7 @@ from domain_atlas.domain.artifacts import KnowledgeArtifactRepository
 from domain_atlas.domain.projects import DomainProjectRepository
 from domain_atlas.domain.sources import ChunkRepository, SourceRepository
 from domain_atlas.domain.workflow import WorkflowRepository
+from domain_atlas.providers.vector_index import VectorIndex
 
 
 class ChatProvider(Protocol):
@@ -16,16 +17,30 @@ class ChatProvider(Protocol):
         ...
 
 
+class EmbeddingProvider(Protocol):
+    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        ...
+
+
 class KnowledgeBuildWorkflow:
     """Compile ingested chunks into structured Domain Atlas artifacts."""
 
-    def __init__(self, *, database_path: Path, chat_provider: ChatProvider) -> None:
+    def __init__(
+        self,
+        *,
+        database_path: Path,
+        chat_provider: ChatProvider,
+        embedding_provider: EmbeddingProvider | None = None,
+        vector_index: VectorIndex | None = None,
+    ) -> None:
         self.project_repository = DomainProjectRepository(database_path)
         self.source_repository = SourceRepository(database_path)
         self.chunk_repository = ChunkRepository(database_path)
         self.artifact_repository = KnowledgeArtifactRepository(database_path)
         self.workflow_repository = WorkflowRepository(database_path)
         self.chat_provider = chat_provider
+        self.embedding_provider = embedding_provider
+        self.vector_index = vector_index
 
     def run(self, project_id: int) -> dict[str, Any]:
         project = self.project_repository.get(project_id)
@@ -68,11 +83,21 @@ class KnowledgeBuildWorkflow:
                 },
             )
             self.artifact_repository.replace_project_artifacts(project_id, payload)
+            sections = self.artifact_repository.list_wiki_sections(project_id)
+            if self.embedding_provider is not None and self.vector_index is not None and sections:
+                embeddings = self.embedding_provider.embed_texts(
+                    [section.body_markdown for section in sections]
+                )
+                self.vector_index.upsert_wiki_sections(
+                    project_id=project_id,
+                    sections=sections,
+                    embeddings=embeddings,
+                )
             self.workflow_repository.record_step(
                 run_id,
                 step_name="persist_artifacts",
                 status="completed",
-                output={"status": "saved"},
+                output={"status": "saved", "wiki_sections": len(sections)},
             )
             self.workflow_repository.finish_run(run_id)
             self.project_repository.update_build_status(project_id, "completed")
@@ -113,6 +138,9 @@ Return a JSON object with exactly these keys:
 - concepts: array of objects with name, definition, prerequisites, related, citations.
 - concept_edges: array of objects with source, target, relation, citations.
 - wiki_pages: array of objects with title, topic_path, summary, body_markdown, citations.
+  Each wiki page should include a stable slug and sections array when possible.
+  Each section should include heading, body_markdown, citations, source_citation_labels, source_chunk_uids, and links.
+  Use [[Wiki Links]] inside section bodies where useful.
 - learning_modules: exactly five objects with stage, title, objectives, readings, key_concepts, check_questions, practice_task, citations.
 """.strip()
 

@@ -141,11 +141,38 @@ CREATE TABLE IF NOT EXISTS concept_edges (
 CREATE TABLE IF NOT EXISTS wiki_pages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id INTEGER NOT NULL REFERENCES domain_projects(id) ON DELETE CASCADE,
+    slug TEXT NOT NULL DEFAULT '',
     title TEXT NOT NULL,
     topic_path TEXT NOT NULL,
     summary TEXT NOT NULL,
     body_markdown TEXT NOT NULL,
     citations_json TEXT NOT NULL DEFAULT '[]',
+    revision INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS wiki_sections (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    section_uid TEXT NOT NULL UNIQUE,
+    project_id INTEGER NOT NULL REFERENCES domain_projects(id) ON DELETE CASCADE,
+    page_id INTEGER NOT NULL REFERENCES wiki_pages(id) ON DELETE CASCADE,
+    page_slug TEXT NOT NULL,
+    heading TEXT NOT NULL,
+    ordinal INTEGER NOT NULL,
+    body_markdown TEXT NOT NULL,
+    citations_json TEXT NOT NULL DEFAULT '[]',
+    source_chunk_uids_json TEXT NOT NULL DEFAULT '[]',
+    source_citation_labels_json TEXT NOT NULL DEFAULT '[]',
+    links_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS wiki_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES domain_projects(id) ON DELETE CASCADE,
+    source_page_slug TEXT NOT NULL,
+    target_page_slug TEXT NOT NULL,
+    link_text TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -165,6 +192,15 @@ CREATE TABLE IF NOT EXISTS learning_modules (
 
 CREATE INDEX IF NOT EXISTS idx_wiki_pages_project
 ON wiki_pages(project_id, topic_path);
+
+CREATE INDEX IF NOT EXISTS idx_wiki_pages_slug
+ON wiki_pages(project_id, slug);
+
+CREATE INDEX IF NOT EXISTS idx_wiki_sections_project
+ON wiki_sections(project_id, page_slug, ordinal);
+
+CREATE INDEX IF NOT EXISTS idx_wiki_links_project
+ON wiki_links(project_id, source_page_slug, target_page_slug);
 
 CREATE INDEX IF NOT EXISTS idx_learning_modules_project
 ON learning_modules(project_id, stage);
@@ -189,6 +225,8 @@ def initialize_database(database_path: Path) -> None:
     database_path.parent.mkdir(parents=True, exist_ok=True)
     with connect(database_path) as connection:
         connection.executescript(SCHEMA)
+        _ensure_column(connection, "wiki_pages", "slug", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(connection, "wiki_pages", "revision", "INTEGER NOT NULL DEFAULT 1")
 
 
 @contextmanager
@@ -205,3 +243,17 @@ def connect(database_path: Path) -> Iterator[sqlite3.Connection]:
         raise
     finally:
         connection.close()
+
+
+def _ensure_column(
+    connection: sqlite3.Connection,
+    table_name: str,
+    column_name: str,
+    definition: str,
+) -> None:
+    columns = {
+        str(row["name"])
+        for row in connection.execute(f"PRAGMA table_info({table_name})").fetchall()
+    }
+    if column_name not in columns:
+        connection.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")

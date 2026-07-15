@@ -80,13 +80,13 @@
 
 ## Phase 9: Wiki Sections, Links, Index, And Lint
 
-- [ ] Add SQLite schema for wiki sections and wiki links.
-- [ ] Extend artifact repository to persist sections, slugs, links, backlinks, and source provenance.
-- [ ] Update knowledge build workflow to accept sectioned Wiki payloads.
-- [ ] Add Wiki section vector indexing and retrieval helpers.
-- [ ] Add Wiki lint service for missing citations, orphan pages, and duplicate slugs/topic paths.
-- [ ] Add tests for section persistence, links/backlinks, indexing, and lint.
-- [ ] Commit phase result.
+- [x] Add SQLite schema for wiki sections and wiki links.
+- [x] Extend artifact repository to persist sections, slugs, links, backlinks, and source provenance.
+- [x] Update knowledge build workflow to accept sectioned Wiki payloads.
+- [x] Add Wiki section vector indexing and retrieval helpers.
+- [x] Add Wiki lint service for missing citations, orphan pages, and duplicate slugs/topic paths.
+- [x] Add tests for section persistence, links/backlinks, indexing, and lint.
+- [x] Commit phase result.
 - [x] Push deferred by user for now.
 
 ## Phase 10: Wiki-First QA
