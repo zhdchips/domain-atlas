@@ -120,9 +120,9 @@
 
 ## Phase 13: Final Hardening
 
-- [ ] Update README with LLM Wiki architecture and interaction modes.
-- [ ] Run full pytest suite.
-- [ ] Run provider smoke if `.env` is configured.
-- [ ] Verify ignored secret/runtime files.
-- [ ] Commit final iteration result.
+- [x] Update README with LLM Wiki architecture and interaction modes.
+- [x] Run full pytest suite.
+- [x] Run provider smoke if `.env` is configured.
+- [x] Verify ignored secret/runtime files.
+- [x] Commit final iteration result.
 - [x] Push deferred by user for now.

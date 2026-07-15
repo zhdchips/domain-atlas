@@ -18,6 +18,7 @@ from domain_atlas.domain.projects import CreateDomainProject, DomainProjectRepos
 from domain_atlas.domain.qa import QARepository
 from domain_atlas.domain.source_candidates import SourceCandidateRepository
 from domain_atlas.domain.sources import ChunkRepository, CreateSource, SourceRepository
+from domain_atlas.domain.workflow import WorkflowRepository
 from domain_atlas.ingestion.service import IngestionService
 from domain_atlas.providers.chat import OpenAICompatibleChatProvider
 from domain_atlas.providers.embeddings import OpenAICompatibleEmbeddingProvider
@@ -62,6 +63,9 @@ def create_app(
 
     def qa_repository() -> QARepository:
         return QARepository(app_settings.database_path)
+
+    def workflow_repository() -> WorkflowRepository:
+        return WorkflowRepository(app_settings.database_path)
 
     def source_discovery_provider() -> ExaSearchProvider:
         return discovery_provider or ExaSearchProvider(api_key=app_settings.exa_api_key)
@@ -180,6 +184,7 @@ def create_app(
         sources = source_repository().list_for_project(project_id)
         chunk_count = chunk_repository().count_for_project(project_id)
         wiki_count = artifact_repository().count_wiki_pages(project_id)
+        workflow_runs = workflow_repository().list_for_project(project_id, limit=3)
 
         return templates.TemplateResponse(
             request,
@@ -192,6 +197,7 @@ def create_app(
                 "chunk_count": chunk_count,
                 "wiki_count": wiki_count,
                 "search_max_results": app_settings.search_max_results,
+                "workflow_runs": workflow_runs,
             },
         )
 

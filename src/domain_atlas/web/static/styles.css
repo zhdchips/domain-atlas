@@ -129,7 +129,8 @@ button {
 .workflow-grid,
 .status-grid,
 .candidate-list,
-.source-list {
+.source-list,
+.workflow-log {
   display: grid;
   gap: 12px;
 }
@@ -237,6 +238,33 @@ button {
   margin: 6px 0;
   color: #475569;
   overflow-wrap: anywhere;
+}
+
+.workflow-run {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid #dde2ea;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.workflow-run ol {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 22px;
+}
+
+.workflow-run li {
+  overflow-wrap: anywhere;
+}
+
+.workflow-run code {
+  display: block;
+  margin-top: 4px;
+  color: #475569;
+  white-space: pre-wrap;
 }
 
 .two-column {

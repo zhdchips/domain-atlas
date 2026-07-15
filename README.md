@@ -4,6 +4,20 @@ Domain Atlas is a local-first agentic domain learning system. It ingests trusted
 
 This repository is built with Spec-Driven Development. See `specs/mvp/` for the active MVP specification, plan, and tasks.
 
+## Architecture
+
+Domain Atlas treats the generated Wiki as the primary knowledge layer:
+
+- Sources and chunks are the evidence layer. They preserve raw provenance, citation labels, and embeddings for source-level fallback.
+- Wiki pages and Wiki sections are the learning layer. They keep stable slugs, topic paths, section citations, source chunk provenance, and Wiki links.
+- QA searches Wiki sections first, then falls back to source chunks only when Wiki evidence is missing.
+- Wiki lint checks missing section citations, duplicate slugs/topic paths, and orphaned pages.
+
+The MVP supports two interaction modes:
+
+- Guided mode: start from a domain name, automatically search Exa, select authoritative sources, ingest them, and build the LLM Wiki and learning path.
+- Expert mode: keep manual control over search, candidate confirmation, source ingestion, and knowledge build.
+
 ## Quickstart
 
 ```bash
@@ -41,8 +55,10 @@ The smoke test verifies Exa search, chat completion, and embedding generation wi
 ## MVP Flow
 
 1. Create a domain project.
-2. Search Exa candidates or add URL/Markdown/PDF sources manually.
-3. Confirm candidates and ingest sources.
-4. Build the knowledge artifacts.
+2. Choose guided mode for one-click setup or expert mode for manual control.
+3. In guided mode, run autopilot to search, filter, ingest, and build.
+4. In expert mode, search Exa candidates or add URL/Markdown/PDF sources manually.
 5. Read the generated Wiki and learning path.
-6. Ask citation-grounded questions.
+6. Ask Wiki-first, citation-grounded questions.
+
+Autopilot keeps the process transparent by saving discovered candidates, marking auto-accepted candidates, creating URL sources, recording workflow steps, and showing recent workflow logs on the project dashboard.

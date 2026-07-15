@@ -6,6 +6,7 @@ from domain_atlas.core.db import connect, initialize_database
 from domain_atlas.domain.projects import CreateDomainProject, DomainProjectRepository
 from domain_atlas.domain.source_candidates import SourceCandidateDraft, SourceCandidateRepository
 from domain_atlas.domain.sources import SourceRepository
+from domain_atlas.domain.workflow import WorkflowRepository
 from domain_atlas.workflow.autopilot import AutopilotWorkflow, select_autopilot_candidates
 
 
@@ -107,6 +108,15 @@ def test_autopilot_workflow_creates_sources_ingests_and_builds(tmp_path):
         "build_knowledge",
     ]
     assert json.loads(steps[1]["output_json"])["selected_count"] == 2
+
+    listed_runs = WorkflowRepository(database_path).list_for_project(project.id)
+    assert listed_runs[0].workflow_name == "guided_autopilot"
+    assert [step.step_name for step in listed_runs[0].steps] == [
+        "discover_candidates",
+        "select_candidates",
+        "ingest_sources",
+        "build_knowledge",
+    ]
 
 
 def _draft(

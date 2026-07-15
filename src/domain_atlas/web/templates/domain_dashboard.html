@@ -76,6 +76,41 @@
   </div>
 </section>
 
+<section class="panel">
+  <h2>流程记录</h2>
+  {% if workflow_runs %}
+    <div class="workflow-log">
+      {% for run in workflow_runs %}
+        <article class="workflow-run">
+          <div class="candidate-heading">
+            <strong>{{ run.workflow_name }}</strong>
+            <span class="status-pill">{{ run.status }}</span>
+          </div>
+          {% if run.error %}
+            <p class="muted">{{ run.error }}</p>
+          {% endif %}
+          <ol>
+            {% for step in run.steps %}
+              <li>
+                <span>{{ step.step_name }}</span>
+                <small>{{ step.status }}</small>
+                {% if step.output %}
+                  <code>{{ step.output }}</code>
+                {% endif %}
+                {% if step.error %}
+                  <small>{{ step.error }}</small>
+                {% endif %}
+              </li>
+            {% endfor %}
+          </ol>
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="muted">还没有流程记录。执行简易模式或知识构建后，这里会显示每一步状态。</p>
+  {% endif %}
+</section>
+
 <section id="sources" class="panel">
   <h2>搜索候选资料</h2>
   <form action="/domains/{{ project.id }}/discover" method="post" class="form-grid">
