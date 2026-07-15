@@ -101,11 +101,11 @@
 
 ## Phase 11: Interaction Modes
 
-- [ ] Add `interaction_mode` to DomainProject schema and model.
-- [ ] Add expert/guided mode selector in project creation UI.
-- [ ] Preserve expert mode manual flows.
-- [ ] Add tests for interaction mode defaults and persistence.
-- [ ] Commit phase result.
+- [x] Add `interaction_mode` to DomainProject schema and model.
+- [x] Add expert/guided mode selector in project creation UI.
+- [x] Preserve expert mode manual flows.
+- [x] Add tests for interaction mode defaults and persistence.
+- [x] Commit phase result.
 - [x] Push deferred by user for now.
 
 ## Phase 12: Guided Autopilot

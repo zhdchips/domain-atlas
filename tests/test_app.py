@@ -170,6 +170,7 @@ def test_create_domain_redirects_to_dashboard(tmp_path):
             "goal": "建立系统化知识地图",
             "level": "beginner",
             "language": "zh",
+            "interaction_mode": "expert",
         },
         follow_redirects=False,
     )
@@ -181,6 +182,7 @@ def test_create_domain_redirects_to_dashboard(tmp_path):
     assert dashboard.status_code == 200
     assert "LLM Agents" in dashboard.text
     assert "建立系统化知识地图" in dashboard.text
+    assert "expert" in dashboard.text
     assert "学习路线" in dashboard.text
 
 

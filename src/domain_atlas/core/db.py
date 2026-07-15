@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS domain_projects (
     goal TEXT NOT NULL DEFAULT '',
     level TEXT NOT NULL DEFAULT 'beginner',
     language TEXT NOT NULL DEFAULT 'zh',
+    interaction_mode TEXT NOT NULL DEFAULT 'guided',
     status TEXT NOT NULL DEFAULT 'draft',
     build_status TEXT NOT NULL DEFAULT 'not_started',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -228,6 +229,12 @@ def initialize_database(database_path: Path) -> None:
         connection.executescript(SCHEMA)
         _ensure_column(connection, "wiki_pages", "slug", "TEXT NOT NULL DEFAULT ''")
         _ensure_column(connection, "wiki_pages", "revision", "INTEGER NOT NULL DEFAULT 1")
+        _ensure_column(
+            connection,
+            "domain_projects",
+            "interaction_mode",
+            "TEXT NOT NULL DEFAULT 'guided'",
+        )
         _ensure_column(
             connection,
             "qa_records",

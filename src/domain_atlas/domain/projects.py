@@ -15,6 +15,7 @@ class DomainProject:
     goal: str
     level: str
     language: str
+    interaction_mode: str
     status: str
     build_status: str
     created_at: str
@@ -27,6 +28,7 @@ class CreateDomainProject:
     goal: str = ""
     level: str = "beginner"
     language: str = "zh"
+    interaction_mode: str = "guided"
 
 
 class DomainProjectRepository:
@@ -43,14 +45,15 @@ class DomainProjectRepository:
         with connect(self.database_path) as connection:
             cursor = connection.execute(
                 """
-                INSERT INTO domain_projects (name, goal, level, language)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO domain_projects (name, goal, level, language, interaction_mode)
+                VALUES (?, ?, ?, ?, ?)
                 """,
                 (
                     name,
                     payload.goal.strip(),
                     payload.level.strip() or "beginner",
                     payload.language.strip() or "zh",
+                    _normalize_interaction_mode(payload.interaction_mode),
                 ),
             )
             project_id = int(cursor.lastrowid)
@@ -104,8 +107,14 @@ def _row_to_project(row) -> DomainProject:
         goal=str(row["goal"]),
         level=str(row["level"]),
         language=str(row["language"]),
+        interaction_mode=str(row["interaction_mode"]),
         status=str(row["status"]),
         build_status=str(row["build_status"]),
         created_at=str(row["created_at"]),
         updated_at=str(row["updated_at"]),
     )
+
+
+def _normalize_interaction_mode(value: str) -> str:
+    normalized = value.strip().lower()
+    return normalized if normalized in {"guided", "expert"} else "guided"

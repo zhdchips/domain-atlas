@@ -41,6 +41,7 @@ def test_project_repository_creates_lists_and_gets_project(tmp_path):
     assert created.name == "强化学习"
     assert created.goal == "理解核心算法"
     assert created.language == "zh"
+    assert created.interaction_mode == "guided"
     assert created.status == "draft"
     assert created.build_status == "not_started"
     assert repository.get(created.id) == created
@@ -58,3 +59,19 @@ def test_project_repository_rejects_blank_name(tmp_path):
         assert "name is required" in str(exc)
     else:
         raise AssertionError("Expected blank project name to be rejected.")
+
+
+def test_project_repository_persists_expert_interaction_mode(tmp_path):
+    database_path = tmp_path / "domain_atlas.sqlite3"
+    initialize_database(database_path)
+    repository = DomainProjectRepository(database_path)
+
+    created = repository.create(
+        CreateDomainProject(
+            name="LLM Agents",
+            interaction_mode="expert",
+        )
+    )
+
+    assert created.interaction_mode == "expert"
+    assert repository.get(created.id).interaction_mode == "expert"

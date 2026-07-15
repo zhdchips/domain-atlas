@@ -34,6 +34,13 @@
         </select>
       </label>
     </div>
+    <label>
+      <span>交互模式</span>
+      <select name="interaction_mode">
+        <option value="guided" selected>简易模式：自动搜索、摄取并构建</option>
+        <option value="expert">专家模式：手动确认每一步</option>
+      </select>
+    </label>
     <button type="submit">创建项目</button>
   </form>
 </section>
@@ -46,7 +53,7 @@
         <a class="project-item" href="/domains/{{ project.id }}">
           <strong>{{ project.name }}</strong>
           <span>{{ project.goal or "尚未设置学习目标" }}</span>
-          <small>语言 {{ project.language }} · 状态 {{ project.status }} · 构建 {{ project.build_status }}</small>
+          <small>模式 {{ project.interaction_mode }} · 语言 {{ project.language }} · 状态 {{ project.status }} · 构建 {{ project.build_status }}</small>
         </a>
       {% endfor %}
     </div>

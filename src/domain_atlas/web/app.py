@@ -142,6 +142,7 @@ def create_app(
         goal: str = Form(""),
         level: str = Form("beginner"),
         language: str = Form("zh"),
+        interaction_mode: str = Form("guided"),
     ) -> RedirectResponse:
         project = project_repository().create(
             CreateDomainProject(
@@ -149,6 +150,7 @@ def create_app(
                 goal=goal,
                 level=level,
                 language=language,
+                interaction_mode=interaction_mode,
             )
         )
         return RedirectResponse(
