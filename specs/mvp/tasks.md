@@ -126,3 +126,12 @@
 - [x] Verify ignored secret/runtime files.
 - [x] Commit final iteration result.
 - [x] Push deferred by user for now.
+
+## Phase 14: Navigation And Layered Regression
+
+- [x] Track detailed SDD in `specs/iterations/2026-07-15-layered-regression/`.
+- [x] Fix dashboard Wiki, learning path, and QA navigation cards.
+- [x] Add deterministic E2E regression coverage for guided domain flow.
+- [x] Add layered regression runner for fast, e2e, and live checks.
+- [x] Commit phase result.
+- [x] Push deferred by user for now.

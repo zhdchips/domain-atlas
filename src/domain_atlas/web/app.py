@@ -37,6 +37,7 @@ def create_app(
     chat_provider: object | None = None,
     embedding_provider: object | None = None,
     vector_index: VectorIndex | None = None,
+    autopilot_runner: object | None = None,
 ) -> FastAPI:
     """Create the Domain Atlas web app."""
     app_settings = settings or get_settings()
@@ -125,6 +126,8 @@ def create_app(
         )
 
     def autopilot_workflow() -> AutopilotWorkflow:
+        if autopilot_runner is not None:
+            return autopilot_runner
         return AutopilotWorkflow(
             database_path=app_settings.database_path,
             discovery_provider=source_discovery_provider(),

@@ -52,6 +52,18 @@ uv run python scripts/smoke_providers.py
 
 The smoke test verifies Exa search, chat completion, and embedding generation without printing secrets.
 
+## Layered Regression
+
+Domain Atlas uses layered regression checks:
+
+```bash
+uv run python scripts/regression.py --fast
+uv run python scripts/regression.py --e2e
+uv run python scripts/regression.py --live
+```
+
+Fast and E2E checks are deterministic and do not call live providers. Live checks verify configured external provider availability. See `specs/iterations/2026-07-15-layered-regression/` for the SDD strategy and maintenance checklist.
+
 ## MVP Flow
 
 1. Create a domain project.
