@@ -16,6 +16,7 @@ class QARecord:
     question: str
     answer: str
     citations: list[str]
+    source_provenance: list[str]
     evidence_status: str
     created_at: str
 
@@ -31,21 +32,28 @@ class QARepository:
         question: str,
         answer: str,
         citations: list[str],
+        source_provenance: list[str] | None = None,
         evidence_status: str,
     ) -> QARecord:
         with connect(self.database_path) as connection:
             cursor = connection.execute(
                 """
                 INSERT INTO qa_records (
-                    project_id, question, answer, citations_json, evidence_status
+                    project_id,
+                    question,
+                    answer,
+                    citations_json,
+                    source_provenance_json,
+                    evidence_status
                 )
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
                     project_id,
                     question.strip(),
                     answer.strip(),
                     json.dumps(citations, ensure_ascii=False),
+                    json.dumps(source_provenance or [], ensure_ascii=False),
                     evidence_status,
                 ),
             )
@@ -77,6 +85,7 @@ def _row_to_record(row) -> QARecord:
         question=str(row["question"]),
         answer=str(row["answer"]),
         citations=json.loads(str(row["citations_json"] or "[]")),
+        source_provenance=json.loads(str(row["source_provenance_json"] or "[]")),
         evidence_status=str(row["evidence_status"]),
         created_at=str(row["created_at"]),
     )

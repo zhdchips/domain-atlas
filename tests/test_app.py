@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 from domain_atlas.core.settings import Settings
 from domain_atlas.domain.source_candidates import SourceCandidateDraft
-from domain_atlas.providers.vector_index import RetrievedChunk
+from domain_atlas.providers.vector_index import RetrievedChunk, RetrievedWikiSection
 from domain_atlas.web.app import create_app
 
 
@@ -50,6 +50,21 @@ class FakeVectorIndex:
                 text="Agents use tools.",
                 citation_label="S1-C1",
                 source_id=1,
+                distance=0.1,
+                metadata={},
+            )
+        ]
+
+    def query_wiki_sections(self, *, project_id: int, query_embedding: list[float], limit: int):
+        return [
+            RetrievedWikiSection(
+                section_uid="agent#1",
+                page_slug="agent",
+                heading="Agent",
+                body_markdown="Agent 会使用工具完成任务。",
+                citations=["W:agent#1"],
+                source_chunk_uids=["chunk:1"],
+                source_citation_labels=["S1-C1"],
                 distance=0.1,
                 metadata={},
             )
@@ -115,9 +130,10 @@ class FakeChatProvider:
 
 class FakeQAChatProvider:
     def complete_json(self, *, system_prompt: str, user_prompt: str):
+        assert "W:agent#1" in user_prompt
         return {
             "answer": "Agent 会使用工具完成任务。",
-            "citations": ["S1-C1"],
+            "citations": ["W:agent#1"],
             "evidence_status": "sufficient",
         }
 
@@ -316,4 +332,5 @@ def test_qa_route_records_cited_answer(tmp_path):
     assert response.status_code == 303
     qa_page = client.get("/domains/1/qa")
     assert "Agent 会使用工具完成任务" in qa_page.text
+    assert "W:agent#1" in qa_page.text
     assert "S1-C1" in qa_page.text

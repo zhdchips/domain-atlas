@@ -91,12 +91,12 @@
 
 ## Phase 10: Wiki-First QA
 
-- [ ] Update QA service to retrieve Wiki sections first.
-- [ ] Preserve source chunk provenance in QA records.
-- [ ] Add insufficient-evidence behavior for missing Wiki evidence.
-- [ ] Update QA UI to show Wiki citations and source provenance.
-- [ ] Add tests proving QA uses Wiki sections before source chunks.
-- [ ] Commit phase result.
+- [x] Update QA service to retrieve Wiki sections first.
+- [x] Preserve source chunk provenance in QA records.
+- [x] Add insufficient-evidence behavior for missing Wiki evidence.
+- [x] Update QA UI to show Wiki citations and source provenance.
+- [x] Add tests proving QA uses Wiki sections before source chunks.
+- [x] Commit phase result.
 - [x] Push deferred by user for now.
 
 ## Phase 11: Interaction Modes

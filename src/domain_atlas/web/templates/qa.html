@@ -24,7 +24,8 @@
       <p class="eyebrow">{{ record.evidence_status }}</p>
       <h2>{{ record.question }}</h2>
       <p>{{ record.answer }}</p>
-      <p class="muted">Citations: {{ ", ".join(record.citations) }}</p>
+      <p class="muted">Wiki citations: {{ ", ".join(record.citations) }}</p>
+      <p class="muted">Source provenance: {{ ", ".join(record.source_provenance) }}</p>
     </article>
   {% else %}
     <article class="panel">

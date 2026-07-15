@@ -211,6 +211,7 @@ CREATE TABLE IF NOT EXISTS qa_records (
     question TEXT NOT NULL,
     answer TEXT NOT NULL,
     citations_json TEXT NOT NULL DEFAULT '[]',
+    source_provenance_json TEXT NOT NULL DEFAULT '[]',
     evidence_status TEXT NOT NULL DEFAULT 'sufficient',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -227,6 +228,12 @@ def initialize_database(database_path: Path) -> None:
         connection.executescript(SCHEMA)
         _ensure_column(connection, "wiki_pages", "slug", "TEXT NOT NULL DEFAULT ''")
         _ensure_column(connection, "wiki_pages", "revision", "INTEGER NOT NULL DEFAULT 1")
+        _ensure_column(
+            connection,
+            "qa_records",
+            "source_provenance_json",
+            "TEXT NOT NULL DEFAULT '[]'",
+        )
 
 
 @contextmanager
