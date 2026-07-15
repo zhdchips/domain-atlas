@@ -91,11 +91,37 @@ def _create_wiki_fixture(settings: Settings) -> int:
                 {
                     "stage": stage,
                     "title": title,
+                    "stage_overview": f"{title}阶段说明 Domain Atlas 如何把资料转为可学习内容。",
+                    "core_explanation": "学习主体由 Agent 从证据中提取和组织，citation 与 provenance 用于回到来源核验。[S1-C1]",
+                    "knowledge_blocks": [
+                        {
+                            "title": "Agent 讲解优先",
+                            "body": "页面先展示可直接学习的讲解，再展示可选证据来源。[S1-C1]",
+                            "citations": ["S1-C1"],
+                        }
+                    ],
+                    "examples": [
+                        {
+                            "title": "Wiki 到课程章节",
+                            "body": "WikiSection 可作为证据，学习模块负责把证据组织成课程章节。[S1-C1]",
+                            "citations": ["S1-C1"],
+                        }
+                    ],
+                    "misconceptions": [
+                        {
+                            "title": "把来源列表当课程",
+                            "correction": "来源列表只用于溯源和深入阅读，不是默认学习主体。[S1-C1]",
+                            "citations": ["S1-C1"],
+                        }
+                    ],
                     "objectives": ["理解领域主线"],
                     "readings": ["Wiki Index [S1-C1]"],
                     "key_concepts": ["Provenance"],
                     "check_questions": ["为什么需要 provenance？"],
                     "practice_task": "用一段话说明 citation 和 provenance 的关系。",
+                    "further_reading": [
+                        {"title": "Wiki Index", "locator": "wiki/index", "citations": ["S1-C1"]}
+                    ],
                     "citations": ["S1-C1"],
                 }
                 for stage, title in enumerate(
@@ -318,14 +344,20 @@ def _assert_learning_guide_layout(page) -> None:
           const hero = document.querySelector(".learning-guide-hero");
           const qaBox = qaGrid.getBoundingClientRect();
           const columnsBox = columns.getBoundingClientRect();
+          const blockGrid = document.querySelector(".lesson-block-grid");
+          const evidence = document.querySelector(".evidence-reading");
           return {
             text: document.body.innerText,
             qaDisplay: getComputedStyle(qaGrid).display,
             qaColumns: getComputedStyle(qaGrid).gridTemplateColumns,
             columnsDisplay: getComputedStyle(columns).display,
             columnsTemplate: getComputedStyle(columns).gridTemplateColumns,
+            blockGridDisplay: getComputedStyle(blockGrid).display,
+            blockGridColumns: getComputedStyle(blockGrid).gridTemplateColumns,
             qaCount: document.querySelectorAll(".qa-card").length,
             moduleCount: document.querySelectorAll(".learning-module").length,
+            lessonBlockCount: document.querySelectorAll(".lesson-block").length,
+            evidenceHeading: evidence.querySelector("h3")?.textContent || "",
             firstCardHeight: firstCard.getBoundingClientRect().height,
             heroWidth: hero.getBoundingClientRect().width,
             qaWidth: qaBox.width,
@@ -343,10 +375,18 @@ def _assert_learning_guide_layout(page) -> None:
         failures.append(f"qa grid display is {metrics['qaDisplay']!r}, expected 'grid'")
     if metrics["columnsDisplay"] != "grid":
         failures.append(f"learning columns display is {metrics['columnsDisplay']!r}, expected 'grid'")
+    if metrics["blockGridDisplay"] != "grid":
+        failures.append(f"lesson block grid display is {metrics['blockGridDisplay']!r}, expected 'grid'")
     if metrics["qaCount"] != 10:
         failures.append(f"expected 10 question cards, got {metrics['qaCount']}")
     if metrics["moduleCount"] != 5:
         failures.append(f"expected 5 learning modules, got {metrics['moduleCount']}")
+    if metrics["lessonBlockCount"] < 5:
+        failures.append(f"expected lesson blocks for modules, got {metrics['lessonBlockCount']}")
+    if metrics["evidenceHeading"] != "证据来源 / 深入阅读":
+        failures.append(f"evidence heading is {metrics['evidenceHeading']!r}")
+    if "阅读材料" in metrics["text"]:
+        failures.append("legacy reading-material heading is still visible")
     if metrics["firstCardHeight"] < 80:
         failures.append(f"first question card is too short: {metrics['firstCardHeight']:.1f}")
     if metrics["heroWidth"] < 700 or metrics["qaWidth"] < 700 or metrics["columnsWidth"] < 700:
@@ -360,7 +400,8 @@ def _assert_learning_guide_layout(page) -> None:
     print(
         "verified learning guide layout "
         f"qa_columns={metrics['qaColumns']} "
-        f"content_columns={metrics['columnsTemplate']}"
+        f"content_columns={metrics['columnsTemplate']} "
+        f"lesson_columns={metrics['blockGridColumns']}"
     )
 
 

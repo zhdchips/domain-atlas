@@ -70,11 +70,37 @@ def build_payload():
             {
                 "stage": stage,
                 "title": title,
+                "stage_overview": f"{title}阶段先建立可直接学习的 Agent 知识框架。",
+                "core_explanation": "Agent 会围绕目标规划步骤、调用工具，并根据反馈调整后续动作。[S1-C1]",
+                "knowledge_blocks": [
+                    {
+                        "title": "目标与规划",
+                        "body": "Agent 先把目标拆成可执行步骤，再决定是否需要工具。[S1-C1]",
+                        "citations": ["S1-C1"],
+                    }
+                ],
+                "examples": [
+                    {
+                        "title": "工具调用例子",
+                        "body": "当问题需要外部信息时，Agent 可以调用搜索或数据库工具。[S1-C1]",
+                        "citations": ["S1-C1"],
+                    }
+                ],
+                "misconceptions": [
+                    {
+                        "title": "把 Agent 等同于聊天",
+                        "correction": "Agent 的关键在于目标驱动、工具使用和反馈闭环。[S1-C1]",
+                        "citations": ["S1-C1"],
+                    }
+                ],
                 "objectives": [f"理解{title}"],
                 "readings": ["Agent [S1-C1]"],
                 "key_concepts": ["Agent"],
                 "check_questions": ["Agent 为什么需要工具？"],
                 "practice_task": "用一句话解释 Agent。",
+                "further_reading": [
+                    {"title": "Agent Source", "locator": "Agent [S1-C1]", "citations": ["S1-C1"]}
+                ],
                 "citations": ["S1-C1"],
             }
             for stage, title in enumerate(
@@ -183,5 +209,11 @@ def test_knowledge_build_workflow_persists_artifacts(tmp_path):
     assert [item["question"] for item in guide.question_answers] == GUIDE_QUESTIONS
     assert len(modules) == 5
     assert modules[0].title == "入门认知"
+    assert modules[0].stage_overview.startswith("入门认知阶段")
+    assert modules[0].core_explanation.startswith("Agent 会围绕目标")
+    assert modules[0].knowledge_blocks[0]["title"] == "目标与规划"
+    assert modules[0].examples[0]["title"] == "工具调用例子"
+    assert modules[0].misconceptions[0]["title"] == "把 Agent 等同于聊天"
+    assert modules[0].further_reading[0]["title"] == "Agent Source"
     assert updated_project is not None
     assert updated_project.build_status == "completed"

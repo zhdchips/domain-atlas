@@ -198,6 +198,12 @@ CREATE TABLE IF NOT EXISTS learning_modules (
     project_id INTEGER NOT NULL REFERENCES domain_projects(id) ON DELETE CASCADE,
     stage INTEGER NOT NULL,
     title TEXT NOT NULL,
+    stage_overview TEXT NOT NULL DEFAULT '',
+    core_explanation TEXT NOT NULL DEFAULT '',
+    knowledge_blocks_json TEXT NOT NULL DEFAULT '[]',
+    examples_json TEXT NOT NULL DEFAULT '[]',
+    misconceptions_json TEXT NOT NULL DEFAULT '[]',
+    further_reading_json TEXT NOT NULL DEFAULT '[]',
     objectives_json TEXT NOT NULL DEFAULT '[]',
     readings_json TEXT NOT NULL DEFAULT '[]',
     key_concepts_json TEXT NOT NULL DEFAULT '[]',
@@ -293,6 +299,27 @@ def initialize_database(database_path: Path) -> None:
             connection,
             "qa_records",
             "source_provenance_json",
+            "TEXT NOT NULL DEFAULT '[]'",
+        )
+        _ensure_column(connection, "learning_modules", "stage_overview", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(connection, "learning_modules", "core_explanation", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(
+            connection,
+            "learning_modules",
+            "knowledge_blocks_json",
+            "TEXT NOT NULL DEFAULT '[]'",
+        )
+        _ensure_column(connection, "learning_modules", "examples_json", "TEXT NOT NULL DEFAULT '[]'")
+        _ensure_column(
+            connection,
+            "learning_modules",
+            "misconceptions_json",
+            "TEXT NOT NULL DEFAULT '[]'",
+        )
+        _ensure_column(
+            connection,
+            "learning_modules",
+            "further_reading_json",
             "TEXT NOT NULL DEFAULT '[]'",
         )
 

@@ -83,6 +83,14 @@ def test_guided_domain_flow_navigation_and_qa_are_deterministic(tmp_path):
     assert "支线拓展" in learning_path.text
     assert "为什么存在" in learning_path.text
     assert "从数据建设到治理闭环" in learning_path.text
+    assert "阶段定位" in learning_path.text
+    assert "核心讲解" in learning_path.text
+    assert "知识块" in learning_path.text
+    assert "一体化数据建设平台" in learning_path.text
+    assert "例子 / 案例" in learning_path.text
+    assert "常见误区" in learning_path.text
+    assert "证据来源 / 深入阅读" in learning_path.text
+    assert "阅读材料" not in learning_path.text
     assert "入门认知" in learning_path.text
     assert "画出 Dataphin 的核心对象关系" in learning_path.text
 
@@ -419,11 +427,37 @@ def _artifact_payload(source_id: int) -> dict:
             {
                 "stage": stage,
                 "title": title,
+                "stage_overview": f"{title}阶段先把 Dataphin 的定位、对象和治理主线讲清楚。",
+                "core_explanation": "Dataphin 是一体化数据建设与治理平台，学习时应先理解数据建设、标准和资产流转之间的关系。[S1-C1]",
+                "knowledge_blocks": [
+                    {
+                        "title": "一体化数据建设平台",
+                        "body": "Dataphin 把数据建设和治理能力放在同一条学习主线上理解。[S1-C1]",
+                        "citations": ["S1-C1"],
+                    }
+                ],
+                "examples": [
+                    {
+                        "title": "核心对象关系图",
+                        "body": "学习者可以用对象关系图串联 Dataphin、数据治理和数据资产。[S1-C1]",
+                        "citations": ["S1-C1"],
+                    }
+                ],
+                "misconceptions": [
+                    {
+                        "title": "只把 Dataphin 当作开发工具",
+                        "correction": "Dataphin 的学习重点还包括治理、标准和资产管理。[S1-C1]",
+                        "citations": ["S1-C1"],
+                    }
+                ],
                 "objectives": ["理解 Dataphin 的基本定位"],
                 "readings": ["Dataphin 入门 [S1-C1]"],
                 "key_concepts": ["Dataphin"],
                 "check_questions": ["Dataphin 是什么？"],
                 "practice_task": "画出 Dataphin 的核心对象关系。",
+                "further_reading": [
+                    {"title": "Dataphin 入门", "locator": "wiki/concepts/dataphin", "citations": ["S1-C1"]}
+                ],
                 "citations": ["S1-C1"],
             }
             for stage, title in enumerate(

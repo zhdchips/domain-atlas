@@ -15,6 +15,10 @@ from domain_atlas.domain.workflow import WorkflowRepository
 from domain_atlas.providers.vector_index import VectorIndex
 
 
+MAX_CONTEXT_CHARS = 18_000
+MAX_CHUNK_CHARS = 2_500
+
+
 class ChatProvider(Protocol):
     def complete_json(self, *, system_prompt: str, user_prompt: str) -> dict[str, Any]:
         ...
@@ -88,6 +92,7 @@ class KnowledgeBuildWorkflow:
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
             )
+            payload = _normalize_payload(payload)
             _validate_payload(payload)
             sources = [
                 self.source_repository.get(source_id)
@@ -179,19 +184,35 @@ Return a JSON object with exactly these keys:
   core_concepts: 8 to 12 objects with name, explanation, depends_on, citations. Use dependency-aware concepts.
   branches: 3 to 6 objects with name, description, when_to_study, citations.
   details: 3 to 6 objects with title, description, practice_or_example, citations.
-- learning_modules: exactly five objects with stage, title, objectives, readings, key_concepts, check_questions, practice_task, citations.
+- learning_modules: exactly five lesson-style objects with stage, title, stage_overview, core_explanation, knowledge_blocks, examples, misconceptions, objectives, key_concepts, check_questions, practice_task, further_reading, citations.
+  Sources are evidence, not the curriculum. Each module must be a self-contained Agent-generated lesson chapter, not a reading list.
+  stage_overview explains what this stage teaches and why it belongs here.
+  core_explanation is concise teaching prose that a learner can study directly.
+  knowledge_blocks: 1 to 2 objects with title, body, citations. Body <= 80 Chinese chars.
+  examples: exactly 1 object with title, body, citations. Body <= 80 Chinese chars.
+  misconceptions: exactly 1 object with title, correction, citations. Correction <= 80 Chinese chars.
+  further_reading: 1 to 2 optional evidence/deep-reading objects with title, locator, citations.
+  Keep legacy objectives, key_concepts, check_questions, practice_task, and citations for compatibility.
+  Do not include a legacy readings field unless necessary; use further_reading for source references.
   Modules should build from the learning_guide: start with mainline and core concepts, then branch into details.
-Keep the response compact and valid JSON. Prefer concise arrays and short encyclopedia-style paragraphs.
+Keep the response compact and valid JSON. Use short strings. Do not include markdown fences.
 """.strip()
 
 
 def _format_context(chunks) -> str:
     lines: list[str] = []
+    used_chars = 0
     for chunk in chunks:
         source_title = chunk.metadata.get("source_title", "Unknown source")
-        lines.append(
-            f"[{chunk.citation_label}] source_id={chunk.source_id} title={source_title}\n{chunk.text}"
-        )
+        chunk_text = chunk.text[:MAX_CHUNK_CHARS]
+        entry = f"[{chunk.citation_label}] source_id={chunk.source_id} title={source_title}\n{chunk_text}"
+        if used_chars + len(entry) > MAX_CONTEXT_CHARS:
+            remaining = MAX_CONTEXT_CHARS - used_chars
+            if remaining > 300:
+                lines.append(entry[:remaining])
+            break
+        lines.append(entry)
+        used_chars += len(entry)
     return "\n\n".join(lines)
 
 
@@ -209,6 +230,14 @@ def _validate_payload(payload: dict[str, Any]) -> None:
         raise ValueError(f"Knowledge build payload missing keys: {', '.join(missing)}")
     if len(payload.get("learning_modules") or []) != 5:
         raise ValueError("Knowledge build must return exactly five learning modules.")
+    for module in payload.get("learning_modules") or []:
+        if not isinstance(module, dict):
+            raise ValueError("Knowledge build learning modules must be objects.")
+        if not module.get("stage_overview") or not module.get("core_explanation"):
+            raise ValueError("Knowledge build learning modules must include lesson teaching prose.")
+        for field in ("knowledge_blocks", "examples", "misconceptions", "further_reading"):
+            if not isinstance(module.get(field), list) or not module.get(field):
+                raise ValueError(f"Knowledge build learning modules must include non-empty {field}.")
     guide = payload.get("learning_guide")
     if not isinstance(guide, dict):
         raise ValueError("Knowledge build must return a learning guide object.")
@@ -218,6 +247,91 @@ def _validate_payload(payload: dict[str, Any]) -> None:
     questions = [str(item.get("question", "")) for item in question_answers if isinstance(item, dict)]
     if questions != REQUIRED_GUIDE_QUESTIONS:
         raise ValueError("Knowledge build learning guide key questions are missing or out of order.")
+
+
+def _normalize_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    modules = payload.get("learning_modules")
+    if not isinstance(modules, list):
+        return payload
+    for module in modules:
+        if not isinstance(module, dict):
+            continue
+        if not module.get("examples"):
+            module["examples"] = module.get("worked_examples") or module.get("cases") or []
+        if not module.get("misconceptions"):
+            module["misconceptions"] = module.get("common_misconceptions") or module.get("failure_cases") or []
+        if not module.get("further_reading"):
+            module["further_reading"] = module.get("evidence_sources") or module.get("source_citations") or []
+        module["knowledge_blocks"] = _structured_items(module.get("knowledge_blocks"), body_key="body")
+        module["examples"] = _structured_items(module.get("examples"), body_key="body")
+        module["misconceptions"] = _structured_items(module.get("misconceptions"), body_key="correction")
+        module["further_reading"] = _structured_items(module.get("further_reading"), body_key="locator")
+        if not module.get("knowledge_blocks"):
+            module["knowledge_blocks"] = _fallback_knowledge_blocks(module)
+        if not module.get("examples"):
+            module["examples"] = _fallback_examples(module)
+        if not module.get("misconceptions"):
+            module["misconceptions"] = _fallback_misconceptions(module)
+        if not module.get("further_reading"):
+            module["further_reading"] = _fallback_further_reading(module)
+    return payload
+
+
+def _structured_items(value: Any, *, body_key: str) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    items: list[dict[str, Any]] = []
+    for index, item in enumerate(value, start=1):
+        if isinstance(item, dict):
+            items.append(item)
+        elif str(item).strip():
+            items.append({"title": f"Item {index}", body_key: str(item).strip(), "citations": [str(item).strip()]})
+    return items
+
+
+def _fallback_knowledge_blocks(module: dict[str, Any]) -> list[dict[str, Any]]:
+    explanation = str(module.get("core_explanation") or module.get("stage_overview") or "").strip()
+    if not explanation:
+        return []
+    return [
+        {
+            "title": str(module.get("title") or "核心知识"),
+            "body": explanation[:160],
+            "citations": _citation_list(module),
+        }
+    ]
+
+
+def _fallback_examples(module: dict[str, Any]) -> list[dict[str, Any]]:
+    blocks = module.get("knowledge_blocks") if isinstance(module.get("knowledge_blocks"), list) else []
+    body = ""
+    if blocks and isinstance(blocks[0], dict):
+        body = str(blocks[0].get("body") or "")
+    body = body or str(module.get("core_explanation") or "")
+    if not body:
+        return []
+    return [{"title": "应用示例", "body": body[:120], "citations": _citation_list(module)}]
+
+
+def _fallback_misconceptions(module: dict[str, Any]) -> list[dict[str, Any]]:
+    body = str(module.get("core_explanation") or module.get("stage_overview") or "").strip()
+    if not body:
+        return []
+    return [{"title": "常见误区", "correction": body[:120], "citations": _citation_list(module)}]
+
+
+def _fallback_further_reading(module: dict[str, Any]) -> list[dict[str, Any]]:
+    citations = _citation_list(module)
+    if not citations:
+        return []
+    return [{"title": "证据来源", "locator": ", ".join(citations), "citations": citations}]
+
+
+def _citation_list(module: dict[str, Any]) -> list[str]:
+    citations = module.get("citations")
+    if isinstance(citations, list):
+        return [str(item) for item in citations if str(item)]
+    return []
 
 
 def _with_workspace_pages(

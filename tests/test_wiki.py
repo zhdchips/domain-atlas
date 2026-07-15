@@ -181,6 +181,59 @@ def test_artifact_repository_persists_learning_guide(tmp_path):
     assert guide.citations == ["S1-C1"]
 
 
+def test_artifact_repository_persists_lesson_module_fields(tmp_path):
+    database_path = tmp_path / "domain_atlas.sqlite3"
+    initialize_database(database_path)
+    project = DomainProjectRepository(database_path).create(CreateDomainProject(name="Lesson Modules"))
+    repository = KnowledgeArtifactRepository(database_path)
+
+    repository.replace_project_artifacts(
+        project.id,
+        {
+            "wiki_pages": [],
+            "source_profiles": [],
+            "concepts": [],
+            "concept_edges": [],
+            "learning_modules": [
+                {
+                    "stage": 1,
+                    "title": "入门认知",
+                    "stage_overview": "先理解领域是什么。",
+                    "core_explanation": "这是 Agent 生成的核心讲解。",
+                    "knowledge_blocks": [
+                        {"title": "知识块", "body": "可直接学习的内容。", "citations": ["S1-C1"]}
+                    ],
+                    "examples": [
+                        {"title": "案例", "body": "一个例子。", "citations": ["S1-C1"]}
+                    ],
+                    "misconceptions": [
+                        {"title": "误区", "correction": "修正说明。", "citations": ["S1-C1"]}
+                    ],
+                    "objectives": ["建立理解"],
+                    "readings": ["旧阅读入口"],
+                    "key_concepts": ["概念"],
+                    "check_questions": ["检查问题？"],
+                    "practice_task": "实践任务。",
+                    "further_reading": [
+                        {"title": "证据来源", "locator": "wiki/index", "citations": ["S1-C1"]}
+                    ],
+                    "citations": ["S1-C1"],
+                }
+            ],
+        },
+    )
+
+    modules = repository.list_learning_modules(project.id)
+
+    assert len(modules) == 1
+    assert modules[0].stage_overview == "先理解领域是什么。"
+    assert modules[0].core_explanation == "这是 Agent 生成的核心讲解。"
+    assert modules[0].knowledge_blocks[0]["title"] == "知识块"
+    assert modules[0].examples[0]["title"] == "案例"
+    assert modules[0].misconceptions[0]["correction"] == "修正说明。"
+    assert modules[0].further_reading[0]["locator"] == "wiki/index"
+
+
 def test_wiki_section_uids_are_project_scoped_and_deduplicated(tmp_path):
     database_path = tmp_path / "domain_atlas.sqlite3"
     initialize_database(database_path)
@@ -297,6 +350,43 @@ def test_learning_guides_table_is_created_for_existing_database(tmp_path):
         }
 
     assert "learning_guides" in tables
+
+
+def test_learning_module_lesson_columns_migrate_old_database(tmp_path):
+    database_path = tmp_path / "domain_atlas.sqlite3"
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE learning_modules (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id INTEGER NOT NULL,
+                stage INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                objectives_json TEXT NOT NULL DEFAULT '[]',
+                readings_json TEXT NOT NULL DEFAULT '[]',
+                key_concepts_json TEXT NOT NULL DEFAULT '[]',
+                check_questions_json TEXT NOT NULL DEFAULT '[]',
+                practice_task TEXT NOT NULL DEFAULT '',
+                citations_json TEXT NOT NULL DEFAULT '[]',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
+    initialize_database(database_path)
+
+    with sqlite3.connect(database_path) as connection:
+        columns = {
+            str(row[1])
+            for row in connection.execute("PRAGMA table_info(learning_modules)").fetchall()
+        }
+
+    assert "stage_overview" in columns
+    assert "core_explanation" in columns
+    assert "knowledge_blocks_json" in columns
+    assert "examples_json" in columns
+    assert "misconceptions_json" in columns
+    assert "further_reading_json" in columns
 
 
 def test_wiki_sections_global_uid_constraint_migrates_to_project_scope(tmp_path):

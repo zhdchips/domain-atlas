@@ -115,19 +115,61 @@
       <article class="panel learning-module">
         <p class="eyebrow">阶段 {{ module.stage }}</p>
         <h2>{{ module.title }}</h2>
+        {% if module.stage_overview %}
+          <section class="lesson-overview">
+            <h3>阶段定位</h3>
+            <p>{{ module.stage_overview }}</p>
+          </section>
+        {% endif %}
+        {% if module.core_explanation %}
+          <section class="lesson-explanation">
+            <h3>核心讲解</h3>
+            <p>{{ module.core_explanation }}</p>
+          </section>
+        {% endif %}
+        {% if module.knowledge_blocks %}
+          <section>
+            <h3>知识块</h3>
+            <div class="lesson-block-grid">
+              {% for block in module.knowledge_blocks %}
+                <article class="lesson-block">
+                  <h4>{{ block.get("title", "知识点") }}</h4>
+                  <p>{{ block.get("body", "") }}</p>
+                  {% if block.get("citations") %}<small>Citations: {{ ", ".join(block.get("citations")) }}</small>{% endif %}
+                </article>
+              {% endfor %}
+            </div>
+          </section>
+        {% endif %}
         <div class="module-grid">
-          <section>
-            <h3>目标</h3>
-            <ul>
-              {% for objective in module.objectives %}<li>{{ objective }}</li>{% endfor %}
-            </ul>
-          </section>
-          <section>
-            <h3>阅读材料</h3>
-            <ul>
-              {% for reading in module.readings %}<li>{{ reading }}</li>{% endfor %}
-            </ul>
-          </section>
+          {% if module.examples %}
+            <section>
+              <h3>例子 / 案例</h3>
+              <div class="lesson-stack">
+                {% for example in module.examples %}
+                  <article>
+                    <h4>{{ example.get("title", "例子") }}</h4>
+                    <p>{{ example.get("body", "") }}</p>
+                    {% if example.get("citations") %}<small>Citations: {{ ", ".join(example.get("citations")) }}</small>{% endif %}
+                  </article>
+                {% endfor %}
+              </div>
+            </section>
+          {% endif %}
+          {% if module.misconceptions %}
+            <section>
+              <h3>常见误区</h3>
+              <div class="lesson-stack">
+                {% for misconception in module.misconceptions %}
+                  <article>
+                    <h4>{{ misconception.get("title", "误区") }}</h4>
+                    <p>{{ misconception.get("correction", "") }}</p>
+                    {% if misconception.get("citations") %}<small>Citations: {{ ", ".join(misconception.get("citations")) }}</small>{% endif %}
+                  </article>
+                {% endfor %}
+              </div>
+            </section>
+          {% endif %}
           <section>
             <h3>关键概念</h3>
             <ul>
@@ -140,10 +182,40 @@
               {% for question in module.check_questions %}<li>{{ question }}</li>{% endfor %}
             </ul>
           </section>
+          {% if module.objectives %}
+            <section>
+              <h3>学习目标</h3>
+              <ul>
+                {% for objective in module.objectives %}<li>{{ objective }}</li>{% endfor %}
+              </ul>
+            </section>
+          {% endif %}
+          <section>
+            <h3>实践任务</h3>
+            <p>{{ module.practice_task }}</p>
+          </section>
         </div>
-        <h3>实践任务</h3>
-        <p>{{ module.practice_task }}</p>
-        <p class="muted">Citations: {{ ", ".join(module.citations) }}</p>
+        <section class="evidence-reading">
+          <h3>证据来源 / 深入阅读</h3>
+          {% if module.further_reading %}
+            <ul>
+              {% for reading in module.further_reading %}
+                <li>
+                  <strong>{{ reading.get("title", "来源") }}</strong>
+                  {% if reading.get("locator") %}<span>{{ reading.get("locator") }}</span>{% endif %}
+                  {% if reading.get("citations") %}<small>{{ ", ".join(reading.get("citations")) }}</small>{% endif %}
+                </li>
+              {% endfor %}
+            </ul>
+          {% elif module.readings %}
+            <ul>
+              {% for reading in module.readings %}<li>{{ reading }}</li>{% endfor %}
+            </ul>
+          {% endif %}
+          {% if module.citations %}
+            <p class="muted">Citations: {{ ", ".join(module.citations) }}</p>
+          {% endif %}
+        </section>
       </article>
     {% endfor %}
   </section>

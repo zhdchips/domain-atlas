@@ -124,6 +124,13 @@ def _run_live_e2e(workdir: Path) -> int:
         raise RuntimeError(f"expected more than 8 wiki sections to exercise embedding batching, got {len(sections)}")
     if len(modules) != 5:
         raise RuntimeError(f"expected 5 learning modules, got {len(modules)}")
+    for module in modules:
+        if not module.stage_overview or not module.core_explanation:
+            raise RuntimeError(f"module {module.stage} did not include lesson prose")
+        if not module.knowledge_blocks or not module.examples or not module.misconceptions:
+            raise RuntimeError(f"module {module.stage} did not include lesson blocks/examples/misconceptions")
+        if not module.further_reading:
+            raise RuntimeError(f"module {module.stage} did not include evidence/deep reading")
     if guide is None:
         raise RuntimeError("build did not create a learning guide")
     if len(guide.question_answers) != 10:
@@ -138,6 +145,7 @@ def _run_live_e2e(workdir: Path) -> int:
     print(
         "built artifacts "
         f"pages={len(pages)} sections={len(sections)} modules={len(modules)} "
+        f"lesson_blocks={sum(len(module.knowledge_blocks) for module in modules)} "
         f"guide_questions={len(guide.question_answers)} concepts={concept_count}"
     )
 

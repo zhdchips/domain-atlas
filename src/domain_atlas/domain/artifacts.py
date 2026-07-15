@@ -73,6 +73,12 @@ class LearningModule:
     project_id: int
     stage: int
     title: str
+    stage_overview: str
+    core_explanation: str
+    knowledge_blocks: list[dict[str, Any]]
+    examples: list[dict[str, Any]]
+    misconceptions: list[dict[str, Any]]
+    further_reading: list[dict[str, Any]]
     objectives: list[str]
     readings: list[str]
     key_concepts: list[str]
@@ -297,6 +303,12 @@ class KnowledgeArtifactRepository:
                         project_id,
                         stage,
                         title,
+                        stage_overview,
+                        core_explanation,
+                        knowledge_blocks_json,
+                        examples_json,
+                        misconceptions_json,
+                        further_reading_json,
                         objectives_json,
                         readings_json,
                         key_concepts_json,
@@ -304,12 +316,18 @@ class KnowledgeArtifactRepository:
                         practice_task,
                         citations_json
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         project_id,
                         int(module.get("stage") or 0),
                         _str(module.get("title")),
+                        _str(module.get("stage_overview")),
+                        _str(module.get("core_explanation")),
+                        _json_structured_list(module.get("knowledge_blocks")),
+                        _json_structured_list(module.get("examples")),
+                        _json_structured_list(module.get("misconceptions")),
+                        _json_structured_list(module.get("further_reading")),
                         _json_list(module.get("objectives")),
                         _json_list(module.get("readings")),
                         _json_list(module.get("key_concepts")),
@@ -423,6 +441,12 @@ class KnowledgeArtifactRepository:
                 project_id=int(row["project_id"]),
                 stage=int(row["stage"]),
                 title=str(row["title"]),
+                stage_overview=str(row["stage_overview"] or ""),
+                core_explanation=str(row["core_explanation"] or ""),
+                knowledge_blocks=_json_dict_list(row["knowledge_blocks_json"]),
+                examples=_json_dict_list(row["examples_json"]),
+                misconceptions=_json_dict_list(row["misconceptions_json"]),
+                further_reading=_json_dict_list(row["further_reading_json"]),
                 objectives=json.loads(str(row["objectives_json"] or "[]")),
                 readings=json.loads(str(row["readings_json"] or "[]")),
                 key_concepts=json.loads(str(row["key_concepts_json"] or "[]")),

@@ -170,11 +170,37 @@ class FakeChatProvider:
                 {
                     "stage": stage,
                     "title": title,
+                    "stage_overview": f"{title}阶段把 Agent 的目标、规划和工具使用串起来。",
+                    "core_explanation": "Agent 不只是聊天接口，而是围绕任务目标规划、调用工具并使用反馈的系统。[S1-C1]",
+                    "knowledge_blocks": [
+                        {
+                            "title": "规划与工具",
+                            "body": "Agent 先判断任务目标，再选择合适工具完成外部动作。[S1-C1]",
+                            "citations": ["S1-C1"],
+                        }
+                    ],
+                    "examples": [
+                        {
+                            "title": "检索型 Agent",
+                            "body": "需要外部资料时，Agent 可以检索资料并把结果纳入回答。[S1-C1]",
+                            "citations": ["S1-C1"],
+                        }
+                    ],
+                    "misconceptions": [
+                        {
+                            "title": "只看对话不看证据",
+                            "correction": "可靠 Agent 学习应保留 citation 和 provenance。[S1-C1]",
+                            "citations": ["S1-C1"],
+                        }
+                    ],
                     "objectives": ["建立理解"],
                     "readings": ["Agent [S1-C1]"],
                     "key_concepts": ["Agent"],
                     "check_questions": ["什么是 Agent？"],
                     "practice_task": "解释 Agent。",
+                    "further_reading": [
+                        {"title": "Agent Wiki", "locator": "wiki/concepts/agent", "citations": ["S1-C1"]}
+                    ],
                     "citations": ["S1-C1"],
                 }
                 for stage, title in enumerate(
@@ -381,6 +407,16 @@ def test_build_knowledge_route_renders_wiki_and_learning_path(tmp_path):
     assert "支线拓展" in path.text
     assert "为什么存在" in path.text
     assert "目标、规划、工具、反馈" in path.text
+    assert "阶段定位" in path.text
+    assert "核心讲解" in path.text
+    assert "知识块" in path.text
+    assert "规划与工具" in path.text
+    assert "例子 / 案例" in path.text
+    assert "检索型 Agent" in path.text
+    assert "常见误区" in path.text
+    assert "只看对话不看证据" in path.text
+    assert "证据来源 / 深入阅读" in path.text
+    assert "阅读材料" not in path.text
     assert "入门认知" in path.text
     assert "进阶专题" in path.text
     assert any(call[0] == "wiki" and call[1] == 1 and call[2] >= 7 for call in vector_index.calls)
