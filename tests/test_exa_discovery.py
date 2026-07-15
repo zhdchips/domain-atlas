@@ -49,6 +49,39 @@ def test_exa_provider_normalizes_search_results():
     assert candidate.metadata["provider_rank"] == 1
 
 
+def test_exa_provider_recognizes_chinese_docs_and_encyclopedia_sources():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "results": [
+                    {
+                        "id": "aliyun-help",
+                        "title": "核心概念定义与逻辑结构-智能数据建设与治理 Dataphin-阿里云",
+                        "url": "https://help.aliyun.com/zh/dataphin/fullmanaged/product-overview/logical-structure-that",
+                        "summary": "Dataphin product overview.",
+                    },
+                    {
+                        "id": "baike",
+                        "title": "Dataphin_百度百科",
+                        "url": "https://baike.baidu.com/item/Dataphin/52936374",
+                        "summary": "Dataphin encyclopedia entry.",
+                    },
+                ]
+            },
+        )
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    provider = ExaSearchProvider(api_key="not-a-real-key", client=client)
+
+    candidates = provider.search("Dataphin", limit=2)
+
+    assert candidates[0].source_type == "official_docs"
+    assert candidates[0].authority_score >= 0.65
+    assert candidates[1].source_type == "encyclopedia"
+    assert candidates[1].authority_score >= 0.65
+
+
 def test_exa_provider_requires_api_key():
     provider = ExaSearchProvider(api_key="")
 

@@ -162,16 +162,31 @@ def _publisher_from_url(url: str) -> str:
 
 
 def _guess_source_type(url: str, title: str) -> str:
-    host = urlparse(url).netloc.lower()
-    lowered = f"{host} {title}".lower()
+    parsed = urlparse(url)
+    host = parsed.netloc.lower()
+    path = parsed.path.lower()
+    lowered = f"{host} {path} {title}".lower()
     if "arxiv.org" in host or "doi.org" in host or "paper" in lowered:
         return "paper"
-    if "docs." in host or "documentation" in lowered or "docs" in lowered:
-        return "official_docs"
     if "github.com" in host:
         return "repository"
-    if "wikipedia.org" in host:
+    if "wikipedia.org" in host or "baike.baidu.com" in host or "百科" in title:
         return "encyclopedia"
+    if (
+        "docs." in host
+        or host.startswith("help.")
+        or host.startswith("developer.")
+        or "documentation" in lowered
+        or "docs" in lowered
+        or "帮助文档" in title
+        or "帮助中心" in title
+        or "产品文档" in title
+        or "白皮书" in title
+        or "/help/" in path
+        or "/product/" in path
+        or "product-overview" in path
+    ):
+        return "official_docs"
     if any(part in host for part in (".edu", ".gov", "ac.", "edu.")):
         return "institution"
     return "web"
@@ -192,10 +207,21 @@ def _authority_score(url: str, source_type: str, publisher: str) -> tuple[float,
         score += 0.15
         reasons.append("代码仓库资料")
     elif source_type == "encyclopedia":
-        score += 0.1
+        score += 0.15
         reasons.append("百科资料")
 
-    if any(part in host for part in (".edu", ".gov", "arxiv.org", "docs.", "github.com")):
+    trusted_host_markers = (
+        ".edu",
+        ".gov",
+        "arxiv.org",
+        "docs.",
+        "help.",
+        "developer.",
+        "github.com",
+        "wikipedia.org",
+        "baike.baidu.com",
+    )
+    if any(part in host for part in trusted_host_markers):
         score += 0.15
         reasons.append("来源域名可信度较高")
 
