@@ -54,17 +54,52 @@ def select_autopilot_candidates(
     *,
     max_sources: int = 5,
     min_authority_score: float = 0.65,
+    fallback_min_authority_score: float = 0.5,
     max_per_domain: int = 2,
 ) -> list[SourceCandidateDraft]:
     """Select high-authority candidates for guided mode."""
-    eligible = [
+    strict_eligible = [
         candidate
         for candidate in candidates
         if candidate.authority_score >= min_authority_score
         and candidate.source_type in PREFERRED_SOURCE_TYPES
     ]
+    if strict_eligible:
+        return _select_ranked_candidates(
+            strict_eligible,
+            max_sources=max_sources,
+            max_per_domain=max_per_domain,
+        )
+
+    fallback_eligible = [
+        candidate
+        for candidate in candidates
+        if candidate.authority_score >= fallback_min_authority_score
+    ]
+    return _select_ranked_candidates(
+        fallback_eligible,
+        max_sources=max_sources,
+        max_per_domain=max_per_domain,
+    )
+
+
+def _selection_mode(selected: list[SourceCandidateDraft]) -> str:
+    if all(
+        candidate.authority_score >= 0.65 and candidate.source_type in PREFERRED_SOURCE_TYPES
+        for candidate in selected
+    ):
+        return "strict_authoritative"
+    return "fallback_best_available"
+
+
+def _select_ranked_candidates(
+    candidates: list[SourceCandidateDraft],
+    *,
+    max_sources: int,
+    max_per_domain: int,
+) -> list[SourceCandidateDraft]:
     ranked = sorted(
-        eligible,
+        candidates,
         key=lambda item: (
             item.source_type not in PREFERRED_SOURCE_TYPES,
             -item.authority_score,
@@ -123,7 +158,7 @@ class AutopilotWorkflow:
 
             selected_drafts = select_autopilot_candidates(drafts)
             if not selected_drafts:
-                raise ValueError("No authoritative candidates passed guided mode filtering.")
+                raise ValueError("No usable candidates passed guided mode filtering.")
             selected_source_ids = {candidate.provider_source_id for candidate in selected_drafts}
             selected = [
                 candidate
@@ -137,6 +172,7 @@ class AutopilotWorkflow:
                 output={
                     "selected_count": len(selected),
                     "candidate_ids": [candidate.id for candidate in selected],
+                    "selection_mode": _selection_mode(selected_drafts),
                 },
             )
 

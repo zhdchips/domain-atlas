@@ -153,6 +153,7 @@ class KnowledgeArtifactRepository:
                     ),
                 )
 
+            used_section_uids: set[str] = set()
             for page in _list(payload.get("wiki_pages")):
                 title = _str(page.get("title"))
                 topic_path = _str(page.get("topic_path")) or title
@@ -200,7 +201,10 @@ class KnowledgeArtifactRepository:
                     )
                     source_chunk_uids = _string_list(section.get("source_chunk_uids"))
                     citations = _string_list(section.get("citations")) or page_citations
-                    section_uid = _str(section.get("section_uid")) or f"{slug}#{ordinal}"
+                    section_uid = _unique_section_uid(
+                        _str(section.get("section_uid")) or f"{slug}#{ordinal}",
+                        used_section_uids,
+                    )
                     connection.execute(
                         """
                         INSERT INTO wiki_sections (
@@ -466,6 +470,16 @@ def _sections_for_page(page: dict[str, Any], default_citations: list[str]) -> li
             "links": _extract_wikilinks(_str(page.get("body_markdown"))),
         }
     ]
+
+
+def _unique_section_uid(section_uid: str, used: set[str]) -> str:
+    candidate = section_uid
+    suffix = 2
+    while candidate in used:
+        candidate = f"{section_uid}-{suffix}"
+        suffix += 1
+    used.add(candidate)
+    return candidate
 
 
 def _extract_wikilinks(markdown: str) -> list[str]:

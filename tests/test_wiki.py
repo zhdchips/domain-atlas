@@ -121,6 +121,54 @@ def test_artifact_repository_persists_typed_workspace_paths(tmp_path):
     assert source_page.title == "Source Doc"
 
 
+def test_wiki_section_uids_are_project_scoped_and_deduplicated(tmp_path):
+    database_path = tmp_path / "domain_atlas.sqlite3"
+    initialize_database(database_path)
+    project_repository = DomainProjectRepository(database_path)
+    first = project_repository.create(CreateDomainProject(name="First"))
+    second = project_repository.create(CreateDomainProject(name="Second"))
+    repository = KnowledgeArtifactRepository(database_path)
+
+    payload = {
+        "wiki_pages": [
+            {
+                "slug": "index",
+                "page_type": "index",
+                "path": "wiki/index",
+                "title": "Wiki Index",
+                "topic_path": "index",
+                "summary": "索引。",
+                "body_markdown": "# Wiki Index",
+                "sections": [
+                    {
+                        "section_uid": "index#1",
+                        "heading": "Index",
+                        "body_markdown": "第一段。",
+                    },
+                    {
+                        "section_uid": "index#1",
+                        "heading": "Index Duplicate",
+                        "body_markdown": "第二段。",
+                    },
+                ],
+            }
+        ],
+        "source_profiles": [],
+        "concepts": [],
+        "concept_edges": [],
+        "learning_modules": [],
+    }
+
+    repository.replace_project_artifacts(first.id, payload)
+    repository.replace_project_artifacts(second.id, payload)
+
+    first_sections = repository.list_wiki_sections(first.id)
+    second_sections = repository.list_wiki_sections(second.id)
+
+    assert [section.section_uid for section in first_sections] == ["index#1", "index#1-2"]
+    assert [section.section_uid for section in second_sections] == ["index#1", "index#1-2"]
+
+
 def test_wiki_page_workspace_columns_migrate_old_database(tmp_path):
     database_path = tmp_path / "domain_atlas.sqlite3"
     with sqlite3.connect(database_path) as connection:
@@ -157,6 +205,45 @@ def test_wiki_page_workspace_columns_migrate_old_database(tmp_path):
     assert page is not None
     assert page.page_type == "concept"
     assert page.updated_at
+
+
+def test_wiki_sections_global_uid_constraint_migrates_to_project_scope(tmp_path):
+    database_path = tmp_path / "domain_atlas.sqlite3"
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE wiki_sections (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                section_uid TEXT NOT NULL UNIQUE,
+                project_id INTEGER NOT NULL,
+                page_id INTEGER NOT NULL,
+                page_slug TEXT NOT NULL,
+                heading TEXT NOT NULL,
+                ordinal INTEGER NOT NULL,
+                body_markdown TEXT NOT NULL,
+                citations_json TEXT NOT NULL DEFAULT '[]',
+                source_chunk_uids_json TEXT NOT NULL DEFAULT '[]',
+                source_citation_labels_json TEXT NOT NULL DEFAULT '[]',
+                links_json TEXT NOT NULL DEFAULT '[]',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
+    initialize_database(database_path)
+
+    with sqlite3.connect(database_path) as connection:
+        indexes = connection.execute("PRAGMA index_list(wiki_sections)").fetchall()
+        index_columns = {
+            row[1]: [
+                column[2]
+                for column in connection.execute(f"PRAGMA index_info({row[1]})").fetchall()
+            ]
+            for row in indexes
+        }
+
+    assert index_columns["idx_wiki_sections_project_uid"] == ["project_id", "section_uid"]
+    assert ["section_uid"] not in index_columns.values()
 
 
 def test_wiki_lint_detects_missing_citations_orphans_and_duplicate_slugs(tmp_path):

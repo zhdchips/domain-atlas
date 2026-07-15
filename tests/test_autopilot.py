@@ -66,6 +66,24 @@ def test_autopilot_candidate_selection_prefers_authoritative_sources():
     ]
 
 
+def test_autopilot_candidate_selection_falls_back_to_best_available_web_sources():
+    drafts = [
+        _draft("creator-a", "https://creator.example.com/a", "web", 0.5),
+        _draft("creator-b", "https://creator.example.com/b", "web", 0.5),
+        _draft("creator-c", "https://creator.example.com/c", "web", 0.5),
+        _draft("media", "https://media.example.com/start", "web", 0.5),
+        _draft("weak", "https://weak.example.com/start", "web", 0.49),
+    ]
+
+    selected = select_autopilot_candidates(drafts, max_sources=5)
+
+    assert [candidate.provider_source_id for candidate in selected] == [
+        "creator-a",
+        "creator-b",
+        "media",
+    ]
+
+
 def test_autopilot_workflow_creates_sources_ingests_and_builds(tmp_path):
     database_path = tmp_path / "domain_atlas.sqlite3"
     initialize_database(database_path)
@@ -119,6 +137,7 @@ def test_autopilot_workflow_creates_sources_ingests_and_builds(tmp_path):
         "build_knowledge",
     ]
     assert json.loads(steps[1]["output_json"])["selected_count"] == 2
+    assert json.loads(steps[1]["output_json"])["selection_mode"] == "strict_authoritative"
 
     listed_runs = WorkflowRepository(database_path).list_for_project(project.id)
     assert listed_runs[0].workflow_name == "guided_autopilot"
@@ -158,6 +177,37 @@ def test_autopilot_continues_when_one_source_fails_ingestion(tmp_path):
     assert ingest_step.output["source_ids"] == [2]
     assert ingest_step.output["failed_sources"][0]["source_id"] == 1
     assert ingest_step.output["failed_sources"][0]["error"] == "URL fetch failed."
+
+
+def test_autopilot_workflow_uses_fallback_selection_for_practical_domains(tmp_path):
+    database_path = tmp_path / "domain_atlas.sqlite3"
+    initialize_database(database_path)
+    project = DomainProjectRepository(database_path).create(
+        CreateDomainProject(name="如何做自媒体", interaction_mode="guided")
+    )
+    drafts = [
+        _draft("creator-a", "https://creator.example.com/a", "web", 0.5),
+        _draft("creator-b", "https://creator.example.com/b", "web", 0.5),
+        _draft("media", "https://media.example.com/start", "web", 0.5),
+    ]
+    ingestion = FakeIngestionRunner()
+    build = FakeBuildRunner()
+
+    result = AutopilotWorkflow(
+        database_path=database_path,
+        discovery_provider=FakeDiscoveryProvider(drafts),
+        ingestion_runner=ingestion,
+        build_runner=build,
+        search_limit=12,
+    ).run(project.id)
+
+    assert result.selected_count == 3
+    assert len(result.source_ids) == 3
+    assert build.project_ids == [project.id]
+
+    runs = WorkflowRepository(database_path).list_for_project(project.id)
+    select_step = next(step for step in runs[0].steps if step.step_name == "select_candidates")
+    assert select_step.output["selection_mode"] == "fallback_best_available"
 
 
 def _draft(

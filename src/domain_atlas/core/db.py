@@ -157,7 +157,7 @@ CREATE TABLE IF NOT EXISTS wiki_pages (
 
 CREATE TABLE IF NOT EXISTS wiki_sections (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    section_uid TEXT NOT NULL UNIQUE,
+    section_uid TEXT NOT NULL,
     project_id INTEGER NOT NULL REFERENCES domain_projects(id) ON DELETE CASCADE,
     page_id INTEGER NOT NULL REFERENCES wiki_pages(id) ON DELETE CASCADE,
     page_slug TEXT NOT NULL,
@@ -200,6 +200,9 @@ ON wiki_pages(project_id, topic_path);
 CREATE INDEX IF NOT EXISTS idx_wiki_sections_project
 ON wiki_sections(project_id, page_slug, ordinal);
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_wiki_sections_project_uid
+ON wiki_sections(project_id, section_uid);
+
 CREATE INDEX IF NOT EXISTS idx_wiki_links_project
 ON wiki_links(project_id, source_page_slug, target_page_slug);
 
@@ -227,6 +230,7 @@ def initialize_database(database_path: Path) -> None:
     database_path.parent.mkdir(parents=True, exist_ok=True)
     with connect(database_path) as connection:
         connection.executescript(SCHEMA)
+        _migrate_wiki_sections_project_scoped_uid(connection)
         _ensure_column(connection, "wiki_pages", "slug", "TEXT NOT NULL DEFAULT ''")
         _ensure_column(connection, "wiki_pages", "page_type", "TEXT NOT NULL DEFAULT 'concept'")
         _ensure_column(connection, "wiki_pages", "path", "TEXT NOT NULL DEFAULT ''")
@@ -305,3 +309,97 @@ def _ensure_column(
     }
     if column_name not in columns:
         connection.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
+
+
+def _migrate_wiki_sections_project_scoped_uid(connection: sqlite3.Connection) -> None:
+    """Replace old globally-unique section_uid schema with project-scoped uniqueness."""
+    if not _has_global_wiki_section_uid_constraint(connection):
+        connection.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_wiki_sections_project_uid
+            ON wiki_sections(project_id, section_uid)
+            """
+        )
+        return
+
+    connection.execute("ALTER TABLE wiki_sections RENAME TO wiki_sections_old")
+    connection.execute(
+        """
+        CREATE TABLE wiki_sections (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            section_uid TEXT NOT NULL,
+            project_id INTEGER NOT NULL REFERENCES domain_projects(id) ON DELETE CASCADE,
+            page_id INTEGER NOT NULL REFERENCES wiki_pages(id) ON DELETE CASCADE,
+            page_slug TEXT NOT NULL,
+            heading TEXT NOT NULL,
+            ordinal INTEGER NOT NULL,
+            body_markdown TEXT NOT NULL,
+            citations_json TEXT NOT NULL DEFAULT '[]',
+            source_chunk_uids_json TEXT NOT NULL DEFAULT '[]',
+            source_citation_labels_json TEXT NOT NULL DEFAULT '[]',
+            links_json TEXT NOT NULL DEFAULT '[]',
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO wiki_sections (
+            id,
+            section_uid,
+            project_id,
+            page_id,
+            page_slug,
+            heading,
+            ordinal,
+            body_markdown,
+            citations_json,
+            source_chunk_uids_json,
+            source_citation_labels_json,
+            links_json,
+            created_at
+        )
+        SELECT
+            id,
+            section_uid,
+            project_id,
+            page_id,
+            page_slug,
+            heading,
+            ordinal,
+            body_markdown,
+            citations_json,
+            source_chunk_uids_json,
+            source_citation_labels_json,
+            links_json,
+            created_at
+        FROM wiki_sections_old
+        """
+    )
+    connection.execute("DROP TABLE wiki_sections_old")
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_wiki_sections_project
+        ON wiki_sections(project_id, page_slug, ordinal)
+        """
+    )
+    connection.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_wiki_sections_project_uid
+        ON wiki_sections(project_id, section_uid)
+        """
+    )
+
+
+def _has_global_wiki_section_uid_constraint(connection: sqlite3.Connection) -> bool:
+    indexes = connection.execute("PRAGMA index_list(wiki_sections)").fetchall()
+    for index in indexes:
+        if str(index["origin"]) != "u":
+            continue
+        columns = [
+            str(row["name"])
+            for row in connection.execute(f"PRAGMA index_info({index['name']})").fetchall()
+        ]
+        if columns == ["section_uid"]:
+            return True
+    return False
