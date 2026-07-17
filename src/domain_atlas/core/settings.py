@@ -34,7 +34,7 @@ class Settings(BaseSettings):
         ),
     )
     intake_llm_timeout_seconds: float = 15.0
-    intake_llm_min_confidence: float = 0.65
+    intake_llm_min_confidence: float = 0.60
 
     embedding_provider: str = "dashscope"
     embedding_base_url: str = ""

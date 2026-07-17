@@ -45,7 +45,7 @@ def _user_prompt(*, name: str, goal: str, level: str) -> str:
         "reason": "non-sensitive concise reason <= 160 chars",
         "understanding": "<= 280 chars and must mention the submitted domain",
         "question": "empty string for clear; one focused question <= 120 chars for clarify",
-        "options": "[] for clear; 2-3 items for clarify: value (lowercase ascii identifier), label, description, scope",
+        "options": "[] for clear; 2-3 items for clarify: value (lowercase ascii identifier using letters, digits, _ or -), label, description, scope",
         "recommended_option": "empty string for clear; one option value for clarify",
         "default_scope": "exact submitted domain for clear; exact scope of recommended option for clarify",
         "assumptions": "array of 0-3 concise strings",

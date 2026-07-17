@@ -30,6 +30,17 @@ def test_valid_clear_assessment_preserves_submitted_domain_scope():
     assert assessment.options == []
 
 
+def test_valid_clarification_accepts_safe_hyphenated_option_identifiers():
+    payload = _clarify_payload("Agent")
+    payload["options"][0]["value"] = "llm-agent"
+    payload["recommended_option"] = "llm-agent"
+
+    assessment = validate_assessment_payload(payload, domain_name="Agent")
+
+    assert assessment is not None
+    assert assessment.recommended_option == "llm-agent"
+
+
 @pytest.mark.parametrize("domain_name", ["Agent", "数据治理", "产品运营"])
 def test_valid_clarification_has_one_question_and_user_selectable_scopes(domain_name):
     assessment = validate_assessment_payload(_clarify_payload(domain_name), domain_name=domain_name)

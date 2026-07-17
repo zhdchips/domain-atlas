@@ -9,7 +9,7 @@ from typing import Any, Protocol
 
 
 DEFAULT_GOAL = "建立可溯源的入门领域地图"
-_OPTION_VALUE = re.compile(r"^[a-z][a-z0-9_]{0,47}$")
+_OPTION_VALUE = re.compile(r"^[a-z][a-z0-9_-]{0,47}$")
 
 
 class IntakeAssessmentProvider(Protocol):
