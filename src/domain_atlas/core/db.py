@@ -18,6 +18,9 @@ CREATE TABLE IF NOT EXISTS domain_projects (
     level TEXT NOT NULL DEFAULT 'beginner',
     language TEXT NOT NULL DEFAULT 'zh',
     interaction_mode TEXT NOT NULL DEFAULT 'guided',
+    scope TEXT NOT NULL DEFAULT '',
+    intake_status TEXT NOT NULL DEFAULT 'confirmed',
+    intake_metadata_json TEXT NOT NULL DEFAULT '{}',
     status TEXT NOT NULL DEFAULT 'draft',
     build_status TEXT NOT NULL DEFAULT 'not_started',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -294,6 +297,26 @@ def initialize_database(database_path: Path) -> None:
             "domain_projects",
             "interaction_mode",
             "TEXT NOT NULL DEFAULT 'guided'",
+        )
+        _ensure_column(connection, "domain_projects", "scope", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(
+            connection,
+            "domain_projects",
+            "intake_status",
+            "TEXT NOT NULL DEFAULT 'confirmed'",
+        )
+        _ensure_column(
+            connection,
+            "domain_projects",
+            "intake_metadata_json",
+            "TEXT NOT NULL DEFAULT '{}'",
+        )
+        connection.execute(
+            """
+            UPDATE domain_projects
+            SET intake_status = 'confirmed'
+            WHERE intake_status = ''
+            """
         )
         _ensure_column(
             connection,

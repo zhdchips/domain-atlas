@@ -56,7 +56,11 @@ def main() -> int:
             _assert_learning_navigation(page, base_url=base_url, project_id=project_id)
             page.goto(f"{base_url}/domains/{project_id}", wait_until="networkidle")
             _assert_dashboard_task_feedback(page)
+            page.goto(f"{base_url}/", wait_until="networkidle")
+            _assert_project_intake(page)
             page.set_viewport_size({"width": 390, "height": 844})
+            page.goto(f"{base_url}/", wait_until="networkidle")
+            _assert_mobile_project_intake(page)
             _assert_mobile_no_horizontal_overflow(page)
             browser.close()
     except PlaywrightError as exc:
@@ -484,6 +488,34 @@ def _assert_dashboard_task_feedback(page) -> None:
         raise RuntimeError("build button was not disabled after submit")
     if "正在生成 LLM Wiki、课程和引用索引" not in form.inner_text():
         raise RuntimeError("build pending status is missing")
+
+
+def _assert_project_intake(page) -> None:
+    page.locator("input[name='name']").fill("Agent")
+    page.get_by_role("button", name="创建项目").click()
+    page.wait_for_url("**/intake", timeout=5000)
+    page.locator(".intake-panel").wait_for(state="visible", timeout=5000)
+    if "你希望从哪个角度学习 Agent" not in page.locator("body").inner_text():
+        raise RuntimeError("ambiguous project did not enter the clarification flow")
+    page.locator("input[value='llm_agent']").check()
+    page.get_by_role("button", name="确认并创建项目").click()
+    page.wait_for_url("**/domains/*", timeout=5000)
+    page.locator(".project-boundary").wait_for(state="visible", timeout=5000)
+    if "LLM Agent：规划、工具调用、记忆与评估" not in page.locator(".project-boundary").inner_text():
+        raise RuntimeError("confirmed project scope is not shown on the dashboard")
+
+
+def _assert_mobile_project_intake(page) -> None:
+    page.locator("input[name='name']").fill("AI")
+    page.get_by_role("button", name="创建项目").click()
+    page.wait_for_url("**/intake", timeout=5000)
+    page.locator(".intake-panel").wait_for(state="visible", timeout=5000)
+    if page.evaluate("() => document.documentElement.scrollWidth > window.innerWidth"):
+        raise RuntimeError("mobile clarification page overflows horizontally")
+    page.get_by_role("button", name="按当前默认理解继续").click()
+    page.locator(".project-boundary").wait_for(state="visible", timeout=5000)
+    if "AI 基础原理" not in page.locator(".project-boundary").inner_text():
+        raise RuntimeError("mobile default clarification did not persist the recommended scope")
 
 
 def _assert_mobile_no_horizontal_overflow(page) -> None:

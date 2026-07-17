@@ -304,6 +304,64 @@ def test_create_domain_redirects_to_dashboard(tmp_path):
     assert "学习路线" in dashboard.text
 
 
+def test_ambiguous_domain_enters_clarification_then_persists_selected_scope(tmp_path):
+    app = create_app(Settings(data_dir=tmp_path))
+    client = TestClient(app)
+
+    created = client.post(
+        "/domains",
+        data={"name": "Agent", "goal": "", "level": "beginner", "interaction_mode": "guided"},
+        follow_redirects=False,
+    )
+
+    assert created.status_code == 303
+    assert created.headers["location"] == "/domains/1/intake"
+    clarification = client.get(created.headers["location"])
+    assert "确认领域边界" in clarification.text
+    assert "LLM Agent" in clarification.text
+    assert "按当前默认理解继续" in clarification.text
+
+    confirmed = client.post(
+        "/domains/1/intake",
+        data={"selection": "llm_agent"},
+        follow_redirects=False,
+    )
+
+    assert confirmed.status_code == 303
+    assert confirmed.headers["location"].startswith("/domains/1")
+    dashboard = client.get(confirmed.headers["location"])
+    assert "LLM Agent：规划、工具调用、记忆与评估" in dashboard.text
+    assert "建立可溯源的入门领域地图" in dashboard.text
+    assert "初始化状态" in dashboard.text
+    assert "已确认" in dashboard.text
+
+
+def test_intake_allows_custom_scope_or_default_and_keeps_expert_manual(tmp_path):
+    app = create_app(Settings(data_dir=tmp_path))
+    client = TestClient(app)
+
+    broad = client.post(
+        "/domains",
+        data={"name": "AI", "goal": "行业落地", "interaction_mode": "expert"},
+        follow_redirects=False,
+    )
+    custom = client.post(
+        "/domains/1/intake",
+        data={"selection": "default", "custom_scope": "医疗 AI 的临床决策支持"},
+        follow_redirects=False,
+    )
+    custom_dashboard = client.get(custom.headers["location"])
+    assert "医疗 AI 的临床决策支持" in custom_dashboard.text
+    assert "专家模式" not in custom_dashboard.text
+    assert "workflow-run" not in custom_dashboard.text
+
+    ambiguous = client.post("/domains", data={"name": "Agent"}, follow_redirects=False)
+    default = client.post("/domains/2/intake", data={"selection": "default"}, follow_redirects=False)
+    default_dashboard = client.get(default.headers["location"])
+    assert "LLM Agent：规划、工具调用、记忆与评估" in default_dashboard.text
+    assert "已按系统当前默认理解继续" in default_dashboard.text
+
+
 def test_home_lists_existing_projects(tmp_path):
     app = create_app(Settings(data_dir=tmp_path))
     client = TestClient(app)

@@ -22,6 +22,13 @@ from domain_atlas.domain.source_candidates import SourceCandidateRepository
 from domain_atlas.domain.sources import ChunkRepository, CreateSource, SourceRepository
 from domain_atlas.domain.workflow import WorkflowRepository
 from domain_atlas.ingestion.service import IngestionService
+from domain_atlas.intake.assessment import (
+    assess_project_intake,
+    assessment_from_metadata,
+    confirmed_intake_metadata,
+    resolved_goal,
+    select_scope,
+)
 from domain_atlas.providers.chat import OpenAICompatibleChatProvider
 from domain_atlas.providers.embeddings import OpenAICompatibleEmbeddingProvider
 from domain_atlas.providers.vector_index import ChromaVectorIndex, VectorIndex
@@ -176,19 +183,93 @@ def create_app(
         language: str = Form("zh"),
         interaction_mode: str = Form("guided"),
     ) -> RedirectResponse:
+        assessment = assess_project_intake(name=name, goal=goal, level=level)
+        resolved_project_goal = resolved_goal(goal)
         project = project_repository().create(
             CreateDomainProject(
                 name=name,
-                goal=goal,
+                goal=resolved_project_goal,
                 level=level,
                 language=language,
                 interaction_mode=interaction_mode,
+                scope=assessment.default_scope,
+                intake_status=("needs_clarification" if assessment.needs_clarification else "confirmed"),
+                intake_metadata=confirmed_intake_metadata(
+                    assessment,
+                    scope=assessment.default_scope,
+                    selection="default",
+                )
+                if not assessment.needs_clarification
+                else assessment.to_metadata(),
             )
         )
+        if assessment.needs_clarification:
+            return RedirectResponse(
+                url=f"/domains/{project.id}/intake",
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
         return RedirectResponse(
             url=f"/domains/{project.id}",
             status_code=status.HTTP_303_SEE_OTHER,
         )
+
+    @app.get("/domains/{project_id}/intake", response_class=HTMLResponse)
+    def clarify_project_intake(
+        request: Request,
+        project_id: int,
+        error: str = "",
+    ) -> HTMLResponse:
+        project = project_repository().get(project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Domain project not found.")
+        if project.intake_status != "needs_clarification":
+            return RedirectResponse(url=f"/domains/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
+        assessment = assessment_from_metadata(project.intake_metadata)
+        return templates.TemplateResponse(
+            request,
+            "intake_clarification.html",
+            {
+                "app_name": app_settings.app_name,
+                "project": project,
+                "assessment": assessment,
+                "error": error,
+            },
+        )
+
+    @app.post("/domains/{project_id}/intake")
+    def confirm_project_intake(
+        project_id: int,
+        selection: str = Form("default"),
+        custom_scope: str = Form(""),
+    ) -> RedirectResponse:
+        project = project_repository().get(project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Domain project not found.")
+        if project.intake_status != "needs_clarification":
+            return _dashboard_redirect(project_id, notice="该项目的领域边界已经确认。")
+        assessment = assessment_from_metadata(project.intake_metadata)
+        scope, updated_level = select_scope(
+            assessment,
+            selection=selection,
+            custom_scope=custom_scope,
+        )
+        if not scope:
+            return RedirectResponse(
+                url=f"/domains/{project_id}/intake?{urlencode({'error': '请选择推荐切入面、补充范围，或按默认理解继续。'})}",
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+        project_repository().confirm_intake(
+            project_id,
+            scope=scope,
+            level=updated_level,
+            intake_metadata=confirmed_intake_metadata(
+                assessment,
+                scope=scope,
+                selection=selection,
+                custom_scope=custom_scope,
+            ),
+        )
+        return _dashboard_redirect(project_id, notice="领域范围已确认，可开始搜索资料或构建知识库。")
 
     @app.get("/domains/{project_id}", response_class=HTMLResponse)
     def domain_dashboard(
@@ -224,6 +305,7 @@ def create_app(
                 "workflow_labels": _workflow_labels(),
                 "step_labels": _step_labels(),
                 "active_workflow": any(run.status in {"queued", "running"} for run in workflow_runs),
+                "intake_assumptions": _string_values(project.intake_metadata.get("assumptions")),
                 "error": error,
                 "notice": notice,
             },

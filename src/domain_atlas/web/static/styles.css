@@ -85,6 +85,103 @@ body {
   font-size: 20px;
 }
 
+.project-boundary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 24px;
+  padding: 16px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+}
+
+.project-boundary div {
+  display: grid;
+  gap: 5px;
+}
+
+.project-boundary span,
+.boundary-assumptions li {
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.boundary-assumptions {
+  grid-column: 1 / -1;
+}
+
+.boundary-assumptions ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.intake-panel {
+  max-width: 720px;
+}
+
+.intake-understanding {
+  margin: 0 0 16px;
+  color: #334155;
+  line-height: 1.65;
+}
+
+.intake-options {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.intake-options legend {
+  margin-bottom: 8px;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.intake-option {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  padding: 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.intake-option input {
+  width: auto;
+  margin-top: 3px;
+}
+
+.intake-option span,
+.intake-option small {
+  display: block;
+}
+
+.intake-option small {
+  margin-top: 4px;
+  color: #64748b;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.intake-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.secondary-button {
+  color: #1e40af;
+  background: #dbeafe;
+}
+
 .form-grid {
   display: grid;
   gap: 16px;
@@ -651,6 +748,7 @@ button:disabled {
 
 @media (max-width: 720px) {
   .form-row,
+  .project-boundary,
   .status-grid,
   .workflow-grid,
   .candidate-item,

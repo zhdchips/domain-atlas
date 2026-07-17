@@ -7,6 +7,27 @@
   <p>{{ project.goal or "尚未设置学习目标。" }}</p>
 </section>
 
+<section class="project-boundary" aria-label="项目边界">
+  <div>
+    <span>领域范围</span>
+    <strong>{{ project.scope or project.name }}</strong>
+  </div>
+  <div>
+    <span>初始化状态</span>
+    <strong>{{ "已确认" if project.intake_status == "confirmed" else "待澄清" }}</strong>
+  </div>
+  {% if intake_assumptions %}
+    <div class="boundary-assumptions">
+      <span>关键假设</span>
+      <ul>
+        {% for assumption in intake_assumptions %}
+          <li>{{ assumption }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+</section>
+
 {% if error %}
   <div class="notice notice-error" role="alert">{{ error }}</div>
 {% endif %}

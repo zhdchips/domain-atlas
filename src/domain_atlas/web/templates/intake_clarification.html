@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="intro">
+  <p class="eyebrow">项目初始化</p>
+  <h1>确认领域边界</h1>
+  <p>{{ project.name }}</p>
+</section>
+
+{% if error %}
+  <div class="notice notice-error" role="alert">{{ error }}</div>
+{% endif %}
+
+<section class="panel intake-panel">
+  <p class="intake-understanding">{{ assessment.understanding }}</p>
+  <h2>{{ assessment.question }}</h2>
+  <form action="/domains/{{ project.id }}/intake" method="post" class="form-grid" data-pending-form data-pending-text="正在保存领域边界…">
+    <fieldset class="intake-options">
+      <legend>推荐切入面</legend>
+      {% for option in assessment.options %}
+        <label class="intake-option">
+          <input type="radio" name="selection" value="{{ option.value }}">
+          <span>
+            <strong>{{ option.label }}</strong>
+            <small>{{ option.description }}</small>
+          </span>
+        </label>
+      {% endfor %}
+    </fieldset>
+    <label>
+      <span>补充你的范围</span>
+      <textarea name="custom_scope" rows="3" placeholder="例如：面向数据工程师的 LLM Agent 工程实践"></textarea>
+    </label>
+    <div class="intake-actions">
+      <button type="submit">确认并创建项目</button>
+      <button type="submit" name="selection" value="default" class="secondary-button">按当前默认理解继续</button>
+    </div>
+  </form>
+</section>
+{% endblock %}
