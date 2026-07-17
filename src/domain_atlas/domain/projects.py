@@ -26,6 +26,11 @@ class DomainProject:
     created_at: str
     updated_at: str
 
+    @property
+    def effective_scope(self) -> str:
+        """Use the learner-confirmed boundary whenever it is available."""
+        return self.scope.strip() or self.name
+
 
 @dataclass(frozen=True)
 class CreateDomainProject:

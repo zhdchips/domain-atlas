@@ -88,7 +88,7 @@ def test_autopilot_workflow_creates_sources_ingests_and_builds(tmp_path):
     database_path = tmp_path / "domain_atlas.sqlite3"
     initialize_database(database_path)
     project = DomainProjectRepository(database_path).create(
-        CreateDomainProject(name="LLM Agents", interaction_mode="guided")
+        CreateDomainProject(name="agent", scope="旅行代理", interaction_mode="guided")
     )
     drafts = [
         _draft("official", "https://docs.example.com/agents", "official_docs", 0.91),
@@ -107,7 +107,7 @@ def test_autopilot_workflow_creates_sources_ingests_and_builds(tmp_path):
         search_limit=12,
     ).run(project.id)
 
-    assert discovery.calls == [("LLM Agents", 12)]
+    assert discovery.calls == [("旅行代理", 12)]
     assert result.selected_count == 2
     assert ingestion.source_ids == result.source_ids
     assert build.project_ids == [project.id]

@@ -64,6 +64,18 @@ def test_project_repository_rejects_blank_name(tmp_path):
         raise AssertionError("Expected blank project name to be rejected.")
 
 
+def test_effective_scope_prefers_confirmed_scope_and_falls_back_to_name(tmp_path):
+    database_path = tmp_path / "domain_atlas.sqlite3"
+    initialize_database(database_path)
+    repository = DomainProjectRepository(database_path)
+
+    scoped = repository.create(CreateDomainProject(name="agent", scope="旅行代理"))
+    unscoped = repository.create(CreateDomainProject(name="LLM Agents"))
+
+    assert scoped.effective_scope == "旅行代理"
+    assert unscoped.effective_scope == "LLM Agents"
+
+
 def test_project_repository_persists_expert_interaction_mode(tmp_path):
     database_path = tmp_path / "domain_atlas.sqlite3"
     initialize_database(database_path)

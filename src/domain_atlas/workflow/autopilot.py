@@ -152,7 +152,7 @@ class AutopilotWorkflow:
             self.workflow_repository.record_step(
                 run_id, step_name="discover_candidates", status="running"
             )
-            drafts = self.discovery_provider.search(project.name, limit=self.search_limit)
+            drafts = self.discovery_provider.search(project.effective_scope, limit=self.search_limit)
             persisted = self.candidate_repository.replace_discovered(project_id, drafts)
             self.workflow_repository.record_step(
                 run_id,

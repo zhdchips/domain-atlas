@@ -37,9 +37,13 @@ DEEP_CORE_EXPLANATION = (
 
 
 class FakeDiscoveryProvider:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, int]] = []
+
     def search(self, query: str, limit: int) -> list[SourceCandidateDraft]:
         assert query
         assert limit == 12
+        self.calls.append((query, limit))
         return [
             SourceCandidateDraft(
                 provider="exa",
@@ -596,31 +600,35 @@ def test_missing_domain_returns_404(tmp_path):
 
 
 def test_discover_sources_lists_candidates_and_confirm_accepts(tmp_path):
-    app = create_app(Settings(data_dir=tmp_path), discovery_provider=FakeDiscoveryProvider())
+    discovery = FakeDiscoveryProvider()
+    app = create_app(Settings(data_dir=tmp_path), discovery_provider=discovery)
     client = TestClient(app)
-    client.post("/domains", data={"name": "LLM Agents"})
+    project = DomainProjectRepository(tmp_path / "domain_atlas.sqlite3").create(
+        CreateDomainProject(name="agent", scope="旅行代理")
+    )
 
     discover = client.post(
-        "/domains/1/discover",
+        f"/domains/{project.id}/discover",
         data={"query": ""},
         follow_redirects=False,
     )
 
     assert discover.status_code == 303
-    assert discover.headers["location"] == "/domains/1"
+    assert discover.headers["location"] == f"/domains/{project.id}"
+    assert discovery.calls == [("旅行代理", 12)]
 
-    dashboard = client.get("/domains/1")
+    dashboard = client.get(f"/domains/{project.id}")
     assert "Agent Docs" in dashboard.text
     assert "Official docs for agents." in dashboard.text
     assert "官方资料" in dashboard.text
 
     confirm = client.post(
-        "/domains/1/candidates/1/confirm",
+        f"/domains/{project.id}/candidates/1/confirm",
         follow_redirects=False,
     )
 
     assert confirm.status_code == 303
-    accepted_dashboard = client.get("/domains/1")
+    accepted_dashboard = client.get(f"/domains/{project.id}")
     assert "已确认" in accepted_dashboard.text
     assert "Agent Docs" in accepted_dashboard.text
     assert "pending" in accepted_dashboard.text

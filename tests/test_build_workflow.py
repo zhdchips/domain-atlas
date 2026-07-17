@@ -10,9 +10,13 @@ from domain_atlas.workflow.build import KnowledgeBuildWorkflow, _normalize_paylo
 
 
 class FakeChatProvider:
+    def __init__(self) -> None:
+        self.user_prompts: list[str] = []
+
     def complete_json(self, *, system_prompt: str, user_prompt: str):
         assert "encyclopedia-style" in system_prompt
         assert "S1-C1" in user_prompt
+        self.user_prompts.append(user_prompt)
         return build_payload()
 
 
@@ -191,7 +195,9 @@ def _learning_guide_payload():
 def test_knowledge_build_workflow_persists_artifacts(tmp_path):
     database_path = tmp_path / "domain_atlas.sqlite3"
     initialize_database(database_path)
-    project = DomainProjectRepository(database_path).create(CreateDomainProject(name="LLM Agents"))
+    project = DomainProjectRepository(database_path).create(
+        CreateDomainProject(name="agent", scope="旅行代理")
+    )
     source = SourceRepository(database_path).create(
         CreateSource(
             project_id=project.id,
@@ -215,7 +221,8 @@ def test_knowledge_build_workflow_persists_artifacts(tmp_path):
         ],
     )
 
-    workflow = KnowledgeBuildWorkflow(database_path=database_path, chat_provider=FakeChatProvider())
+    chat = FakeChatProvider()
+    workflow = KnowledgeBuildWorkflow(database_path=database_path, chat_provider=chat)
     workflow.run(project.id)
 
     repository = KnowledgeArtifactRepository(database_path)
@@ -251,6 +258,7 @@ def test_knowledge_build_workflow_persists_artifacts(tmp_path):
     assert modules[0].further_reading[0]["title"] == "Agent Source"
     assert updated_project is not None
     assert updated_project.build_status == "completed"
+    assert "Domain: 旅行代理" in chat.user_prompts[0]
 
 
 def test_normalize_payload_derives_mainline_navigation_for_legacy_guide():

@@ -389,7 +389,7 @@ def create_app(
         if project is None:
             raise HTTPException(status_code=404, detail="Domain project not found.")
 
-        search_query = query.strip() or project.name
+        search_query = query.strip() or project.effective_scope
         try:
             drafts = source_discovery_provider().search(
                 search_query,

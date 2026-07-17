@@ -84,7 +84,7 @@ class KnowledgeBuildWorkflow:
             context = _format_context(chunks)
             system_prompt = _system_prompt(project.language)
             user_prompt = _user_prompt(
-                domain_name=project.name,
+                domain_name=project.effective_scope,
                 goal=project.goal,
                 level=project.level,
                 context=context,
@@ -132,7 +132,7 @@ class KnowledgeBuildWorkflow:
             ]
             payload = _with_workspace_pages(
                 payload=payload,
-                domain_name=project.name,
+                domain_name=project.effective_scope,
                 chunks=chunks,
                 sources=[source for source in sources if source is not None],
             )
