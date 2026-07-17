@@ -24,15 +24,14 @@ from domain_atlas.domain.workflow import WorkflowRepository
 from domain_atlas.ingestion.service import IngestionService
 from domain_atlas.intake.assessment import (
     IntakeAssessment,
-    IntakeSuggestionProvider,
-    apply_suggestion,
-    assess_project_intake,
+    IntakeAssessmentProvider,
     assessment_from_metadata,
     confirmed_intake_metadata,
+    fallback_intake_assessment,
     resolved_goal,
     select_scope,
 )
-from domain_atlas.intake.suggestions import LLMIntakeSuggestionProvider
+from domain_atlas.intake.suggestions import LLMIntakeAssessmentProvider
 from domain_atlas.providers.chat import OpenAICompatibleChatProvider
 from domain_atlas.providers.embeddings import OpenAICompatibleEmbeddingProvider
 from domain_atlas.providers.vector_index import ChromaVectorIndex, VectorIndex
@@ -59,7 +58,7 @@ def create_app(
     vector_index: VectorIndex | None = None,
     autopilot_runner: object | None = None,
     background_runner: object | None = None,
-    intake_suggestion_provider: IntakeSuggestionProvider | None = None,
+    intake_assessment_provider: IntakeAssessmentProvider | None = None,
 ) -> FastAPI:
     """Create the Domain Atlas web app."""
     app_settings = settings or get_settings()
@@ -96,16 +95,16 @@ def create_app(
     def source_discovery_provider() -> ExaSearchProvider:
         return discovery_provider or ExaSearchProvider(api_key=app_settings.exa_api_key)
 
-    def configured_intake_suggestion_provider() -> IntakeSuggestionProvider | None:
-        if intake_suggestion_provider is not None:
-            return intake_suggestion_provider
+    def configured_intake_assessment_provider() -> IntakeAssessmentProvider | None:
+        if intake_assessment_provider is not None:
+            return intake_assessment_provider
         if (
-            not app_settings.intake_llm_suggestions_enabled
+            not app_settings.intake_llm_assessment_enabled
             or not app_settings.llm_api_key.strip()
             or not app_settings.llm_base_url.strip()
         ):
             return None
-        return LLMIntakeSuggestionProvider(
+        return LLMIntakeAssessmentProvider(
             OpenAICompatibleChatProvider(
                 api_key=app_settings.llm_api_key,
                 base_url=app_settings.llm_base_url,
@@ -209,13 +208,14 @@ def create_app(
         language: str = Form("zh"),
         interaction_mode: str = Form("guided"),
     ) -> RedirectResponse:
-        assessment = assess_project_intake(name=name, goal=goal, level=level)
-        assessment, suggestion_source, suggestion_status = _enhance_intake_assessment(
-            assessment=assessment,
-            provider=configured_intake_suggestion_provider() if assessment.needs_clarification else None,
+        fallback = fallback_intake_assessment(name=name, goal=goal, level=level)
+        assessment, assessment_source, assessment_status = _resolve_intake_assessment(
+            fallback=fallback,
+            provider=configured_intake_assessment_provider(),
             name=name,
             goal=goal,
             level=level,
+            min_confidence=app_settings.intake_llm_min_confidence,
         )
         resolved_project_goal = resolved_goal(goal)
         intake_metadata = (
@@ -229,9 +229,8 @@ def create_app(
         )
         intake_metadata.update(
             {
-                "rule_reason": assessment.reason,
-                "suggestion_source": suggestion_source,
-                "suggestion_status": suggestion_status,
+                "assessment_source": assessment_source,
+                "assessment_status": assessment_status,
             }
         )
         project = project_repository().create(
@@ -309,9 +308,12 @@ def create_app(
         )
         intake_metadata.update(
             {
-                "rule_reason": project.intake_metadata.get("rule_reason", assessment.reason),
-                "suggestion_source": project.intake_metadata.get("suggestion_source", "rule"),
-                "suggestion_status": project.intake_metadata.get("suggestion_status", "not_requested"),
+                "assessment_source": project.intake_metadata.get(
+                    "assessment_source", project.intake_metadata.get("suggestion_source", "legacy")
+                ),
+                "assessment_status": project.intake_metadata.get(
+                    "assessment_status", project.intake_metadata.get("suggestion_status", "legacy")
+                ),
             }
         )
         project_repository().confirm_intake(
@@ -653,31 +655,31 @@ def create_app(
     return app
 
 
-def _enhance_intake_assessment(
+def _resolve_intake_assessment(
     *,
-    assessment: IntakeAssessment,
-    provider: IntakeSuggestionProvider | None,
+    fallback: IntakeAssessment,
+    provider: IntakeAssessmentProvider | None,
     name: str,
     goal: str,
     level: str,
+    min_confidence: float,
 ) -> tuple[IntakeAssessment, str, str]:
-    """Apply optional LLM copy without letting it control the clarification decision."""
-    if not assessment.needs_clarification:
-        return assessment, "rule", "not_requested"
+    """Use one validated model assessment or safely retain the submitted domain scope."""
     if provider is None:
-        return assessment, "rule", "not_requested"
+        return fallback, "fallback", "unconfigured"
     try:
-        suggestion = provider.suggest(
+        assessment = provider.assess(
             name=name,
             goal=goal,
             level=level,
-            assessment=assessment,
         )
     except Exception:
-        return assessment, "fallback", "fallback"
-    if suggestion is None:
-        return assessment, "fallback", "fallback"
-    return apply_suggestion(assessment, suggestion), "llm", "applied"
+        return fallback, "fallback", "failed"
+    if assessment is None:
+        return fallback, "fallback", "invalid"
+    if assessment.confidence is None or assessment.confidence < min_confidence:
+        return fallback, "fallback", "low_confidence"
+    return assessment, "llm", "applied"
 
 
 def _source_type_from_suffix(suffix: str) -> str | None:

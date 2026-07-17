@@ -19,7 +19,7 @@ from domain_atlas.core.settings import Settings
 from domain_atlas.domain.artifacts import KnowledgeArtifactRepository
 from domain_atlas.domain.projects import CreateDomainProject, DomainProjectRepository
 from domain_atlas.domain.workflow import WorkflowRepository
-from domain_atlas.intake.assessment import IntakeSuggestion, apply_suggestion, assess_project_intake
+from domain_atlas.intake.assessment import IntakeAssessment
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -39,7 +39,7 @@ def main() -> int:
     try:
         data_dir = workdir / "data"
         settings = Settings(data_dir=data_dir)
-        project_id, llm_intake_project_id = _create_wiki_fixture(settings)
+        project_id, llm_intake_project_id, mobile_intake_project_id = _create_wiki_fixture(settings)
         port = _free_port()
         server = _start_server(data_dir=data_dir, port=port)
         base_url = f"http://127.0.0.1:{port}"
@@ -60,9 +60,9 @@ def main() -> int:
             page.goto(f"{base_url}/domains/{llm_intake_project_id}/intake", wait_until="networkidle")
             _assert_llm_enhanced_intake(page)
             page.goto(f"{base_url}/", wait_until="networkidle")
-            _assert_project_intake(page)
+            _assert_clear_project_intake(page)
             page.set_viewport_size({"width": 390, "height": 844})
-            page.goto(f"{base_url}/", wait_until="networkidle")
+            page.goto(f"{base_url}/domains/{mobile_intake_project_id}/intake", wait_until="networkidle")
             _assert_mobile_project_intake(page)
             _assert_mobile_no_horizontal_overflow(page)
             browser.close()
@@ -84,7 +84,7 @@ def main() -> int:
     return 0
 
 
-def _create_wiki_fixture(settings: Settings) -> tuple[int, int]:
+def _create_wiki_fixture(settings: Settings) -> tuple[int, int, int]:
     initialize_database(settings.database_path)
     project = DomainProjectRepository(settings.database_path).create(
         CreateDomainProject(
@@ -176,40 +176,49 @@ def _create_wiki_fixture(settings: Settings) -> tuple[int, int]:
         run_id, step_name="compile_context", status="completed", output={"chunk_count": 1}
     )
     workflow_repository.finish_run(run_id)
-    assessment = assess_project_intake(name="Agent", goal="学习", level="beginner")
-    enhanced = apply_suggestion(
-        assessment,
-        IntakeSuggestion(
-            understanding="“Agent”需要先确认是面向 LLM 工程还是智能体理论。",
-            question="你希望优先建立哪一类 Agent 学习边界？",
-            options=[
-                {
-                    "value": option["value"],
-                    "label": f"增强：{option['label']}",
-                    "description": f"增强说明：{option['description']}",
-                    "scope": option["scope"],
-                }
-                for option in assessment.options[:2]
-            ],
-            default_scope=assessment.default_scope,
-            assumptions=["本次展示使用了受规则约束的模型建议。"],
-        ),
+    llm_project = _create_llm_intake_fixture(settings, name="Agent")
+    mobile_llm_project = _create_llm_intake_fixture(settings, name="数据治理")
+    return project.id, llm_project.id, mobile_llm_project.id
+
+
+def _create_llm_intake_fixture(settings: Settings, *, name: str):
+    assessment = IntakeAssessment(
+        needs_clarification=True,
+        reason="领域覆盖多个常见学习切入面。",
+        understanding=f"“{name}”需要先确认适合你的学习切入面。",
+        question=f"你希望先从{name}的哪个切入面学习？",
+        options=[
+            {
+                "value": "foundations",
+                "label": "方法基础",
+                "description": "理解核心概念、方法论与关键流程。",
+                "scope": f"{name} 方法基础",
+            },
+            {
+                "value": "practice",
+                "label": "落地实践",
+                "description": "围绕案例、组织落地和实践方法学习。",
+                "scope": f"{name} 落地实践",
+            },
+        ],
+        default_scope=f"{name} 方法基础",
+        assumptions=["确认后会以选择的范围组织资料和课程。"],
+        confidence=0.87,
+        recommended_option="foundations",
     )
-    llm_project = DomainProjectRepository(settings.database_path).create(
+    return DomainProjectRepository(settings.database_path).create(
         CreateDomainProject(
-            name="Agent",
+            name=name,
             goal="学习",
-            scope=enhanced.default_scope,
+            scope=assessment.default_scope,
             intake_status="needs_clarification",
             intake_metadata={
-                **enhanced.to_metadata(),
-                "rule_reason": assessment.reason,
-                "suggestion_source": "llm",
-                "suggestion_status": "applied",
+                **assessment.to_metadata(),
+                "assessment_source": "llm",
+                "assessment_status": "applied",
             },
         )
     )
-    return project.id, llm_project.id
 
 
 def _learning_guide_payload() -> dict[str, Any]:
@@ -308,6 +317,7 @@ def _page(page_type: str, path: str, title: str, summary: str) -> dict[str, Any]
 def _start_server(*, data_dir: Path, port: int) -> subprocess.Popen[str]:
     env = os.environ.copy()
     env["DATA_DIR"] = str(data_dir)
+    env["INTAKE_LLM_ASSESSMENT_ENABLED"] = "false"
     return subprocess.Popen(
         [
             sys.executable,
@@ -529,37 +539,33 @@ def _assert_dashboard_task_feedback(page) -> None:
 def _assert_llm_enhanced_intake(page) -> None:
     page.locator(".intake-panel").wait_for(state="visible", timeout=5000)
     body_text = page.locator("body").inner_text()
-    if "模型已在本地规则边界内优化" not in body_text:
-        raise RuntimeError("LLM-enhanced clarification provenance is missing")
-    if "增强：LLM Agent" not in body_text:
-        raise RuntimeError("LLM-enhanced clarification option is missing")
-
-
-def _assert_project_intake(page) -> None:
-    page.locator("input[name='name']").fill("Agent")
-    page.get_by_role("button", name="创建项目").click()
-    page.wait_for_url("**/intake", timeout=5000)
-    page.locator(".intake-panel").wait_for(state="visible", timeout=5000)
-    if "你希望从哪个角度学习 Agent" not in page.locator("body").inner_text():
-        raise RuntimeError("ambiguous project did not enter the clarification flow")
-    page.locator("input[value='llm_agent']").check()
+    if "模型建议了值得确认的学习边界" not in body_text:
+        raise RuntimeError("LLM-led clarification provenance is missing")
+    if "方法基础" not in body_text:
+        raise RuntimeError("LLM-led clarification option is missing")
+    page.locator("input[value='practice']").check()
     page.get_by_role("button", name="确认并创建项目").click()
     page.wait_for_url("**/domains/*", timeout=5000)
+    if "Agent 落地实践" not in page.locator(".project-boundary").inner_text():
+        raise RuntimeError("selected LLM clarification scope was not persisted")
+
+
+def _assert_clear_project_intake(page) -> None:
+    page.locator("input[name='name']").fill("Dataphin")
+    page.get_by_role("button", name="创建项目").click()
+    page.wait_for_url("**/domains/*", timeout=5000)
     page.locator(".project-boundary").wait_for(state="visible", timeout=5000)
-    if "LLM Agent：规划、工具调用、记忆与评估" not in page.locator(".project-boundary").inner_text():
-        raise RuntimeError("confirmed project scope is not shown on the dashboard")
+    if "Dataphin" not in page.locator(".project-boundary").inner_text():
+        raise RuntimeError("clear project did not reach its dashboard")
 
 
 def _assert_mobile_project_intake(page) -> None:
-    page.locator("input[name='name']").fill("AI")
-    page.get_by_role("button", name="创建项目").click()
-    page.wait_for_url("**/intake", timeout=5000)
     page.locator(".intake-panel").wait_for(state="visible", timeout=5000)
     if page.evaluate("() => document.documentElement.scrollWidth > window.innerWidth"):
         raise RuntimeError("mobile clarification page overflows horizontally")
     page.get_by_role("button", name="按当前默认理解继续").click()
     page.locator(".project-boundary").wait_for(state="visible", timeout=5000)
-    if "AI 基础原理" not in page.locator(".project-boundary").inner_text():
+    if "数据治理 方法基础" not in page.locator(".project-boundary").inner_text():
         raise RuntimeError("mobile default clarification did not persist the recommended scope")
 
 

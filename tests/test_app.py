@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import time
+
 from fastapi.testclient import TestClient
 
 from domain_atlas.core.settings import Settings
 from domain_atlas.discovery.exa import SourceDiscoveryError
-from domain_atlas.domain.projects import DomainProjectRepository
-from domain_atlas.intake.assessment import IntakeSuggestion
+from domain_atlas.domain.projects import CreateDomainProject, DomainProjectRepository
+from domain_atlas.intake.assessment import IntakeAssessment
 from domain_atlas.domain.source_candidates import SourceCandidateDraft
+from domain_atlas.domain.workflow import WorkflowRepository
 from domain_atlas.providers.vector_index import RetrievedChunk, RetrievedWikiSection
 from domain_atlas.web.app import create_app
 
@@ -58,32 +61,75 @@ class FailingDiscoveryProvider:
         raise SourceDiscoveryError("搜索服务暂时不可用")
 
 
-class FakeIntakeSuggestionProvider:
+class FakeIntakeAssessmentProvider:
     def __init__(self) -> None:
         self.calls: list[str] = []
 
-    def suggest(self, *, name: str, goal: str, level: str, assessment) -> IntakeSuggestion:
+    def assess(self, *, name: str, goal: str, level: str) -> IntakeAssessment:
         self.calls.append(name)
-        return IntakeSuggestion(
-            understanding=f"“{name}”需要先确定具体学习方向。",
-            question="你最希望先建立哪一种 Agent 能力？",
+        if name == "Dataphin":
+            return IntakeAssessment(
+                needs_clarification=False,
+                reason="边界已清楚。",
+                understanding="“Dataphin”已给出明确产品领域和入门目标。",
+                question="",
+                options=[],
+                default_scope="Dataphin",
+                assumptions=["按提交领域建立地图。"],
+                confidence=0.93,
+            )
+        return IntakeAssessment(
+            needs_clarification=True,
+            reason="领域有多个常见学习切入面。",
+            understanding=f"“{name}”需要先确认具体学习方向。",
+            question=f"你最希望先从{name}的哪个切入面学习？",
             options=[
                 {
-                    "value": option["value"],
-                    "label": f"增强：{option['label']}",
-                    "description": f"增强说明：{option['description']}",
-                    "scope": option["scope"],
+                    "value": "foundations",
+                    "label": "方法基础",
+                    "description": "理解核心概念、方法论和关键流程。",
+                    "scope": f"{name} 方法基础",
+                },
+                {
+                    "value": "practice",
+                    "label": "落地实践",
+                    "description": "从组织落地、案例和实践方法进入。",
+                    "scope": f"{name} 落地实践",
                 }
-                for option in assessment.options[:2]
             ],
-            default_scope=assessment.default_scope,
-            assumptions=["本次选项由模型在规则边界内优化。"],
+            default_scope=f"{name} 方法基础",
+            assumptions=["确认后将以选择的范围组织资料和课程。"],
+            confidence=0.87,
+            recommended_option="foundations",
         )
 
 
-class FailingIntakeSuggestionProvider:
-    def suggest(self, **kwargs):
+class FailingIntakeAssessmentProvider:
+    def assess(self, **kwargs):
         raise TimeoutError("provider api key should never be shown")
+
+
+class InvalidIntakeAssessmentProvider:
+    def assess(self, **kwargs):
+        return None
+
+
+class LowConfidenceIntakeAssessmentProvider:
+    def assess(self, *, name: str, **kwargs):
+        return IntakeAssessment(
+            needs_clarification=True,
+            reason="模型对范围判断不够确定。",
+            understanding=f"“{name}”可能有多个方向。",
+            question="你希望从哪里开始？",
+            options=[
+                {"value": "a", "label": "A", "description": "方向 A", "scope": f"{name} A"},
+                {"value": "b", "label": "B", "description": "方向 B", "scope": f"{name} B"},
+            ],
+            default_scope=f"{name} A",
+            assumptions=[],
+            confidence=0.2,
+            recommended_option="a",
+        )
 
 
 class FakeEmbeddingProvider:
@@ -334,8 +380,9 @@ def test_create_domain_redirects_to_dashboard(tmp_path):
     assert "学习路线" in dashboard.text
 
 
-def test_ambiguous_domain_enters_clarification_then_persists_selected_scope(tmp_path):
-    app = create_app(Settings(data_dir=tmp_path))
+def test_llm_assessment_enters_clarification_then_persists_selected_scope(tmp_path):
+    provider = FakeIntakeAssessmentProvider()
+    app = create_app(Settings(data_dir=tmp_path), intake_assessment_provider=provider)
     client = TestClient(app)
 
     created = client.post(
@@ -348,65 +395,70 @@ def test_ambiguous_domain_enters_clarification_then_persists_selected_scope(tmp_
     assert created.headers["location"] == "/domains/1/intake"
     clarification = client.get(created.headers["location"])
     assert "确认领域边界" in clarification.text
-    assert "LLM Agent" in clarification.text
+    assert "模型建议了值得确认的学习边界" in clarification.text
+    assert "方法基础" in clarification.text
     assert "按当前默认理解继续" in clarification.text
 
     confirmed = client.post(
         "/domains/1/intake",
-        data={"selection": "llm_agent"},
+        data={"selection": "practice"},
         follow_redirects=False,
     )
 
     assert confirmed.status_code == 303
     assert confirmed.headers["location"].startswith("/domains/1")
     dashboard = client.get(confirmed.headers["location"])
-    assert "LLM Agent：规划、工具调用、记忆与评估" in dashboard.text
+    assert "Agent 落地实践" in dashboard.text
     assert "建立可溯源的入门领域地图" in dashboard.text
     assert "初始化状态" in dashboard.text
     assert "已确认" in dashboard.text
 
 
-def test_llm_suggestion_enhances_only_rule_required_clarification(tmp_path):
-    provider = FakeIntakeSuggestionProvider()
-    app = create_app(Settings(data_dir=tmp_path), intake_suggestion_provider=provider)
+def test_llm_assessment_decides_clear_or_clarify_for_semantic_domains(tmp_path):
+    provider = FakeIntakeAssessmentProvider()
+    app = create_app(Settings(data_dir=tmp_path), intake_assessment_provider=provider)
     client = TestClient(app)
 
     clear = client.post("/domains", data={"name": "Dataphin"}, follow_redirects=False)
-    ambiguous = client.post("/domains", data={"name": "Agent"}, follow_redirects=False)
+    data_governance = client.post("/domains", data={"name": "数据治理"}, follow_redirects=False)
+    product_ops = client.post("/domains", data={"name": "产品运营"}, follow_redirects=False)
 
     assert clear.headers["location"] == "/domains/1"
-    assert provider.calls == ["Agent"]
-    clarification = client.get(ambiguous.headers["location"])
-    assert "模型已在本地规则边界内优化" in clarification.text
-    assert "你最希望先建立哪一种 Agent 能力" in clarification.text
-    assert "增强：LLM Agent" in clarification.text
+    assert data_governance.headers["location"] == "/domains/2/intake"
+    assert product_ops.headers["location"] == "/domains/3/intake"
+    assert provider.calls == ["Dataphin", "数据治理", "产品运营"]
+    clarification = client.get(data_governance.headers["location"])
+    assert "你最希望先从数据治理的哪个切入面学习" in clarification.text
+    assert "方法基础" in clarification.text
     project = DomainProjectRepository(tmp_path / "domain_atlas.sqlite3").get(2)
     assert project is not None
-    assert project.intake_metadata["rule_reason"] == "ambiguous_domain"
-    assert project.intake_metadata["suggestion_source"] == "llm"
-    assert project.intake_metadata["suggestion_status"] == "applied"
+    assert project.intake_metadata["reason"] == "领域有多个常见学习切入面。"
+    assert project.intake_metadata["assessment_source"] == "llm"
+    assert project.intake_metadata["assessment_status"] == "applied"
+    assert project.intake_metadata["confidence"] == 0.87
 
 
-def test_failed_or_unconfigured_intake_suggestion_falls_back_without_raw_error(tmp_path):
+def test_failed_or_unconfigured_intake_assessment_falls_back_without_raw_error(tmp_path):
     failing_app = create_app(
         Settings(data_dir=tmp_path / "failed"),
-        intake_suggestion_provider=FailingIntakeSuggestionProvider(),
+        intake_assessment_provider=FailingIntakeAssessmentProvider(),
     )
     failing_client = TestClient(failing_app)
     failed = failing_client.post("/domains", data={"name": "Agent"}, follow_redirects=False)
     fallback_page = failing_client.get(failed.headers["location"])
     failed_project = DomainProjectRepository(tmp_path / "failed" / "domain_atlas.sqlite3").get(1)
 
-    assert "当前展示可靠的规则建议" in fallback_page.text
+    assert failed.headers["location"] == "/domains/1"
     assert "provider api key" not in fallback_page.text
     assert failed_project is not None
-    assert failed_project.intake_metadata["suggestion_source"] == "fallback"
-    assert failed_project.intake_metadata["suggestion_status"] == "fallback"
+    assert failed_project.scope == "Agent"
+    assert failed_project.intake_metadata["assessment_source"] == "fallback"
+    assert failed_project.intake_metadata["assessment_status"] == "failed"
 
     unconfigured_app = create_app(
         Settings(
             data_dir=tmp_path / "unconfigured",
-            intake_llm_suggestions_enabled=True,
+            intake_llm_assessment_enabled=True,
             llm_api_key="",
             llm_base_url="",
         )
@@ -416,18 +468,93 @@ def test_failed_or_unconfigured_intake_suggestion_falls_back_without_raw_error(t
     unconfigured_project = DomainProjectRepository(tmp_path / "unconfigured" / "domain_atlas.sqlite3").get(1)
 
     assert unconfigured.status_code == 303
+    assert unconfigured.headers["location"] == "/domains/1"
     assert unconfigured_project is not None
-    assert unconfigured_project.intake_metadata["suggestion_source"] == "rule"
-    assert unconfigured_project.intake_metadata["suggestion_status"] == "not_requested"
+    assert unconfigured_project.intake_metadata["assessment_source"] == "fallback"
+    assert unconfigured_project.intake_metadata["assessment_status"] == "unconfigured"
+
+
+def test_invalid_or_low_confidence_assessment_falls_back_to_direct_creation(tmp_path):
+    invalid_client = TestClient(
+        create_app(
+            Settings(data_dir=tmp_path / "invalid"),
+            intake_assessment_provider=InvalidIntakeAssessmentProvider(),
+        )
+    )
+    invalid = invalid_client.post("/domains", data={"name": "产品运营"}, follow_redirects=False)
+    invalid_project = DomainProjectRepository(tmp_path / "invalid" / "domain_atlas.sqlite3").get(1)
+
+    low_client = TestClient(
+        create_app(
+            Settings(data_dir=tmp_path / "low"),
+            intake_assessment_provider=LowConfidenceIntakeAssessmentProvider(),
+        )
+    )
+    low = low_client.post("/domains", data={"name": "数据治理"}, follow_redirects=False)
+    low_project = DomainProjectRepository(tmp_path / "low" / "domain_atlas.sqlite3").get(1)
+
+    assert invalid.headers["location"] == "/domains/1"
+    assert invalid_project is not None
+    assert invalid_project.scope == "产品运营"
+    assert invalid_project.intake_metadata["assessment_status"] == "invalid"
+    assert low.headers["location"] == "/domains/1"
+    assert low_project is not None
+    assert low_project.scope == "数据治理"
+    assert low_project.intake_metadata["assessment_status"] == "low_confidence"
+
+
+def test_legacy_clarification_metadata_remains_confirmable(tmp_path):
+    settings = Settings(data_dir=tmp_path)
+    app = create_app(settings)
+    project = DomainProjectRepository(settings.database_path).create(
+        CreateDomainProject(
+            name="旧项目",
+            scope="旧项目默认范围",
+            intake_status="needs_clarification",
+            intake_metadata={
+                "reason": "ambiguous_domain",
+                "understanding": "旧项目需要确认范围。",
+                "question": "你希望从哪里开始？",
+                "options": [
+                    {
+                        "value": "legacy_scope",
+                        "label": "旧范围",
+                        "description": "使用历史保存的范围。",
+                        "scope": "旧项目历史范围",
+                    }
+                ],
+                "default_scope": "旧项目默认范围",
+                "assumptions": ["历史项目。"],
+                "suggestion_source": "llm",
+                "suggestion_status": "applied",
+            },
+        )
+    )
+    client = TestClient(app)
+
+    page = client.get(f"/domains/{project.id}/intake")
+    confirmed = client.post(
+        f"/domains/{project.id}/intake",
+        data={"selection": "legacy_scope"},
+        follow_redirects=False,
+    )
+    confirmed_project = DomainProjectRepository(settings.database_path).get(project.id)
+
+    assert page.status_code == 200
+    assert "旧范围" in page.text
+    assert confirmed.headers["location"].startswith(f"/domains/{project.id}")
+    assert confirmed_project is not None
+    assert confirmed_project.scope == "旧项目历史范围"
+    assert confirmed_project.intake_metadata["assessment_source"] == "llm"
 
 
 def test_intake_allows_custom_scope_or_default_and_keeps_expert_manual(tmp_path):
-    app = create_app(Settings(data_dir=tmp_path))
+    app = create_app(Settings(data_dir=tmp_path), intake_assessment_provider=FakeIntakeAssessmentProvider())
     client = TestClient(app)
 
     broad = client.post(
         "/domains",
-        data={"name": "AI", "goal": "行业落地", "interaction_mode": "expert"},
+        data={"name": "数据治理", "goal": "行业落地", "interaction_mode": "expert"},
         follow_redirects=False,
     )
     custom = client.post(
@@ -440,11 +567,11 @@ def test_intake_allows_custom_scope_or_default_and_keeps_expert_manual(tmp_path)
     assert "专家模式" not in custom_dashboard.text
     assert "workflow-run" not in custom_dashboard.text
 
-    ambiguous = client.post("/domains", data={"name": "Agent"}, follow_redirects=False)
+    ambiguous = client.post("/domains", data={"name": "产品运营"}, follow_redirects=False)
     default = client.post("/domains/2/intake", data={"selection": "default"}, follow_redirects=False)
     default_dashboard = client.get(default.headers["location"])
-    assert "LLM Agent：规划、工具调用、记忆与评估" in default_dashboard.text
-    assert "已按系统当前默认理解继续" in default_dashboard.text
+    assert "产品运营 方法基础" in default_dashboard.text
+    assert "已按系统当前推荐理解继续" in default_dashboard.text
 
 
 def test_home_lists_existing_projects(tmp_path):
@@ -555,6 +682,7 @@ def test_upload_markdown_and_ingest_from_dashboard(tmp_path):
     ingest = client.post("/domains/1/sources/1/ingest", follow_redirects=False)
 
     assert ingest.status_code == 303
+    _wait_for_workflow(tmp_path / "domain_atlas.sqlite3", project_id=1)
     after = client.get("/domains/1")
     assert "已摄取" in after.text
     assert "Chunks" in after.text
@@ -576,10 +704,12 @@ def test_build_knowledge_route_renders_wiki_and_learning_path(tmp_path):
         files={"file": ("agents.md", b"# Agents\n\nAgents use tools.", "text/markdown")},
     )
     client.post("/domains/1/sources/1/ingest")
+    _wait_for_workflow(tmp_path / "domain_atlas.sqlite3", project_id=1)
 
     build = client.post("/domains/1/build", follow_redirects=False)
 
     assert build.status_code == 303
+    _wait_for_workflow(tmp_path / "domain_atlas.sqlite3", project_id=1)
     dashboard = client.get("/domains/1")
     assert "completed" in dashboard.text
     wiki = client.get("/domains/1/wiki")
@@ -642,3 +772,14 @@ def test_qa_route_records_cited_answer(tmp_path):
     assert "Agent 会使用工具完成任务" in qa_page.text
     assert "W:agent#1" in qa_page.text
     assert "S1-C1" in qa_page.text
+
+
+def _wait_for_workflow(database_path, *, project_id: int) -> None:
+    deadline = time.monotonic() + 3
+    repository = WorkflowRepository(database_path)
+    while time.monotonic() < deadline:
+        runs = repository.list_for_project(project_id, limit=3)
+        if runs and not any(run.status in {"queued", "running"} for run in runs):
+            return
+        time.sleep(0.02)
+    raise AssertionError("background workflow did not finish in time")

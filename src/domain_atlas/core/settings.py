@@ -5,7 +5,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -26,8 +26,15 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     chat_model: str = "deepseek-chat"
     chat_max_tokens: int = 12_000
-    intake_llm_suggestions_enabled: bool = False
+    intake_llm_assessment_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "INTAKE_LLM_ASSESSMENT_ENABLED",
+            "INTAKE_LLM_SUGGESTIONS_ENABLED",
+        ),
+    )
     intake_llm_timeout_seconds: float = 15.0
+    intake_llm_min_confidence: float = 0.65
 
     embedding_provider: str = "dashscope"
     embedding_base_url: str = ""

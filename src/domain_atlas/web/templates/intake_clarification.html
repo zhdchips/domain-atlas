@@ -12,12 +12,14 @@
 {% endif %}
 
 <section class="panel intake-panel">
-  {% if project.intake_metadata.get("suggestion_source") == "llm" %}
-    <p class="suggestion-note" role="status">模型已在本地规则边界内优化本次澄清建议，最终范围仍由你确认。</p>
-  {% elif project.intake_metadata.get("suggestion_status") == "fallback" %}
-    <p class="suggestion-note">当前展示可靠的规则建议。</p>
+  {% if project.intake_metadata.get("assessment_source") == "llm" %}
+    <p class="suggestion-note" role="status">模型建议了值得确认的学习边界，最终范围仍由你确认。</p>
+  {% elif project.intake_metadata.get("assessment_source") == "fallback" %}
+    <p class="suggestion-note">当前按你的输入创建领域边界。</p>
+  {% elif project.intake_metadata.get("suggestion_source") == "llm" %}
+    <p class="suggestion-note" role="status">这是旧版模型增强的澄清建议，最终范围仍由你确认。</p>
   {% else %}
-    <p class="suggestion-note">当前建议由本地规则生成。</p>
+    <p class="suggestion-note">这是已保存的领域边界澄清建议。</p>
   {% endif %}
   <p class="intake-understanding">{{ assessment.understanding }}</p>
   <h2>{{ assessment.question }}</h2>
