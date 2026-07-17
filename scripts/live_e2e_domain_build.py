@@ -127,8 +127,12 @@ def _run_live_e2e(workdir: Path) -> int:
     for module in modules:
         if not module.stage_overview or not module.core_explanation:
             raise RuntimeError(f"module {module.stage} did not include lesson prose")
-        if not module.knowledge_blocks or not module.examples or not module.misconceptions:
+        if len(module.core_explanation) < 180:
+            raise RuntimeError(f"module {module.stage} core explanation is too short for direct study")
+        if len(module.knowledge_blocks) < 3 or not module.examples or not module.misconceptions:
             raise RuntimeError(f"module {module.stage} did not include lesson blocks/examples/misconceptions")
+        if not all(block.get("citations") for block in module.knowledge_blocks):
+            raise RuntimeError(f"module {module.stage} lesson blocks are missing citations")
         if not module.further_reading:
             raise RuntimeError(f"module {module.stage} did not include evidence/deep reading")
     if guide is None:
@@ -138,8 +142,14 @@ def _run_live_e2e(workdir: Path) -> int:
     guide_questions = {str(item.get("question")) for item in guide.question_answers}
     if "是什么" not in guide_questions or "未来趋势" not in guide_questions:
         raise RuntimeError(f"guide is missing required key questions: {sorted(guide_questions)}")
-    if not guide.mainline or not guide.core_concepts:
+    if len(guide.mainline) != 5 or not guide.core_concepts:
         raise RuntimeError("guide did not include mainline and core concepts")
+    stages = {module.stage for module in modules}
+    for item in guide.mainline:
+        if int(item.get("module_stage") or 0) not in stages:
+            raise RuntimeError(f"mainline item is not mapped to a lesson stage: {item}")
+        if not item.get("learning_outcome") or not item.get("concept_names"):
+            raise RuntimeError(f"mainline item lacks navigation fields: {item}")
     if concept_count < 6:
         raise RuntimeError(f"expected at least 6 concepts, got {concept_count}")
     print(

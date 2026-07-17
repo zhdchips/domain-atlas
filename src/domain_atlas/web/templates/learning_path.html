@@ -36,12 +36,29 @@
   <section class="learning-columns">
     <article class="panel">
       <p class="eyebrow">领域主线</p>
-      <h2>抓住主干叙事</h2>
-      <ol class="guide-list">
-        {% for item in guide.mainline %}
+      <h2>沿主线进入完整课程</h2>
+      <ol class="guide-list mainline-navigation">
+        {% for item in mainline_items %}
           <li>
             <strong>{{ item.get("title", "主线节点") }}</strong>
-            <span>{{ item.get("explanation", "") }}</span>
+            {% if item.get("learning_outcome") %}
+              <p class="mainline-outcome">本阶段将掌握：{{ item.get("learning_outcome", "") }}</p>
+            {% endif %}
+            {% if item.get("explanation") %}<span>{{ item.get("explanation", "") }}</span>{% endif %}
+            {% if item.get("concepts") %}
+              <div class="mainline-concepts" aria-label="关联概念">
+                {% for concept in item.get("concepts") %}
+                  {% if concept.get("href") %}
+                    <a href="{{ concept.get("href") }}">{{ concept.get("name") }}</a>
+                  {% else %}
+                    <span>{{ concept.get("name") }}</span>
+                  {% endif %}
+                {% endfor %}
+              </div>
+            {% endif %}
+            {% if item.get("lesson_href") %}
+              <a class="lesson-link" href="{{ item.get("lesson_href") }}">进入第 {{ item.get("module_stage") }} 阶段学习：{{ item.get("module_title") }}</a>
+            {% endif %}
             {% if item.get("citations") %}<small>{{ ", ".join(item.get("citations")) }}</small>{% endif %}
           </li>
         {% endfor %}
@@ -52,9 +69,15 @@
       <p class="eyebrow">核心概念</p>
       <h2>先掌握这些依赖点</h2>
       <div class="concept-stack">
-        {% for concept in guide.core_concepts %}
+        {% for concept in guide_core_concepts %}
           <section>
-            <h3>{{ concept.get("name", "概念") }}</h3>
+            <h3>
+              {% if concept.get("wiki_href") %}
+                <a href="{{ concept.get("wiki_href") }}">{{ concept.get("name", "概念") }}</a>
+              {% else %}
+                {{ concept.get("name", "概念") }}
+              {% endif %}
+            </h3>
             <p>{{ concept.get("explanation", "") }}</p>
             {% if concept.get("depends_on") %}
               <small>依赖：{{ ", ".join(concept.get("depends_on")) }}</small>
@@ -112,7 +135,7 @@
       <h2>从主干到支线逐步推进</h2>
     </div>
     {% for module in modules %}
-      <article class="panel learning-module">
+      <article class="panel learning-module" id="lesson-stage-{{ module.stage }}" tabindex="-1">
         <p class="eyebrow">阶段 {{ module.stage }}</p>
         <h2>{{ module.title }}</h2>
         {% if module.stage_overview %}
@@ -122,7 +145,7 @@
           </section>
         {% endif %}
         {% if module.core_explanation %}
-          <section class="lesson-explanation">
+          <section class="lesson-explanation" aria-label="Agent 课程讲解">
             <h3>核心讲解</h3>
             <p>{{ module.core_explanation }}</p>
           </section>
@@ -163,6 +186,7 @@
                 {% for misconception in module.misconceptions %}
                   <article>
                     <h4>{{ misconception.get("title", "误区") }}</h4>
+                    {% if misconception.get("misconception") %}<p>{{ misconception.get("misconception") }}</p>{% endif %}
                     <p>{{ misconception.get("correction", "") }}</p>
                     {% if misconception.get("citations") %}<small>Citations: {{ ", ".join(misconception.get("citations")) }}</small>{% endif %}
                   </article>

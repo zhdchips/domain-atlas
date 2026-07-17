@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     llm_base_url: str = "https://api.deepseek.com"
     llm_api_key: str = ""
     chat_model: str = "deepseek-chat"
+    chat_max_tokens: int = 12_000
 
     embedding_provider: str = "dashscope"
     embedding_base_url: str = ""

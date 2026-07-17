@@ -52,6 +52,7 @@ def main() -> int:
             page.goto(f"{base_url}/domains/{project_id}/path", wait_until="networkidle")
             page.locator(".qa-grid").wait_for(state="visible", timeout=5000)
             _assert_learning_guide_layout(page)
+            _assert_learning_navigation(page, base_url=base_url, project_id=project_id)
             browser.close()
     except PlaywrightError as exc:
         print(f"FAIL browser-e2e: Playwright could not run Chromium: {exc}")
@@ -98,7 +99,17 @@ def _create_wiki_fixture(settings: Settings) -> int:
                             "title": "Agent 讲解优先",
                             "body": "页面先展示可直接学习的讲解，再展示可选证据来源。[S1-C1]",
                             "citations": ["S1-C1"],
-                        }
+                        },
+                        {
+                            "title": "课程组织",
+                            "body": "主线将学习目标连接到章节，章节再把机制、案例和练习组织成连续学习过程。[S1-C1]",
+                            "citations": ["S1-C1"],
+                        },
+                        {
+                            "title": "证据边界",
+                            "body": "来源用于核验讲解中的主张和延伸阅读，不能替代面向学习者的课程正文。[S1-C1]",
+                            "citations": ["S1-C1"],
+                        },
                     ],
                     "examples": [
                         {
@@ -114,10 +125,10 @@ def _create_wiki_fixture(settings: Settings) -> int:
                             "citations": ["S1-C1"],
                         }
                     ],
-                    "objectives": ["理解领域主线"],
+                    "objectives": ["理解领域主线", "区分课程与证据来源"],
                     "readings": ["Wiki Index [S1-C1]"],
-                    "key_concepts": ["Provenance"],
-                    "check_questions": ["为什么需要 provenance？"],
+                    "key_concepts": ["Provenance", "WikiSection"],
+                    "check_questions": ["为什么需要 provenance？", "为什么来源不是课程主体？"],
                     "practice_task": "用一段话说明 citation 和 provenance 的关系。",
                     "further_reading": [
                         {"title": "Wiki Index", "locator": "wiki/index", "citations": ["S1-C1"]}
@@ -175,15 +186,14 @@ def _learning_guide_payload() -> dict[str, Any]:
         ],
         "mainline": [
             {
-                "title": "从资料到可溯源 Wiki",
+                "title": f"阶段 {stage}：从资料到课程",
                 "explanation": "先摄取权威资料，再生成 Wiki 页面、段落和引用证据。[S1-C1]",
+                "learning_outcome": "能从主线进入对应课程，并区分课程正文和证据来源。",
+                "module_stage": stage,
+                "concept_names": ["Provenance", "WikiSection"],
                 "citations": ["S1-C1"],
-            },
-            {
-                "title": "从 Wiki 到学习路线",
-                "explanation": "学习路线基于主线概念展开，并延伸到支线主题。[S1-C1]",
-                "citations": ["S1-C1"],
-            },
+            }
+            for stage in range(1, 6)
         ],
         "core_concepts": [
             {
@@ -346,6 +356,7 @@ def _assert_learning_guide_layout(page) -> None:
           const columnsBox = columns.getBoundingClientRect();
           const blockGrid = document.querySelector(".lesson-block-grid");
           const evidence = document.querySelector(".evidence-reading");
+          const mainlineLinks = document.querySelectorAll(".lesson-link");
           return {
             text: document.body.innerText,
             qaDisplay: getComputedStyle(qaGrid).display,
@@ -357,6 +368,9 @@ def _assert_learning_guide_layout(page) -> None:
             qaCount: document.querySelectorAll(".qa-card").length,
             moduleCount: document.querySelectorAll(".learning-module").length,
             lessonBlockCount: document.querySelectorAll(".lesson-block").length,
+            mainlineLinkCount: mainlineLinks.length,
+            lessonTargetCount: document.querySelectorAll(".learning-module[id^='lesson-stage-']").length,
+            conceptLinkCount: document.querySelectorAll(".mainline-concepts a").length,
             evidenceHeading: evidence.querySelector("h3")?.textContent || "",
             firstCardHeight: firstCard.getBoundingClientRect().height,
             heroWidth: hero.getBoundingClientRect().width,
@@ -395,6 +409,13 @@ def _assert_learning_guide_layout(page) -> None:
             f"hero={metrics['heroWidth']:.1f} qa={metrics['qaWidth']:.1f} "
             f"columns={metrics['columnsWidth']:.1f}"
         )
+    if metrics["mainlineLinkCount"] != 5 or metrics["lessonTargetCount"] != 5:
+        failures.append(
+            "mainline navigation does not map every stage: "
+            f"links={metrics['mainlineLinkCount']} targets={metrics['lessonTargetCount']}"
+        )
+    if metrics["conceptLinkCount"] < 1:
+        failures.append("mainline does not expose a Wiki concept link")
     if failures:
         raise RuntimeError("; ".join(failures))
     print(
@@ -403,6 +424,39 @@ def _assert_learning_guide_layout(page) -> None:
         f"content_columns={metrics['columnsTemplate']} "
         f"lesson_columns={metrics['blockGridColumns']}"
     )
+
+
+def _assert_learning_navigation(page, *, base_url: str, project_id: int) -> None:
+    page.locator(".lesson-link").first.click()
+    target = page.locator("#lesson-stage-1")
+    target.wait_for(state="visible", timeout=5000)
+    target_box = target.bounding_box()
+    if target_box is None or target_box["y"] > 180:
+        raise RuntimeError(f"lesson anchor did not bring stage 1 into view: {target_box}")
+
+    page.goto(f"{base_url}/domains/{project_id}/path", wait_until="networkidle")
+    page.locator(".mainline-concepts a").first.click()
+    page.locator(".wiki-page").wait_for(state="visible", timeout=5000)
+    if not page.url.endswith(f"/domains/{project_id}/wiki/concepts/provenance"):
+        raise RuntimeError(f"mainline concept link opened unexpected URL: {page.url}")
+
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.goto(f"{base_url}/domains/{project_id}/path", wait_until="networkidle")
+    mobile = page.evaluate(
+        """
+        () => ({
+          viewport: window.innerWidth,
+          documentWidth: document.documentElement.scrollWidth,
+          mainlineWidth: document.querySelector('.mainline-navigation').getBoundingClientRect().width,
+          lessonLinkWidth: document.querySelector('.lesson-link').getBoundingClientRect().width,
+        })
+        """
+    )
+    if mobile["documentWidth"] > mobile["viewport"] + 1:
+        raise RuntimeError(f"mobile learning page overflows horizontally: {mobile}")
+    if mobile["lessonLinkWidth"] > mobile["mainlineWidth"]:
+        raise RuntimeError(f"mobile lesson link overflows mainline item: {mobile}")
+    print("verified mainline navigation, Wiki concept link, and mobile layout")
 
 
 def _free_port() -> int:

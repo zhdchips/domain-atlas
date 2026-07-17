@@ -13,6 +13,7 @@ def test_openai_compatible_chat_provider_parses_json_content():
         assert request.headers["authorization"] == f"Bearer {expected_key}"
         body = request.read()
         assert b'"response_format":{"type":"json_object"}' in body
+        assert b'"max_tokens":12000' in body
         return httpx.Response(
             200,
             json={
@@ -30,6 +31,7 @@ def test_openai_compatible_chat_provider_parses_json_content():
         api_key=expected_key,
         base_url="https://llm.example.com",
         model="test-chat",
+        max_tokens=12_000,
         client=httpx.Client(transport=httpx.MockTransport(handler)),
     )
 

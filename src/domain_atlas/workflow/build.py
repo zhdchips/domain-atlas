@@ -15,8 +15,8 @@ from domain_atlas.domain.workflow import WorkflowRepository
 from domain_atlas.providers.vector_index import VectorIndex
 
 
-MAX_CONTEXT_CHARS = 18_000
-MAX_CHUNK_CHARS = 2_500
+MAX_CONTEXT_CHARS = 30_000
+MAX_CHUNK_CHARS = 3_500
 
 
 class ChatProvider(Protocol):
@@ -93,7 +93,27 @@ class KnowledgeBuildWorkflow:
                 user_prompt=user_prompt,
             )
             payload = _normalize_payload(payload)
-            _validate_payload(payload)
+            try:
+                _validate_payload(payload)
+            except ValueError as exc:
+                self.workflow_repository.record_step(
+                    run_id,
+                    step_name="repair_lesson_structure",
+                    status="running",
+                    output={"reason": str(exc)},
+                )
+                payload = self.chat_provider.complete_json(
+                    system_prompt=system_prompt,
+                    user_prompt=_repair_user_prompt(user_prompt, str(exc)),
+                )
+                payload = _normalize_payload(payload)
+                _validate_payload(payload)
+                self.workflow_repository.record_step(
+                    run_id,
+                    step_name="repair_lesson_structure",
+                    status="completed",
+                    output={"status": "repaired"},
+                )
             sources = [
                 self.source_repository.get(source_id)
                 for source_id in sorted({chunk.source_id for chunk in chunks})
@@ -180,23 +200,41 @@ Return a JSON object with exactly these keys:
 - learning_guide: object with summary, question_answers, mainline, core_concepts, branches, details, citations.
   question_answers must answer exactly these ten questions, in order: {", ".join(REQUIRED_GUIDE_QUESTIONS)}.
   Each question answer object must include question, answer, citations. Answers must contain concrete domain knowledge from the chunks, not generic study advice.
-  mainline: 5 to 8 objects with title, explanation, citations. Explain the main narrative a learner should follow.
+  mainline: exactly five ordered objects, one per learning module. Each object must include title, explanation, learning_outcome, module_stage, concept_names, citations.
+  module_stage is the 1-based stage number of the associated learning module. learning_outcome states the concrete conclusion or capability the learner should gain. concept_names contains 2 to 4 names from core_concepts or concepts that this stage relies on.
+  Explain the main narrative a learner should follow, then make the next lesson obvious.
   core_concepts: 8 to 12 objects with name, explanation, depends_on, citations. Use dependency-aware concepts.
   branches: 3 to 6 objects with name, description, when_to_study, citations.
   details: 3 to 6 objects with title, description, practice_or_example, citations.
 - learning_modules: exactly five lesson-style objects with stage, title, stage_overview, core_explanation, knowledge_blocks, examples, misconceptions, objectives, key_concepts, check_questions, practice_task, further_reading, citations.
   Sources are evidence, not the curriculum. Each module must be a self-contained Agent-generated lesson chapter, not a reading list.
   stage_overview explains what this stage teaches and why it belongs here.
-  core_explanation is concise teaching prose that a learner can study directly.
-  knowledge_blocks: 1 to 2 objects with title, body, citations. Body <= 80 Chinese chars.
-  examples: exactly 1 object with title, body, citations. Body <= 80 Chinese chars.
-  misconceptions: exactly 1 object with title, correction, citations. Correction <= 80 Chinese chars.
+  core_explanation is 180 to 500 Chinese characters of connected teaching prose that a learner can study directly. Explain definitions, mechanisms, and causal relationships rather than announcing a topic.
+  knowledge_blocks: 3 to 5 ordered objects with title, body, citations. Every body should be 80 to 220 Chinese characters and explain a distinct definition, mechanism, causal relation, or derivation.
+  examples: 1 to 2 objects with title, body, citations. Include at least one concrete end-to-end worked example or case with situation, steps, and result. Body should be 120 to 280 Chinese characters.
+  misconceptions: 1 to 2 objects with title, correction, citations. Describe a real misconception or failure mode, why it causes trouble, and how to correct it. Correction should be 100 to 240 Chinese characters.
+  objectives: 2 to 4 observable learning outcomes. key_concepts: 2 to 6 concepts. check_questions: 2 to 4 questions. practice_task must be concrete and produce an inspectable result.
+  Every module must teach enough for a beginner to understand the central mechanism and complete the practice before opening external material.
+  For the module about data-platform methodology and standardized modeling, explicitly cover: the problem it solves; business entities, activities, and grain; dimensional/fact modeling and logical-table mapping; deriving metrics from atomic metrics, business filters, periods, and grain; an e-commerce order-analysis case; and failures caused by table-first design, fragmented metric definitions, or coupling business models to physical implementation.
   further_reading: 1 to 2 optional evidence/deep-reading objects with title, locator, citations.
   Keep legacy objectives, key_concepts, check_questions, practice_task, and citations for compatibility.
   Do not include a legacy readings field unless necessary; use further_reading for source references.
   Modules should build from the learning_guide: start with mainline and core concepts, then branch into details.
-Keep the response compact and valid JSON. Use short strings. Do not include markdown fences.
+Return complete but focused teaching content and valid JSON. Do not include markdown fences.
 """.strip()
+
+
+def _repair_user_prompt(user_prompt: str, validation_error: str) -> str:
+    return (
+        f"{user_prompt}\n\n"
+        "Your previous JSON object was parseable but failed the lesson-quality contract: "
+        f"{validation_error}\n"
+        "Regenerate the complete JSON object from scratch. Do not shorten the five lesson chapters. "
+        "Every module needs a 180+ character core explanation, at least three distinct cited "
+        "knowledge blocks, an end-to-end example, a real misconception correction, and further reading. "
+        "Every mainline item must map to a module_stage and include learning_outcome and concept_names. "
+        "Return JSON only."
+    )
 
 
 def _format_context(chunks) -> str:
@@ -230,11 +268,17 @@ def _validate_payload(payload: dict[str, Any]) -> None:
         raise ValueError(f"Knowledge build payload missing keys: {', '.join(missing)}")
     if len(payload.get("learning_modules") or []) != 5:
         raise ValueError("Knowledge build must return exactly five learning modules.")
-    for module in payload.get("learning_modules") or []:
+    modules = payload.get("learning_modules") or []
+    stages = {int(module.get("stage") or 0) for module in modules if isinstance(module, dict)}
+    for module in modules:
         if not isinstance(module, dict):
             raise ValueError("Knowledge build learning modules must be objects.")
         if not module.get("stage_overview") or not module.get("core_explanation"):
             raise ValueError("Knowledge build learning modules must include lesson teaching prose.")
+        if len(str(module.get("core_explanation") or "").strip()) < 180:
+            raise ValueError("Knowledge build lesson core explanation is too short for direct study.")
+        if len(module.get("knowledge_blocks") or []) < 3:
+            raise ValueError("Knowledge build learning modules must include at least three knowledge blocks.")
         for field in ("knowledge_blocks", "examples", "misconceptions", "further_reading"):
             if not isinstance(module.get(field), list) or not module.get(field):
                 raise ValueError(f"Knowledge build learning modules must include non-empty {field}.")
@@ -247,6 +291,13 @@ def _validate_payload(payload: dict[str, Any]) -> None:
     questions = [str(item.get("question", "")) for item in question_answers if isinstance(item, dict)]
     if questions != REQUIRED_GUIDE_QUESTIONS:
         raise ValueError("Knowledge build learning guide key questions are missing or out of order.")
+    for item in guide.get("mainline") or []:
+        if not isinstance(item, dict):
+            raise ValueError("Knowledge build learning guide mainline items must be objects.")
+        if int(item.get("module_stage") or 0) not in stages:
+            raise ValueError("Knowledge build learning guide mainline must map to a lesson stage.")
+        if not item.get("learning_outcome"):
+            raise ValueError("Knowledge build learning guide mainline must include a learning outcome.")
 
 
 def _normalize_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -274,7 +325,44 @@ def _normalize_payload(payload: dict[str, Any]) -> dict[str, Any]:
             module["misconceptions"] = _fallback_misconceptions(module)
         if not module.get("further_reading"):
             module["further_reading"] = _fallback_further_reading(module)
+    guide = payload.get("learning_guide")
+    if isinstance(guide, dict):
+        guide["mainline"] = _normalize_mainline(guide.get("mainline"), modules)
     return payload
+
+
+def _normalize_mainline(value: Any, modules: list[Any]) -> list[dict[str, Any]]:
+    """Fill navigation fields while keeping older guide payloads readable."""
+    module_by_stage = {
+        int(module.get("stage") or 0): module
+        for module in modules
+        if isinstance(module, dict) and int(module.get("stage") or 0) > 0
+    }
+    ordered_modules = [module_by_stage[stage] for stage in sorted(module_by_stage)]
+    items = value if isinstance(value, list) else []
+    normalized: list[dict[str, Any]] = []
+    for index, item in enumerate(items):
+        if not isinstance(item, dict):
+            continue
+        current = dict(item)
+        raw_stage = current.get("module_stage") or current.get("stage")
+        try:
+            stage = int(raw_stage)
+        except (TypeError, ValueError):
+            stage = 0
+        if stage not in module_by_stage and ordered_modules:
+            stage = int(ordered_modules[min(index, len(ordered_modules) - 1)].get("stage") or 0)
+        module = module_by_stage.get(stage, {})
+        current["module_stage"] = stage
+        current["learning_outcome"] = _str(current.get("learning_outcome")) or _str(
+            current.get("explanation")
+        )
+        concept_names = _string_list(current.get("concept_names"))[:4]
+        if not concept_names:
+            concept_names = _string_list(module.get("key_concepts"))[:4]
+        current["concept_names"] = concept_names
+        normalized.append(current)
+    return normalized
 
 
 def _structured_items(value: Any, *, body_key: str) -> list[dict[str, Any]]:

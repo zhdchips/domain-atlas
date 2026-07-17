@@ -21,6 +21,7 @@ class OpenAICompatibleChatProvider:
         api_key: str,
         base_url: str,
         model: str,
+        max_tokens: int | None = None,
         timeout_seconds: float = 60.0,
         temperature: float = 0.0,
         max_retries: int = 2,
@@ -31,6 +32,7 @@ class OpenAICompatibleChatProvider:
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.model = model
+        self.max_tokens = max_tokens
         self.timeout_seconds = timeout_seconds
         self.temperature = temperature
         self.max_retries = max_retries
@@ -56,6 +58,8 @@ class OpenAICompatibleChatProvider:
             "temperature": self.temperature,
             "response_format": {"type": "json_object"},
         }
+        if self.max_tokens is not None:
+            body["max_tokens"] = self.max_tokens
         headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
 
         attempts = self.json_retries + 1

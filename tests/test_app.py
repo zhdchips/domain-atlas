@@ -21,6 +21,14 @@ GUIDE_QUESTIONS = [
     "未来趋势",
 ]
 
+STAGE_TITLES = ["入门认知", "核心概念", "关键方法", "实践应用", "进阶专题"]
+DEEP_CORE_EXPLANATION = (
+    "Agent 的学习重点不是把模型当作会回答问题的聊天界面，而是理解它如何围绕明确目标形成行动闭环。"
+    "它先把任务分解为可验证的步骤，判断哪些信息或动作需要外部工具，再读取工具返回的结果并修正后续计划。"
+    "这个循环让系统能够把语言理解转化为检索、计算、写入等实际操作，同时也要求每一步保留证据和失败处理策略。"
+    "学习者应能区分模型生成的建议与工具执行得到的事实，并据此评估一次任务是否真的完成。[S1-C1]"
+)
+
 
 class FakeDiscoveryProvider:
     def search(self, query: str, limit: int) -> list[SourceCandidateDraft]:
@@ -135,16 +143,27 @@ class FakeChatProvider:
                 ],
                 "mainline": [
                     {
-                        "title": "目标、规划、工具、反馈",
+                        "title": f"{title}：目标、规划、工具、反馈",
                         "explanation": "学习主线从目标拆解进入工具调用，再理解反馈修正。[S1-C1]",
+                        "learning_outcome": "能说明目标、工具和反馈如何组成行动闭环。",
+                        "module_stage": stage,
+                        "concept_names": ["Agent", "Tool Use"],
                         "citations": ["S1-C1"],
                     }
+                    for stage, title in enumerate(STAGE_TITLES, start=1)
                 ],
                 "core_concepts": [
                     {
                         "name": "Agent",
                         "explanation": "Agent 使用工具完成任务。[S1-C1]",
                         "depends_on": [],
+                        "citations": ["S1-C1"],
+                    }
+                    ,
+                    {
+                        "name": "Tool Use",
+                        "explanation": "让 Agent 连接外部检索、计算和执行能力的机制。[S1-C1]",
+                        "depends_on": ["Agent"],
                         "citations": ["S1-C1"],
                     }
                 ],
@@ -171,13 +190,23 @@ class FakeChatProvider:
                     "stage": stage,
                     "title": title,
                     "stage_overview": f"{title}阶段把 Agent 的目标、规划和工具使用串起来。",
-                    "core_explanation": "Agent 不只是聊天接口，而是围绕任务目标规划、调用工具并使用反馈的系统。[S1-C1]",
+                    "core_explanation": DEEP_CORE_EXPLANATION,
                     "knowledge_blocks": [
                         {
                             "title": "规划与工具",
                             "body": "Agent 先判断任务目标，再选择合适工具完成外部动作。[S1-C1]",
                             "citations": ["S1-C1"],
-                        }
+                        },
+                        {
+                            "title": "工具选择",
+                            "body": "工具调用把语言任务连接到检索、计算或写入等外部动作，工具类型必须和待验证的步骤匹配。[S1-C1]",
+                            "citations": ["S1-C1"],
+                        },
+                        {
+                            "title": "反馈与证据",
+                            "body": "工具结果会改变下一步计划；可靠流程还要记录来源和失败原因，避免把猜测当成已经执行的事实。[S1-C1]",
+                            "citations": ["S1-C1"],
+                        },
                     ],
                     "examples": [
                         {
@@ -193,10 +222,10 @@ class FakeChatProvider:
                             "citations": ["S1-C1"],
                         }
                     ],
-                    "objectives": ["建立理解"],
+                    "objectives": ["建立理解", "说明工具结果如何影响下一步"],
                     "readings": ["Agent [S1-C1]"],
-                    "key_concepts": ["Agent"],
-                    "check_questions": ["什么是 Agent？"],
+                    "key_concepts": ["Agent", "Tool Use"],
+                    "check_questions": ["什么是 Agent？", "工具结果如何影响计划？"],
                     "practice_task": "解释 Agent。",
                     "further_reading": [
                         {"title": "Agent Wiki", "locator": "wiki/concepts/agent", "citations": ["S1-C1"]}
@@ -204,7 +233,7 @@ class FakeChatProvider:
                     "citations": ["S1-C1"],
                 }
                 for stage, title in enumerate(
-                    ["入门认知", "核心概念", "关键方法", "实践应用", "进阶专题"],
+                    STAGE_TITLES,
                     start=1,
                 )
             ],
@@ -404,6 +433,10 @@ def test_build_knowledge_route_renders_wiki_and_learning_path(tmp_path):
     assert "领域速览" in path.text
     assert "关键问题" in path.text
     assert "领域主线" in path.text
+    assert "本阶段将掌握" in path.text
+    assert "进入第 1 阶段学习" in path.text
+    assert 'href="#lesson-stage-1"' in path.text
+    assert 'href="/domains/1/wiki/concepts/agent"' in path.text
     assert "支线拓展" in path.text
     assert "为什么存在" in path.text
     assert "目标、规划、工具、反馈" in path.text
@@ -411,6 +444,8 @@ def test_build_knowledge_route_renders_wiki_and_learning_path(tmp_path):
     assert "核心讲解" in path.text
     assert "知识块" in path.text
     assert "规划与工具" in path.text
+    assert "工具选择" in path.text
+    assert "反馈与证据" in path.text
     assert "例子 / 案例" in path.text
     assert "检索型 Agent" in path.text
     assert "常见误区" in path.text
@@ -419,6 +454,7 @@ def test_build_knowledge_route_renders_wiki_and_learning_path(tmp_path):
     assert "阅读材料" not in path.text
     assert "入门认知" in path.text
     assert "进阶专题" in path.text
+    assert 'id="lesson-stage-1"' in path.text
     assert any(call[0] == "wiki" and call[1] == 1 and call[2] >= 7 for call in vector_index.calls)
 
 

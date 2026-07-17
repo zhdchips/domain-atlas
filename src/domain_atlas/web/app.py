@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI, Form, HTTPException, Request, UploadFile, status
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -79,6 +80,7 @@ def create_app(
             api_key=app_settings.llm_api_key,
             base_url=app_settings.llm_base_url,
             model=app_settings.chat_model,
+            max_tokens=app_settings.chat_max_tokens,
         )
         return KnowledgeBuildWorkflow(
             database_path=app_settings.database_path,
@@ -120,6 +122,7 @@ def create_app(
             api_key=app_settings.llm_api_key,
             base_url=app_settings.llm_base_url,
             model=app_settings.chat_model,
+            max_tokens=app_settings.chat_max_tokens,
         )
         return RetrievalQAService(
             database_path=app_settings.database_path,
@@ -417,6 +420,7 @@ def create_app(
         repository = artifact_repository()
         guide = repository.get_learning_guide(project_id)
         modules = repository.list_learning_modules(project_id)
+        pages = repository.list_wiki_pages(project_id)
         return templates.TemplateResponse(
             request,
             "learning_path.html",
@@ -425,6 +429,17 @@ def create_app(
                 "project": project,
                 "guide": guide,
                 "modules": modules,
+                "mainline_items": _learning_mainline_items(
+                    guide=guide,
+                    modules=modules,
+                    pages=pages,
+                    project_id=project_id,
+                ),
+                "guide_core_concepts": _guide_concept_items(
+                    guide=guide,
+                    pages=pages,
+                    project_id=project_id,
+                ),
             },
         )
 
@@ -476,3 +491,82 @@ def _page_type_labels() -> dict[str, str]:
         "template": "templates",
         "query": "queries",
     }
+
+
+def _learning_mainline_items(*, guide, modules, pages, project_id: int) -> list[dict[str, Any]]:
+    """Prepare stable lesson and concept navigation without mutating persisted artifacts."""
+    if guide is None:
+        return []
+    module_by_stage = {module.stage: module for module in modules}
+    concept_urls = _concept_wiki_urls(pages, project_id)
+    items: list[dict[str, Any]] = []
+    for index, item in enumerate(guide.mainline):
+        if not isinstance(item, dict):
+            continue
+        stage = _mainline_stage(item, modules, index)
+        module = module_by_stage.get(stage)
+        concept_names = _string_values(item.get("concept_names"))[:4]
+        if not concept_names and module is not None:
+            concept_names = [name for name in module.key_concepts if str(name).strip()][:4]
+        items.append(
+            {
+                "title": str(item.get("title") or "主线节点"),
+                "explanation": str(item.get("explanation") or ""),
+                "learning_outcome": str(item.get("learning_outcome") or item.get("explanation") or ""),
+                "module_stage": stage,
+                "module_title": module.title if module is not None else "对应课程",
+                "lesson_href": f"#lesson-stage-{stage}" if module is not None else "",
+                "concepts": [
+                    {"name": name, "href": concept_urls.get(name.casefold(), "")}
+                    for name in concept_names
+                ],
+                "citations": _string_values(item.get("citations")),
+            }
+        )
+    return items
+
+
+def _guide_concept_items(*, guide, pages, project_id: int) -> list[dict[str, Any]]:
+    if guide is None:
+        return []
+    concept_urls = _concept_wiki_urls(pages, project_id)
+    items: list[dict[str, Any]] = []
+    for concept in guide.core_concepts:
+        if not isinstance(concept, dict):
+            continue
+        name = str(concept.get("name") or "概念")
+        items.append(
+            {
+                **concept,
+                "name": name,
+                "wiki_href": concept_urls.get(name.casefold(), ""),
+            }
+        )
+    return items
+
+
+def _concept_wiki_urls(pages, project_id: int) -> dict[str, str]:
+    return {
+        page.title.casefold(): f"/domains/{project_id}/wiki/{page.path.removeprefix('wiki/')}"
+        for page in pages
+        if page.page_type == "concept" and page.title.strip()
+    }
+
+
+def _mainline_stage(item: dict[str, Any], modules, index: int) -> int:
+    try:
+        stage = int(item.get("module_stage") or item.get("stage") or 0)
+    except (TypeError, ValueError):
+        stage = 0
+    available = {module.stage for module in modules}
+    if stage in available:
+        return stage
+    if not modules:
+        return 0
+    return modules[min(index, len(modules) - 1)].stage
+
+
+def _string_values(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]

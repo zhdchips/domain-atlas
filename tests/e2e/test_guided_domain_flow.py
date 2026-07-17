@@ -80,6 +80,9 @@ def test_guided_domain_flow_navigation_and_qa_are_deterministic(tmp_path):
     assert "领域速览" in learning_path.text
     assert "关键问题" in learning_path.text
     assert "领域主线" in learning_path.text
+    assert "本阶段将掌握" in learning_path.text
+    assert 'href="#lesson-stage-1"' in learning_path.text
+    assert 'href="/domains/1/wiki/concepts/dataphin"' in learning_path.text
     assert "支线拓展" in learning_path.text
     assert "为什么存在" in learning_path.text
     assert "从数据建设到治理闭环" in learning_path.text
@@ -92,6 +95,7 @@ def test_guided_domain_flow_navigation_and_qa_are_deterministic(tmp_path):
     assert "证据来源 / 深入阅读" in learning_path.text
     assert "阅读材料" not in learning_path.text
     assert "入门认知" in learning_path.text
+    assert 'id="lesson-stage-1"' in learning_path.text
     assert "画出 Dataphin 的核心对象关系" in learning_path.text
 
     qa_page = client.get("/domains/1/qa")
@@ -452,7 +456,7 @@ def _artifact_payload(source_id: int) -> dict:
                 ],
                 "objectives": ["理解 Dataphin 的基本定位"],
                 "readings": ["Dataphin 入门 [S1-C1]"],
-                "key_concepts": ["Dataphin"],
+                "key_concepts": ["Dataphin 入门"],
                 "check_questions": ["Dataphin 是什么？"],
                 "practice_task": "画出 Dataphin 的核心对象关系。",
                 "further_reading": [
