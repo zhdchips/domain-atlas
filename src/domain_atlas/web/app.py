@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
 from fastapi import FastAPI, Form, HTTPException, Request, UploadFile, status
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -27,11 +28,15 @@ from domain_atlas.providers.vector_index import ChromaVectorIndex, VectorIndex
 from domain_atlas.qa.service import RetrievalQAService
 from domain_atlas.workflow.build import KnowledgeBuildWorkflow
 from domain_atlas.workflow.autopilot import AutopilotWorkflow
+from domain_atlas.workflow.background import BackgroundWorkflowRunner, WorkflowConflictError
 
 templates = Jinja2Templates(directory="src/domain_atlas/web/templates")
 static_files = StaticFiles(directory="src/domain_atlas/web/static")
 templates.env.globals["static_version"] = lambda: str(
-    int(Path("src/domain_atlas/web/static/styles.css").stat().st_mtime)
+    max(
+        int(Path("src/domain_atlas/web/static/styles.css").stat().st_mtime),
+        int(Path("src/domain_atlas/web/static/app.js").stat().st_mtime),
+    )
 )
 
 
@@ -42,6 +47,7 @@ def create_app(
     embedding_provider: object | None = None,
     vector_index: VectorIndex | None = None,
     autopilot_runner: object | None = None,
+    background_runner: object | None = None,
 ) -> FastAPI:
     """Create the Domain Atlas web app."""
     app_settings = settings or get_settings()
@@ -50,6 +56,7 @@ def create_app(
     app = FastAPI(title=app_settings.app_name)
     app.state.settings = app_settings
     app.mount("/static", static_files, name="static")
+    WorkflowRepository(app_settings.database_path).interrupt_active_runs()
 
     def project_repository() -> DomainProjectRepository:
         return DomainProjectRepository(app_settings.database_path)
@@ -71,6 +78,8 @@ def create_app(
 
     def workflow_repository() -> WorkflowRepository:
         return WorkflowRepository(app_settings.database_path)
+
+    task_runner = background_runner or BackgroundWorkflowRunner(workflow_repository())
 
     def source_discovery_provider() -> ExaSearchProvider:
         return discovery_provider or ExaSearchProvider(api_key=app_settings.exa_api_key)
@@ -182,7 +191,12 @@ def create_app(
         )
 
     @app.get("/domains/{project_id}", response_class=HTMLResponse)
-    def domain_dashboard(request: Request, project_id: int) -> HTMLResponse:
+    def domain_dashboard(
+        request: Request,
+        project_id: int,
+        error: str = "",
+        notice: str = "",
+    ) -> HTMLResponse:
         project = project_repository().get(project_id)
         if project is None:
             raise HTTPException(status_code=404, detail="Domain project not found.")
@@ -207,6 +221,27 @@ def create_app(
                 "wiki_count": wiki_count,
                 "search_max_results": app_settings.search_max_results,
                 "workflow_runs": workflow_runs,
+                "workflow_labels": _workflow_labels(),
+                "step_labels": _step_labels(),
+                "active_workflow": any(run.status in {"queued", "running"} for run in workflow_runs),
+                "error": error,
+                "notice": notice,
+            },
+        )
+
+    @app.get("/domains/{project_id}/workflow-status", response_class=HTMLResponse)
+    def workflow_status(request: Request, project_id: int) -> HTMLResponse:
+        project = project_repository().get(project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Domain project not found.")
+        runs = workflow_repository().list_for_project(project_id, limit=3)
+        return templates.TemplateResponse(
+            request,
+            "workflow_status.html",
+            {
+                "workflow_runs": runs,
+                "workflow_labels": _workflow_labels(),
+                "step_labels": _step_labels(),
             },
         )
 
@@ -226,7 +261,7 @@ def create_app(
                 limit=app_settings.search_max_results,
             )
         except SourceDiscoveryError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            return _dashboard_redirect(project_id, error=f"搜索候选资料失败：{exc}")
 
         candidate_repository().replace_discovered(project_id, drafts)
         return RedirectResponse(
@@ -244,7 +279,7 @@ def create_app(
             raise HTTPException(status_code=404, detail="Domain project not found.")
         candidate = candidate_repository().accept(project_id, candidate_id)
         if candidate is None:
-            raise HTTPException(status_code=404, detail="Source candidate not found.")
+            return _dashboard_redirect(project_id, error="确认候选资料失败：未找到该候选资料。")
         source_repository().create(
             CreateSource(
                 project_id=project_id,
@@ -295,7 +330,7 @@ def create_app(
         suffix = Path(filename).suffix.lower()
         source_type = _source_type_from_suffix(suffix)
         if source_type is None:
-            raise HTTPException(status_code=400, detail="Only Markdown and PDF files are supported.")
+            return _dashboard_redirect(project_id, error="上传失败：仅支持 Markdown 和 PDF 文件。")
         content = await file.read()
         digest = hashlib.sha256(content).hexdigest()
         source = source_repository().create(
@@ -326,13 +361,16 @@ def create_app(
         if source is None or source.project_id != project_id:
             raise HTTPException(status_code=404, detail="Source not found.")
         try:
-            source_ingestion_service().ingest_source(source_id)
-        except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        return RedirectResponse(
-            url=f"/domains/{project_id}",
-            status_code=status.HTTP_303_SEE_OTHER,
-        )
+            task_runner.submit(
+                project_id=project_id,
+                workflow_name="source_ingestion",
+                work=lambda run_id: _run_source_ingestion(
+                    source_ingestion_service(), workflow_repository(), source_id, run_id
+                ),
+            )
+        except WorkflowConflictError as exc:
+            return _dashboard_redirect(project_id, error=str(exc))
+        return _dashboard_redirect(project_id, notice="已开始摄取资料，可在当前任务中查看进度。")
 
     @app.post("/domains/{project_id}/build")
     def build_knowledge(project_id: int) -> RedirectResponse:
@@ -340,13 +378,14 @@ def create_app(
         if project is None:
             raise HTTPException(status_code=404, detail="Domain project not found.")
         try:
-            knowledge_build_workflow().run(project_id)
-        except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        return RedirectResponse(
-            url=f"/domains/{project_id}",
-            status_code=status.HTTP_303_SEE_OTHER,
-        )
+            task_runner.submit(
+                project_id=project_id,
+                workflow_name="knowledge_build",
+                work=lambda run_id: knowledge_build_workflow().run(project_id, run_id=run_id),
+            )
+        except WorkflowConflictError as exc:
+            return _dashboard_redirect(project_id, error=str(exc))
+        return _dashboard_redirect(project_id, notice="已开始构建知识库，可在当前任务中查看进度。")
 
     @app.post("/domains/{project_id}/autopilot")
     def run_autopilot(project_id: int) -> RedirectResponse:
@@ -354,13 +393,14 @@ def create_app(
         if project is None:
             raise HTTPException(status_code=404, detail="Domain project not found.")
         try:
-            autopilot_workflow().run(project_id)
-        except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        return RedirectResponse(
-            url=f"/domains/{project_id}",
-            status_code=status.HTTP_303_SEE_OTHER,
-        )
+            task_runner.submit(
+                project_id=project_id,
+                workflow_name="guided_autopilot",
+                work=lambda run_id: _run_autopilot(autopilot_workflow(), project_id, run_id),
+            )
+        except WorkflowConflictError as exc:
+            return _dashboard_redirect(project_id, error=str(exc))
+        return _dashboard_redirect(project_id, notice="已开始一键构建领域地图，可在当前任务中查看进度。")
 
     @app.get("/domains/{project_id}/wiki", response_class=HTMLResponse)
     def wiki_pages(request: Request, project_id: int) -> HTMLResponse:
@@ -444,7 +484,7 @@ def create_app(
         )
 
     @app.get("/domains/{project_id}/qa", response_class=HTMLResponse)
-    def qa_page(request: Request, project_id: int) -> HTMLResponse:
+    def qa_page(request: Request, project_id: int, error: str = "") -> HTMLResponse:
         project = project_repository().get(project_id)
         if project is None:
             raise HTTPException(status_code=404, detail="Domain project not found.")
@@ -452,7 +492,12 @@ def create_app(
         return templates.TemplateResponse(
             request,
             "qa.html",
-            {"app_name": app_settings.app_name, "project": project, "records": records},
+            {
+                "app_name": app_settings.app_name,
+                "project": project,
+                "records": records,
+                "error": error,
+            },
         )
 
     @app.post("/domains/{project_id}/qa")
@@ -463,7 +508,10 @@ def create_app(
         try:
             retrieval_qa_service().answer(project_id=project_id, question=question)
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            return RedirectResponse(
+                url=f"/domains/{project_id}/qa?{urlencode({'error': f'回答失败：{exc}'})}",
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
         return RedirectResponse(
             url=f"/domains/{project_id}/qa",
             status_code=status.HTTP_303_SEE_OTHER,
@@ -478,6 +526,74 @@ def _source_type_from_suffix(suffix: str) -> str | None:
     if suffix == ".pdf":
         return "pdf"
     return None
+
+
+def _dashboard_redirect(project_id: int, *, error: str = "", notice: str = "") -> RedirectResponse:
+    query = {key: value for key, value in {"error": error, "notice": notice}.items() if value}
+    suffix = f"?{urlencode(query)}" if query else ""
+    return RedirectResponse(
+        url=f"/domains/{project_id}{suffix}",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+def _run_source_ingestion(
+    service: IngestionService,
+    repository: WorkflowRepository,
+    source_id: int,
+    run_id: int,
+) -> None:
+    def progress(step_name: str, step_status: str, output: dict[str, object] | None) -> None:
+        repository.record_step(
+            run_id,
+            step_name=step_name,
+            status=step_status,
+            output=output,
+            error=str((output or {}).get("error") or "") if step_status == "failed" else "",
+        )
+
+    service.ingest_source(source_id, progress=progress)
+    repository.record_step(run_id, step_name="ingest", status="completed")
+
+
+def _run_autopilot(workflow: object, project_id: int, run_id: int) -> object:
+    """Keep deterministic legacy runners usable while production reuses the queued run."""
+    try:
+        return workflow.run(project_id, run_id=run_id)
+    except TypeError as exc:
+        if "run_id" not in str(exc):
+            raise
+        return workflow.run(project_id)
+
+
+def _workflow_labels() -> dict[str, str]:
+    return {
+        "guided_autopilot": "一键构建领域地图",
+        "knowledge_build": "构建知识库",
+        "source_ingestion": "摄取资料",
+    }
+
+
+def _step_labels() -> dict[str, str]:
+    return {
+        "discover_candidates": "搜索候选资料",
+        "select_candidates": "筛选资料",
+        "ingest_sources": "摄取资料",
+        "build_knowledge": "生成 Wiki 与课程",
+        "compile_context": "整理上下文",
+        "generate_artifacts": "生成结构化内容",
+        "repair_lesson_structure": "修复课程结构",
+        "persist_artifacts": "写入产物",
+        "load": "抓取 / 读取",
+        "parse": "解析与切分",
+        "embed": "生成 Embedding",
+        "index": "写入索引",
+        "ingest": "完成摄取",
+        "workflow": "任务执行",
+        "interrupted": "任务中断",
+        "knowledge_build": "构建知识库",
+        "guided_autopilot": "一键构建领域地图",
+    }
 
 
 def _page_type_labels() -> dict[str, str]:

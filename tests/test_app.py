@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from domain_atlas.core.settings import Settings
+from domain_atlas.discovery.exa import SourceDiscoveryError
 from domain_atlas.domain.source_candidates import SourceCandidateDraft
 from domain_atlas.providers.vector_index import RetrievedChunk, RetrievedWikiSection
 from domain_atlas.web.app import create_app
@@ -48,6 +49,11 @@ class FakeDiscoveryProvider:
                 authority_reason="官方资料",
             )
         ]
+
+
+class FailingDiscoveryProvider:
+    def search(self, query: str, limit: int) -> list[SourceCandidateDraft]:
+        raise SourceDiscoveryError("搜索服务暂时不可用")
 
 
 class FakeEmbeddingProvider:
@@ -366,6 +372,20 @@ def test_add_url_source_route_lists_pending_source(tmp_path):
     assert "Agent Docs" in dashboard.text
     assert "https://docs.example.com/agents" in dashboard.text
     assert "pending" in dashboard.text
+
+
+def test_form_error_redirects_to_dashboard_instead_of_exposing_json(tmp_path):
+    app = create_app(Settings(data_dir=tmp_path), discovery_provider=FailingDiscoveryProvider())
+    client = TestClient(app)
+    client.post("/domains", data={"name": "LLM Agents"})
+
+    response = client.post("/domains/1/discover", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"].startswith("/domains/1?error=")
+    dashboard = client.get(response.headers["location"])
+    assert "搜索候选资料失败：搜索服务暂时不可用" in dashboard.text
+    assert '{"detail"' not in dashboard.text
 
 
 def test_upload_markdown_and_ingest_from_dashboard(tmp_path):

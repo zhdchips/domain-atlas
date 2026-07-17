@@ -140,13 +140,18 @@ class AutopilotWorkflow:
         self.build_runner = build_runner
         self.search_limit = search_limit
 
-    def run(self, project_id: int) -> AutopilotResult:
-        project = self.project_repository.get(project_id)
-        if project is None:
-            raise ValueError("Domain project not found.")
-
-        run_id = self.workflow_repository.start_run(project_id, "guided_autopilot")
+    def run(self, project_id: int, *, run_id: int | None = None) -> AutopilotResult:
+        if run_id is None:
+            run_id = self.workflow_repository.start_run(project_id, "guided_autopilot")
+        else:
+            self.workflow_repository.mark_running(run_id)
         try:
+            project = self.project_repository.get(project_id)
+            if project is None:
+                raise ValueError("Domain project not found.")
+            self.workflow_repository.record_step(
+                run_id, step_name="discover_candidates", status="running"
+            )
             drafts = self.discovery_provider.search(project.name, limit=self.search_limit)
             persisted = self.candidate_repository.replace_discovered(project_id, drafts)
             self.workflow_repository.record_step(
@@ -156,6 +161,9 @@ class AutopilotWorkflow:
                 output={"candidate_count": len(persisted)},
             )
 
+            self.workflow_repository.record_step(
+                run_id, step_name="select_candidates", status="running"
+            )
             selected_drafts = select_autopilot_candidates(drafts)
             if not selected_drafts:
                 raise ValueError("No usable candidates passed guided mode filtering.")
@@ -178,6 +186,12 @@ class AutopilotWorkflow:
 
             source_ids: list[int] = []
             failed_sources: list[dict[str, object]] = []
+            self.workflow_repository.record_step(
+                run_id,
+                step_name="ingest_sources",
+                status="running",
+                output={"completed": 0, "total": len(selected)},
+            )
             for candidate in selected:
                 accepted = self.candidate_repository.accept(project_id, candidate.id)
                 if accepted is None:
@@ -197,6 +211,12 @@ class AutopilotWorkflow:
                     )
                     continue
                 source_ids.append(source.id)
+                self.workflow_repository.record_step(
+                    run_id,
+                    step_name="ingest_sources",
+                    status="running",
+                    output={"completed": len(source_ids), "total": len(selected), "source_id": source.id},
+                )
 
             self.workflow_repository.record_step(
                 run_id,
@@ -206,6 +226,11 @@ class AutopilotWorkflow:
             )
             if not source_ids:
                 raise ValueError("All selected sources failed ingestion.")
+            self.workflow_repository.record_step(
+                run_id,
+                step_name="build_knowledge",
+                status="running",
+            )
             self.build_runner.run(project_id)
             self.workflow_repository.record_step(
                 run_id,

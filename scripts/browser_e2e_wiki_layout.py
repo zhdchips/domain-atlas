@@ -18,6 +18,7 @@ from domain_atlas.core.db import initialize_database
 from domain_atlas.core.settings import Settings
 from domain_atlas.domain.artifacts import KnowledgeArtifactRepository
 from domain_atlas.domain.projects import CreateDomainProject, DomainProjectRepository
+from domain_atlas.domain.workflow import WorkflowRepository
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -53,6 +54,10 @@ def main() -> int:
             page.locator(".qa-grid").wait_for(state="visible", timeout=5000)
             _assert_learning_guide_layout(page)
             _assert_learning_navigation(page, base_url=base_url, project_id=project_id)
+            page.goto(f"{base_url}/domains/{project_id}", wait_until="networkidle")
+            _assert_dashboard_task_feedback(page)
+            page.set_viewport_size({"width": 390, "height": 844})
+            _assert_mobile_no_horizontal_overflow(page)
             browser.close()
     except PlaywrightError as exc:
         print(f"FAIL browser-e2e: Playwright could not run Chromium: {exc}")
@@ -158,6 +163,12 @@ def _create_wiki_fixture(settings: Settings) -> int:
             ],
         },
     )
+    workflow_repository = WorkflowRepository(settings.database_path)
+    run_id = workflow_repository.start_run(project.id, "knowledge_build")
+    workflow_repository.record_step(
+        run_id, step_name="compile_context", status="completed", output={"chunk_count": 1}
+    )
+    workflow_repository.finish_run(run_id)
     return project.id
 
 
@@ -457,6 +468,28 @@ def _assert_learning_navigation(page, *, base_url: str, project_id: int) -> None
     if mobile["lessonLinkWidth"] > mobile["mainlineWidth"]:
         raise RuntimeError(f"mobile lesson link overflows mainline item: {mobile}")
     print("verified mainline navigation, Wiki concept link, and mobile layout")
+
+
+def _assert_dashboard_task_feedback(page) -> None:
+    if "当前任务" not in page.locator("body").inner_text():
+        raise RuntimeError("dashboard current-task area is missing")
+    if "整理上下文" not in page.locator("body").inner_text():
+        raise RuntimeError("dashboard does not render persisted workflow steps")
+
+    form = page.locator("form[action$='/build']")
+    form.evaluate("form => form.addEventListener('submit', event => event.preventDefault(), { once: true })")
+    form.locator("button").click()
+    button = form.locator("button")
+    if not button.is_disabled():
+        raise RuntimeError("build button was not disabled after submit")
+    if "正在生成 LLM Wiki、课程和引用索引" not in form.inner_text():
+        raise RuntimeError("build pending status is missing")
+
+
+def _assert_mobile_no_horizontal_overflow(page) -> None:
+    overflow = page.evaluate("() => document.documentElement.scrollWidth > window.innerWidth")
+    if overflow:
+        raise RuntimeError("dashboard overflows horizontally at mobile width")
 
 
 def _free_port() -> int:

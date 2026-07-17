@@ -132,19 +132,31 @@ def test_autopilot_workflow_creates_sources_ingests_and_builds(tmp_path):
     assert run["status"] == "completed"
     assert [step["step_name"] for step in steps] == [
         "discover_candidates",
+        "discover_candidates",
+        "select_candidates",
         "select_candidates",
         "ingest_sources",
+        "ingest_sources",
+        "ingest_sources",
+        "ingest_sources",
+        "build_knowledge",
         "build_knowledge",
     ]
-    assert json.loads(steps[1]["output_json"])["selected_count"] == 2
-    assert json.loads(steps[1]["output_json"])["selection_mode"] == "strict_authoritative"
+    assert json.loads(steps[3]["output_json"])["selected_count"] == 2
+    assert json.loads(steps[3]["output_json"])["selection_mode"] == "strict_authoritative"
 
     listed_runs = WorkflowRepository(database_path).list_for_project(project.id)
     assert listed_runs[0].workflow_name == "guided_autopilot"
     assert [step.step_name for step in listed_runs[0].steps] == [
         "discover_candidates",
+        "discover_candidates",
+        "select_candidates",
         "select_candidates",
         "ingest_sources",
+        "ingest_sources",
+        "ingest_sources",
+        "ingest_sources",
+        "build_knowledge",
         "build_knowledge",
     ]
 
@@ -173,7 +185,11 @@ def test_autopilot_continues_when_one_source_fails_ingestion(tmp_path):
     assert build.project_ids == [project.id]
 
     runs = WorkflowRepository(database_path).list_for_project(project.id)
-    ingest_step = next(step for step in runs[0].steps if step.step_name == "ingest_sources")
+    ingest_step = next(
+        step
+        for step in reversed(runs[0].steps)
+        if step.step_name == "ingest_sources" and step.status in {"completed", "failed"}
+    )
     assert ingest_step.output["source_ids"] == [2]
     assert ingest_step.output["failed_sources"][0]["source_id"] == 1
     assert ingest_step.output["failed_sources"][0]["error"] == "URL fetch failed."
@@ -206,7 +222,11 @@ def test_autopilot_workflow_uses_fallback_selection_for_practical_domains(tmp_pa
     assert build.project_ids == [project.id]
 
     runs = WorkflowRepository(database_path).list_for_project(project.id)
-    select_step = next(step for step in runs[0].steps if step.step_name == "select_candidates")
+    select_step = next(
+        step
+        for step in reversed(runs[0].steps)
+        if step.step_name == "select_candidates" and step.status == "completed"
+    )
     assert select_step.output["selection_mode"] == "fallback_best_available"
 
 

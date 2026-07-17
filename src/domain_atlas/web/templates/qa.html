@@ -7,9 +7,13 @@
   <p>只基于已摄取知识库回答；证据不足时会明确说明。</p>
 </section>
 
+{% if error %}
+  <div class="notice notice-error" role="alert">{{ error }}</div>
+{% endif %}
+
 <section class="panel">
   <h2>提问</h2>
-  <form action="/domains/{{ project.id }}/qa" method="post" class="form-grid">
+  <form action="/domains/{{ project.id }}/qa" method="post" class="form-grid" data-pending-form data-pending-text="正在检索证据并组织带引用回答…">
     <label>
       <span>问题</span>
       <textarea name="question" rows="3" required placeholder="例如：这个领域最核心的概念是什么？"></textarea>

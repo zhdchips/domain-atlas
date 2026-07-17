@@ -7,6 +7,13 @@
   <p>{{ project.goal or "尚未设置学习目标。" }}</p>
 </section>
 
+{% if error %}
+  <div class="notice notice-error" role="alert">{{ error }}</div>
+{% endif %}
+{% if notice %}
+  <div class="notice notice-success" role="status">{{ notice }}</div>
+{% endif %}
+
 <section class="status-grid">
   <div class="metric">
     <span>语言</span>
@@ -56,18 +63,18 @@
 {% if project.interaction_mode == "guided" %}
 <section class="panel">
   <h2>简易模式</h2>
-  <form action="/domains/{{ project.id }}/autopilot" method="post" class="form-grid">
+  <form action="/domains/{{ project.id }}/autopilot" method="post" class="form-grid" data-pending-form data-pending-text="正在搜索、筛选、摄取资料并构建领域地图，可能需要数分钟…">
     <p class="muted">自动搜索 12 条候选资料，筛选权威来源，最多摄取 5 条，然后构建 LLM Wiki 和学习路线。</p>
-    <button type="submit">一键构建领域地图</button>
+    <button type="submit" {% if active_workflow %}disabled aria-disabled="true"{% endif %}>一键构建领域地图</button>
   </form>
 </section>
 {% endif %}
 
 <section class="panel">
   <h2>知识构建</h2>
-  <form action="/domains/{{ project.id }}/build" method="post" class="form-grid">
+  <form action="/domains/{{ project.id }}/build" method="post" class="form-grid" data-pending-form data-pending-text="正在生成 LLM Wiki、课程和引用索引，可能需要 1–3 分钟…">
     <p class="muted">基于已摄取 chunks 生成 source profile、概念、百科式 Wiki、概念关系和五阶段学习路线。</p>
-    <button type="submit">构建知识库</button>
+    <button type="submit" {% if active_workflow %}disabled aria-disabled="true"{% endif %}>构建知识库</button>
   </form>
   <div class="inline-links">
     <a href="/domains/{{ project.id }}/wiki">查看 Wiki</a>
@@ -77,43 +84,15 @@
 </section>
 
 <section class="panel">
-  <h2>流程记录</h2>
-  {% if workflow_runs %}
-    <div class="workflow-log">
-      {% for run in workflow_runs %}
-        <article class="workflow-run">
-          <div class="candidate-heading">
-            <strong>{{ run.workflow_name }}</strong>
-            <span class="status-pill">{{ run.status }}</span>
-          </div>
-          {% if run.error %}
-            <p class="muted">{{ run.error }}</p>
-          {% endif %}
-          <ol>
-            {% for step in run.steps %}
-              <li>
-                <span>{{ step.step_name }}</span>
-                <small>{{ step.status }}</small>
-                {% if step.output %}
-                  <code>{{ step.output }}</code>
-                {% endif %}
-                {% if step.error %}
-                  <small>{{ step.error }}</small>
-                {% endif %}
-              </li>
-            {% endfor %}
-          </ol>
-        </article>
-      {% endfor %}
-    </div>
-  {% else %}
-    <p class="muted">还没有流程记录。执行简易模式或知识构建后，这里会显示每一步状态。</p>
-  {% endif %}
+  <h2>当前任务</h2>
+  <div data-workflow-poll="/domains/{{ project.id }}/workflow-status" aria-live="polite">
+    {% include "workflow_status.html" %}
+  </div>
 </section>
 
 <section id="sources" class="panel">
   <h2>搜索候选资料</h2>
-  <form action="/domains/{{ project.id }}/discover" method="post" class="form-grid">
+  <form action="/domains/{{ project.id }}/discover" method="post" class="form-grid" data-pending-form data-pending-text="正在检索并评估候选资料…">
     <label>
       <span>搜索查询</span>
       <input name="query" value="{{ project.name }}" placeholder="默认使用领域名称">
@@ -144,7 +123,7 @@
             <small>权威性 {{ "%.2f"|format(candidate.authority_score) }} · {{ candidate.authority_reason }}</small>
           </div>
           {% if candidate.status != "accepted" %}
-            <form action="/domains/{{ project.id }}/candidates/{{ candidate.id }}/confirm" method="post">
+            <form action="/domains/{{ project.id }}/candidates/{{ candidate.id }}/confirm" method="post" data-pending-form data-pending-text="正在确认候选资料…">
               <button type="submit">确认</button>
             </form>
           {% else %}
@@ -161,7 +140,7 @@
 <section class="panel">
   <h2>手动添加资料</h2>
   <div class="two-column">
-    <form action="/domains/{{ project.id }}/sources/url" method="post" class="form-grid">
+    <form action="/domains/{{ project.id }}/sources/url" method="post" class="form-grid" data-pending-form data-pending-text="正在添加 URL…">
       <label>
         <span>URL</span>
         <input name="url" type="url" required placeholder="https://example.com">
@@ -172,7 +151,7 @@
       </label>
       <button type="submit">添加 URL</button>
     </form>
-    <form action="/domains/{{ project.id }}/sources/file" method="post" enctype="multipart/form-data" class="form-grid">
+    <form action="/domains/{{ project.id }}/sources/file" method="post" enctype="multipart/form-data" class="form-grid" data-pending-form data-pending-text="正在上传文件…">
       <label>
         <span>Markdown / PDF</span>
         <input name="file" type="file" accept=".md,.markdown,.pdf" required>
@@ -194,8 +173,8 @@
             <small>类型 {{ source.source_type }} · 状态 {{ source.status }}</small>
           </div>
           {% if source.status != "ingested" %}
-            <form action="/domains/{{ project.id }}/sources/{{ source.id }}/ingest" method="post">
-              <button type="submit">摄取</button>
+            <form action="/domains/{{ project.id }}/sources/{{ source.id }}/ingest" method="post" data-pending-form data-pending-text="正在抓取、解析、切分并向量化资料…">
+              <button type="submit" {% if active_workflow %}disabled aria-disabled="true"{% endif %}>摄取</button>
             </form>
           {% else %}
             <span class="accepted-label">已摄取</span>

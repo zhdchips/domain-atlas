@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
+from collections.abc import Callable
 from typing import Protocol
 
 import httpx
@@ -44,17 +45,25 @@ class IngestionService:
         self.vector_index = vector_index
         self.http_client = http_client
 
-    def ingest_source(self, source_id: int) -> tuple[Source, list[Chunk]]:
+    def ingest_source(
+        self,
+        source_id: int,
+        *,
+        progress: Callable[[str, str, dict[str, object] | None], None] | None = None,
+    ) -> tuple[Source, list[Chunk]]:
         source = self.source_repository.get(source_id)
         if source is None:
             raise ValueError("Source not found.")
 
         try:
+            _emit_progress(progress, "load", "running")
             document = self._load(source)
             if not document.normalized_text.strip():
                 raise ValueError("Source did not contain extractable text.")
             checksum = hashlib.sha256(document.raw_bytes).hexdigest()
             raw_path, normalized_path = self._write_artifacts(source, document)
+            _emit_progress(progress, "load", "completed")
+            _emit_progress(progress, "parse", "running")
             text_chunks = chunk_segments(
                 source_id=source.id,
                 source_checksum=checksum,
@@ -62,6 +71,8 @@ class IngestionService:
             )
             if not text_chunks:
                 raise ValueError("Source did not produce any chunks.")
+            _emit_progress(progress, "parse", "completed", {"chunk_count": len(text_chunks)})
+            _emit_progress(progress, "embed", "running", {"chunk_count": len(text_chunks)})
 
             chunk_rows = self.chunk_repository.replace_for_source(
                 source.id,
@@ -84,11 +95,14 @@ class IngestionService:
                 ],
             )
             embeddings = self.embedding_provider.embed_texts([chunk.text for chunk in chunk_rows])
+            _emit_progress(progress, "embed", "completed", {"chunk_count": len(chunk_rows)})
+            _emit_progress(progress, "index", "running", {"chunk_count": len(chunk_rows)})
             self.vector_index.upsert_chunks(
                 project_id=source.project_id,
                 chunks=chunk_rows,
                 embeddings=embeddings,
             )
+            _emit_progress(progress, "index", "completed", {"chunk_count": len(chunk_rows)})
             updated = self.source_repository.update_ingested(
                 source.id,
                 raw_path=str(raw_path),
@@ -98,6 +112,7 @@ class IngestionService:
             )
             return updated, chunk_rows
         except Exception as exc:
+            _emit_progress(progress, "ingest", "failed", {"error": str(exc)})
             self.source_repository.update_failed(source.id, str(exc))
             raise
 
@@ -124,3 +139,13 @@ class IngestionService:
         raw_path.write_bytes(document.raw_bytes)
         normalized_path.write_text(document.normalized_text, encoding="utf-8")
         return raw_path, normalized_path
+
+
+def _emit_progress(
+    progress: Callable[[str, str, dict[str, object] | None], None] | None,
+    step_name: str,
+    status: str,
+    output: dict[str, object] | None = None,
+) -> None:
+    if progress is not None:
+        progress(step_name, status, output)

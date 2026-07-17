@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import time
 
 import pytest
 from fastapi.testclient import TestClient
@@ -43,7 +44,9 @@ def test_guided_domain_flow_navigation_and_qa_are_deterministic(tmp_path):
 
     autopilot_response = client.post("/domains/1/autopilot", follow_redirects=False)
     assert autopilot_response.status_code == 303
-    assert autopilot_response.headers["location"] == "/domains/1"
+    assert autopilot_response.headers["location"].startswith("/domains/1")
+
+    _wait_for_workflow(database_path, project_id=1)
 
     dashboard = client.get("/domains/1")
     assert dashboard.status_code == 200
@@ -115,6 +118,17 @@ def test_guided_domain_flow_navigation_and_qa_are_deterministic(tmp_path):
     assert "Dataphin 是一体化数据建设与治理平台。" in qa_result.text
     assert "W:dataphin#1" in qa_result.text
     assert "S1-C1" in qa_result.text
+
+
+def _wait_for_workflow(database_path: Path, *, project_id: int) -> None:
+    repository = WorkflowRepository(database_path)
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline:
+        runs = repository.list_for_project(project_id)
+        if runs and not any(run.status in {"queued", "running"} for run in runs):
+            return
+        time.sleep(0.02)
+    raise AssertionError("background workflow did not finish in time")
 
 
 class DeterministicAutopilotRunner:

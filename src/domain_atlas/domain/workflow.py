@@ -38,16 +38,27 @@ class WorkflowRepository:
     def __init__(self, database_path: Path) -> None:
         self.database_path = database_path
 
-    def start_run(self, project_id: int, workflow_name: str) -> int:
+    def start_run(self, project_id: int, workflow_name: str, *, status: str = "running") -> int:
         with connect(self.database_path) as connection:
             cursor = connection.execute(
                 """
                 INSERT INTO workflow_runs (project_id, workflow_name, status)
-                VALUES (?, ?, 'running')
+                VALUES (?, ?, ?)
                 """,
-                (project_id, workflow_name),
+                (project_id, workflow_name, status),
             )
         return int(cursor.lastrowid)
+
+    def mark_running(self, run_id: int) -> None:
+        with connect(self.database_path) as connection:
+            connection.execute(
+                """
+                UPDATE workflow_runs
+                SET status = 'running', updated_at = CURRENT_TIMESTAMP
+                WHERE id = ? AND status = 'queued'
+                """,
+                (run_id,),
+            )
 
     def record_step(
         self,
@@ -94,6 +105,53 @@ class WorkflowRepository:
                 """,
                 (error, run_id),
             )
+
+    def has_active_run(self, project_id: int) -> bool:
+        with connect(self.database_path) as connection:
+            row = connection.execute(
+                """
+                SELECT 1 FROM workflow_runs
+                WHERE project_id = ? AND status IN ('queued', 'running')
+                LIMIT 1
+                """,
+                (project_id,),
+            ).fetchone()
+        return row is not None
+
+    def get_status(self, run_id: int) -> str | None:
+        with connect(self.database_path) as connection:
+            row = connection.execute(
+                "SELECT status FROM workflow_runs WHERE id = ?", (run_id,)
+            ).fetchone()
+        return str(row["status"]) if row else None
+
+    def interrupt_active_runs(self) -> int:
+        """Close tasks from a previous process that cannot resume locally."""
+        message = "服务重启前任务未完成，已标记为中断；请重新发起。"
+        with connect(self.database_path) as connection:
+            active_rows = connection.execute(
+                """
+                SELECT id FROM workflow_runs
+                WHERE status IN ('queued', 'running')
+                """
+            ).fetchall()
+            for row in active_rows:
+                connection.execute(
+                    """
+                    UPDATE workflow_runs
+                    SET status = 'interrupted', error = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (message, int(row["id"])),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO workflow_steps (run_id, step_name, status, output_json, error)
+                    VALUES (?, 'interrupted', 'interrupted', '{}', ?)
+                    """,
+                    (int(row["id"]), message),
+                )
+        return len(active_rows)
 
     def list_for_project(self, project_id: int, *, limit: int = 5) -> list[WorkflowRun]:
         with connect(self.database_path) as connection:

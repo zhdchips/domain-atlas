@@ -17,6 +17,7 @@ from domain_atlas.domain.artifacts import KnowledgeArtifactRepository
 from domain_atlas.domain.projects import DomainProjectRepository
 from domain_atlas.domain.qa import QARepository
 from domain_atlas.domain.sources import ChunkRepository, SourceRepository
+from domain_atlas.domain.workflow import WorkflowRepository
 from domain_atlas.web.app import create_app
 
 
@@ -94,6 +95,9 @@ def _run_live_e2e(workdir: Path) -> int:
         follow_redirects=False,
     )
     _expect_redirect(ingest, f"/domains/{project_id}")
+    _wait_for_workflow(
+        WorkflowRepository(settings.database_path), project_id=project_id, workflow_name="source_ingestion"
+    )
     chunk_count = ChunkRepository(settings.database_path).count_for_project(project_id)
     if chunk_count < 1:
         raise RuntimeError("ingestion produced no chunks")
@@ -101,6 +105,9 @@ def _run_live_e2e(workdir: Path) -> int:
 
     build = client.post(f"/domains/{project_id}/build", follow_redirects=False)
     _expect_redirect(build, f"/domains/{project_id}")
+    _wait_for_workflow(
+        WorkflowRepository(settings.database_path), project_id=project_id, workflow_name="knowledge_build"
+    )
     project = DomainProjectRepository(settings.database_path).get(project_id)
     if project is None or project.build_status != "completed":
         raise RuntimeError(f"project build_status was {project.build_status if project else 'missing'}")
@@ -216,6 +223,27 @@ def _project_id_from_location(location: str) -> int:
         return int(location.rstrip("/").split("/")[-1])
     except ValueError as exc:
         raise RuntimeError(f"could not parse project id from location: {location}") from exc
+
+
+def _wait_for_workflow(
+    repository: WorkflowRepository,
+    *,
+    project_id: int,
+    workflow_name: str,
+    timeout_seconds: float = 360,
+) -> None:
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        runs = repository.list_for_project(project_id, limit=10)
+        matching = next((run for run in runs if run.workflow_name == workflow_name), None)
+        if matching is not None and matching.status not in {"queued", "running"}:
+            if matching.status != "completed":
+                raise RuntimeError(
+                    f"{workflow_name} ended with {matching.status}: {matching.error}"
+                )
+            return
+        time.sleep(0.25)
+    raise RuntimeError(f"{workflow_name} did not finish within {timeout_seconds:.0f}s")
 
 
 def _count_rows(database_path: Path, table: str, project_id: int) -> int:

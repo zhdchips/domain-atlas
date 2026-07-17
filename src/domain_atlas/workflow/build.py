@@ -63,17 +63,24 @@ class KnowledgeBuildWorkflow:
         self.embedding_provider = embedding_provider
         self.vector_index = vector_index
 
-    def run(self, project_id: int) -> dict[str, Any]:
-        project = self.project_repository.get(project_id)
-        if project is None:
-            raise ValueError("Domain project not found.")
-        chunks = self.chunk_repository.list_for_project(project_id, limit=40)
-        if not chunks:
-            raise ValueError("Knowledge build requires at least one ingested chunk.")
-
-        run_id = self.workflow_repository.start_run(project_id, "knowledge_build")
-        self.project_repository.update_build_status(project_id, "running")
+    def run(self, project_id: int, *, run_id: int | None = None) -> dict[str, Any]:
+        if run_id is None:
+            run_id = self.workflow_repository.start_run(project_id, "knowledge_build")
+        else:
+            self.workflow_repository.mark_running(run_id)
         try:
+            project = self.project_repository.get(project_id)
+            if project is None:
+                raise ValueError("Domain project not found.")
+            chunks = self.chunk_repository.list_for_project(project_id, limit=40)
+            if not chunks:
+                raise ValueError("知识构建至少需要一份已摄取的资料。")
+            self.project_repository.update_build_status(project_id, "running")
+            self.workflow_repository.record_step(
+                run_id,
+                step_name="compile_context",
+                status="running",
+            )
             context = _format_context(chunks)
             system_prompt = _system_prompt(project.language)
             user_prompt = _user_prompt(
@@ -87,6 +94,11 @@ class KnowledgeBuildWorkflow:
                 step_name="compile_context",
                 status="completed",
                 output={"chunk_count": len(chunks)},
+            )
+            self.workflow_repository.record_step(
+                run_id,
+                step_name="generate_artifacts",
+                status="running",
             )
             payload = self.chat_provider.complete_json(
                 system_prompt=system_prompt,
@@ -135,8 +147,19 @@ class KnowledgeBuildWorkflow:
                 },
             )
             self.artifact_repository.replace_project_artifacts(project_id, payload)
+            self.workflow_repository.record_step(
+                run_id,
+                step_name="persist_artifacts",
+                status="running",
+            )
             sections = self.artifact_repository.list_wiki_sections(project_id)
             if self.embedding_provider is not None and self.vector_index is not None and sections:
+                self.workflow_repository.record_step(
+                    run_id,
+                    step_name="index",
+                    status="running",
+                    output={"wiki_sections": len(sections)},
+                )
                 embeddings = self.embedding_provider.embed_texts(
                     [section.body_markdown for section in sections]
                 )
@@ -144,6 +167,12 @@ class KnowledgeBuildWorkflow:
                     project_id=project_id,
                     sections=sections,
                     embeddings=embeddings,
+                )
+                self.workflow_repository.record_step(
+                    run_id,
+                    step_name="index",
+                    status="completed",
+                    output={"wiki_sections": len(sections)},
                 )
             self.workflow_repository.record_step(
                 run_id,
@@ -162,7 +191,8 @@ class KnowledgeBuildWorkflow:
                 error=str(exc),
             )
             self.workflow_repository.fail_run(run_id, str(exc))
-            self.project_repository.update_build_status(project_id, "failed")
+            if self.project_repository.get(project_id) is not None:
+                self.project_repository.update_build_status(project_id, "failed")
             raise
 
 

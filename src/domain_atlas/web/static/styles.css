@@ -129,6 +129,37 @@ button {
   cursor: pointer;
 }
 
+button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.pending-status,
+.notice {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.pending-status {
+  color: #1e3a8a;
+  background: #eff6ff;
+  border-left: 3px solid #2563eb;
+}
+
+.notice-error,
+.workflow-error {
+  color: #991b1b;
+  background: #fef2f2;
+}
+
+.notice-success {
+  color: #166534;
+  background: #f0fdf4;
+}
+
 .project-list,
 .workflow-grid,
 .status-grid,
@@ -452,6 +483,43 @@ button {
   border: 1px solid #dde2ea;
   border-radius: 8px;
   background: #ffffff;
+}
+
+.workflow-run-active {
+  border-color: #93c5fd;
+}
+
+.workflow-step {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.workflow-step-running {
+  color: #1e40af;
+}
+
+.workflow-step-failed,
+.workflow-step-interrupted {
+  color: #991b1b;
+}
+
+.status-queued,
+.status-running {
+  color: #1e40af;
+  background: #dbeafe;
+}
+
+.status-failed,
+.status-interrupted {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.status-completed {
+  color: #166534;
+  background: #dcfce7;
 }
 
 .workflow-run ol {

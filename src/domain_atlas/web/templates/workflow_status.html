@@ -1,0 +1,40 @@
+{% if workflow_runs %}
+  <div class="workflow-log">
+    {% for run in workflow_runs %}
+      <article class="workflow-run{% if run.status in ['queued', 'running'] %} workflow-run-active{% endif %}">
+        <div class="candidate-heading">
+          <strong>{{ workflow_labels.get(run.workflow_name, run.workflow_name) }}</strong>
+          <span class="status-pill status-{{ run.status }}">{{ run.status }}</span>
+        </div>
+        {% if run.status == 'queued' %}
+          <p class="muted">任务已排队，正在准备执行。</p>
+        {% elif run.status == 'running' %}
+          <p class="muted">任务正在执行，页面会自动更新进度。</p>
+        {% endif %}
+        {% if run.error %}
+          <p class="workflow-error">{{ run.error }}</p>
+        {% endif %}
+        {% if run.steps %}
+          <ol>
+            {% for step in run.steps %}
+              <li class="workflow-step workflow-step-{{ step.status }}">
+                <span>{{ step_labels.get(step.step_name, step.step_name) }}</span>
+                <small>{{ step.status }}</small>
+                {% if step.output.get('completed') is not none and step.output.get('total') is not none %}
+                  <small>{{ step.output.get('completed') }}/{{ step.output.get('total') }}</small>
+                {% elif step.output.get('chunk_count') is not none %}
+                  <small>{{ step.output.get('chunk_count') }} 个片段</small>
+                {% endif %}
+                {% if step.error %}
+                  <small class="workflow-error">{{ step.error }}</small>
+                {% endif %}
+              </li>
+            {% endfor %}
+          </ol>
+        {% endif %}
+      </article>
+    {% endfor %}
+  </div>
+{% else %}
+  <p class="muted">还没有任务记录。执行简易模式、摄取资料或知识构建后，这里会显示进度。</p>
+{% endif %}
