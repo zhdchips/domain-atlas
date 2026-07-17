@@ -61,11 +61,13 @@ Domain Atlas uses layered regression checks:
 uv run python scripts/regression.py --fast
 uv run python scripts/regression.py --e2e
 uv run python scripts/regression.py --browser-e2e
+uv run python scripts/regression.py --intake-eval
 uv run python scripts/regression.py --live
+uv run python scripts/regression.py --live-intake-eval
 uv run python scripts/regression.py --live-e2e
 ```
 
-Fast and E2E checks are deterministic and do not call live providers. Browser E2E uses Playwright against a deterministic local Wiki project and catches real CSS/layout regressions. Live checks verify configured external provider availability, while live E2E runs the fixed Markdown-to-Wiki build through the configured LLM and embedding providers.
+Fast and E2E checks are deterministic and do not call live providers. Fast regression also replays the versioned intake evaluation set. Browser E2E uses Playwright against a deterministic local Wiki project and catches real CSS/layout regressions. `--live-intake-eval` calls the chat model once for each intake case and writes a normalized report under `reports/intake/`; it creates no project or knowledge artifacts. Live checks verify configured external provider availability, while live E2E runs the fixed Markdown-to-Wiki build through the configured LLM and embedding providers.
 
 Before the first browser E2E run:
 

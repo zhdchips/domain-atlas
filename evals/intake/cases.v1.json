@@ -1,0 +1,167 @@
+{
+  "schema_version": 1,
+  "case_set": "intake-zh-v1",
+  "quality_gate": {
+    "min_decision_accuracy": 0.85,
+    "min_topic_coverage_rate": 0.8,
+    "require_clarification_structure_rate": 1.0
+  },
+  "cases": [
+    {
+      "id": "dataphin-specific-clear",
+      "core": true,
+      "category": "clear_specific",
+      "name": "瓴羊 Dataphin",
+      "goal": "入门并构建可溯源领域地图",
+      "level": "beginner",
+      "expected_decision": "clear",
+      "required_topics": [],
+      "notes": "明确产品、学习层级和产出，不应额外打断。",
+      "offline_payload": {"decision": "clear", "confidence": 0.94, "reason": "产品、目标和学习层级已明确。", "understanding": "将围绕瓴羊 Dataphin 的入门知识和可溯源领域地图建立学习计划。", "question": "", "options": [], "recommended_option": "", "default_scope": "瓴羊 Dataphin", "assumptions": ["先以产品官方资料和数据治理实践资料作为证据来源。"]}
+    },
+    {
+      "id": "agent-ambiguous",
+      "core": true,
+      "category": "ambiguous",
+      "name": "Agent",
+      "goal": "",
+      "level": "beginner",
+      "expected_decision": "clarify",
+      "required_topics": ["llm", "理论"],
+      "notes": "Agent 可能指 LLM 工程、智能体理论或具体框架。",
+      "offline_payload": {"decision": "clarify", "confidence": 0.82, "reason": "Agent 具有多个常见但不同的学习语境。", "understanding": "Agent 在这里可能指 LLM Agent、智能体理论或框架实践。", "question": "你希望优先从哪个角度学习 Agent？", "options": [{"value": "llm-agent", "label": "LLM Agent", "description": "工具调用、规划、记忆与评估。", "scope": "LLM Agent 工程实践"}, {"value": "agent-theory", "label": "智能体理论", "description": "感知、决策、学习与多智能体系统。", "scope": "智能体理论与多智能体系统"}, {"value": "agent-framework", "label": "框架实践", "description": "围绕具体框架和产品完成原型。", "scope": "Agent 框架与产品实践"}], "recommended_option": "llm-agent", "default_scope": "LLM Agent 工程实践", "assumptions": ["未填写学习目标，需要先确认学习边界。"]}
+    },
+    {
+      "id": "data-governance-broad",
+      "core": true,
+      "category": "broad",
+      "name": "数据治理",
+      "goal": "",
+      "level": "beginner",
+      "expected_decision": "clarify",
+      "required_topics": ["质量", "标准"],
+      "notes": "宽泛领域且没有目标，需要选择可执行切入面。",
+      "offline_payload": {"decision": "clarify", "confidence": 0.79, "reason": "数据治理覆盖组织、标准、质量和平台多个切入面。", "understanding": "数据治理需要先确定希望解决的治理问题和学习范围。", "question": "你希望优先从数据治理的哪个切入面学习？", "options": [{"value": "data-quality", "label": "数据质量", "description": "质量规则、监控、清洗与改进闭环。", "scope": "数据治理中的数据质量管理"}, {"value": "data-standards", "label": "数据标准", "description": "标准、口径、元数据和责任分工。", "scope": "数据治理中的标准与元数据管理"}, {"value": "governance-platform", "label": "平台落地", "description": "治理平台、流程编排和组织实施。", "scope": "数据治理平台与组织落地"}], "recommended_option": "data-quality", "default_scope": "数据治理中的数据质量管理", "assumptions": ["初学者需要先从一个可验证的治理问题进入。"]}
+    },
+    {
+      "id": "product-operations-broad",
+      "core": true,
+      "category": "broad",
+      "name": "产品运营",
+      "goal": "",
+      "level": "beginner",
+      "expected_decision": "clarify",
+      "required_topics": ["增长", "用户"],
+      "notes": "产品运营覆盖增长、用户运营和内容活动。",
+      "offline_payload": {"decision": "clarify", "confidence": 0.78, "reason": "产品运营的职责和方法随业务目标而变化。", "understanding": "产品运营可以从增长、用户留存或内容活动等不同方向学习。", "question": "你希望优先学习产品运营的哪类工作？", "options": [{"value": "growth", "label": "增长运营", "description": "漏斗、实验、转化与增长策略。", "scope": "产品运营中的增长与转化"}, {"value": "user-operations", "label": "用户运营", "description": "分层、留存、生命周期与社群。", "scope": "产品运营中的用户生命周期管理"}, {"value": "content-operations", "label": "内容活动", "description": "内容策略、活动设计和效果复盘。", "scope": "产品运营中的内容与活动运营"}], "recommended_option": "user-operations", "default_scope": "产品运营中的用户生命周期管理", "assumptions": ["未指定业务阶段，需要先选择主要运营目标。"]}
+    },
+    {
+      "id": "workflow-broad",
+      "core": false,
+      "category": "broad",
+      "name": "工作流",
+      "goal": "",
+      "level": "beginner",
+      "expected_decision": "clarify",
+      "required_topics": ["业务", "技术"],
+      "notes": "工作流可能指业务流程、自动化或 Agent 编排。",
+      "offline_payload": {"decision": "clarify", "confidence": 0.76, "reason": "工作流在业务和技术语境中的含义不同。", "understanding": "工作流可能关注业务流程设计、自动化实现或 Agent 编排。", "question": "你希望优先学习哪一类工作流？", "options": [{"value": "business-workflow", "label": "业务流程", "description": "流程建模、协作、审批与持续改进。", "scope": "业务工作流设计与优化"}, {"value": "automation-workflow", "label": "自动化工作流", "description": "触发器、集成、编排和可观测性。", "scope": "技术自动化工作流"}, {"value": "agent-workflow", "label": "Agent 编排", "description": "任务分解、工具调用和状态管理。", "scope": "Agent 工作流编排"}], "recommended_option": "business-workflow", "default_scope": "业务工作流设计与优化", "assumptions": ["当前输入未说明业务或技术语境。"]}
+    },
+    {
+      "id": "model-ambiguous",
+      "core": false,
+      "category": "ambiguous",
+      "name": "模型",
+      "goal": "想系统学习",
+      "level": "beginner",
+      "expected_decision": "clarify",
+      "required_topics": ["机器学习", "大语言"],
+      "notes": "模型可能是统计、机器学习、LLM 或业务建模。",
+      "offline_payload": {"decision": "clarify", "confidence": 0.74, "reason": "模型缺少所属领域，学习对象不明确。", "understanding": "模型可能指机器学习模型、大语言模型或业务领域建模。", "question": "你希望先学习哪一类模型？", "options": [{"value": "machine-learning", "label": "机器学习模型", "description": "监督学习、特征、训练与评估。", "scope": "机器学习模型基础"}, {"value": "large-language-model", "label": "大语言模型", "description": "Transformer、提示、微调与推理。", "scope": "大语言模型基础与应用"}, {"value": "business-modeling", "label": "业务建模", "description": "指标、实体关系和业务规则建模。", "scope": "业务领域建模方法"}], "recommended_option": "machine-learning", "default_scope": "机器学习模型基础", "assumptions": ["学习者尚未指定模型所在领域。"]}
+    },
+    {
+      "id": "security-ambiguous",
+      "core": false,
+      "category": "ambiguous",
+      "name": "安全",
+      "goal": "入门",
+      "level": "beginner",
+      "expected_decision": "clarify",
+      "required_topics": ["网络", "数据"],
+      "notes": "安全可能是网络、数据、应用或合规安全。",
+      "offline_payload": {"decision": "clarify", "confidence": 0.77, "reason": "安全领域分支差异较大。", "understanding": "安全可以从网络防护、数据保护或应用安全等不同方向进入。", "question": "你希望优先从哪个安全方向开始？", "options": [{"value": "network-security", "label": "网络安全", "description": "网络防护、攻击面和应急响应。", "scope": "网络安全基础"}, {"value": "data-security", "label": "数据安全", "description": "数据分类、访问控制与合规。", "scope": "数据安全与合规"}, {"value": "application-security", "label": "应用安全", "description": "安全开发、漏洞和供应链风险。", "scope": "应用安全工程实践"}], "recommended_option": "network-security", "default_scope": "网络安全基础", "assumptions": ["未提供具体的安全场景。"]}
+    },
+    {
+      "id": "data-governance-specific-clear",
+      "core": true,
+      "category": "clear_specific_goal",
+      "name": "数据治理",
+      "goal": "为医疗团队建立数据质量责任制、指标口径和异常处理流程",
+      "level": "beginner",
+      "expected_decision": "clear",
+      "required_topics": [],
+      "notes": "领域宽泛但目标已给出人群、产出和边界，不应过度打断。",
+      "offline_payload": {"decision": "clear", "confidence": 0.88, "reason": "目标已限定团队、数据质量和责任制产出。", "understanding": "将围绕医疗团队的数据治理，重点学习数据质量责任制、指标口径和异常处理流程。", "question": "", "options": [], "recommended_option": "", "default_scope": "数据治理", "assumptions": ["后续资料优先覆盖医疗数据质量与责任分工。"]}
+    },
+    {
+      "id": "advanced-level-conflict",
+      "core": false,
+      "category": "level_goal_conflict",
+      "name": "量子计算",
+      "goal": "从零开始并在两周内复现前沿论文",
+      "level": "advanced",
+      "expected_decision": "clarify",
+      "required_topics": ["入门", "研究"],
+      "notes": "目标同时包含从零和前沿复现，需确认优先级。",
+      "offline_payload": {"decision": "clarify", "confidence": 0.75, "reason": "学习目标的起点和产出深度存在明显冲突。", "understanding": "量子计算的目标同时要求入门学习和前沿研究复现，需要确认优先路径。", "question": "你希望先建立入门基础，还是优先面向研究论文复现？", "options": [{"value": "foundations", "label": "入门基础", "description": "数学、量子比特和基础算法。", "scope": "量子计算入门基础"}, {"value": "research-reproduction", "label": "研究复现", "description": "论文阅读、实验设计与复现方法。", "scope": "量子计算研究论文复现"}], "recommended_option": "foundations", "default_scope": "量子计算入门基础", "assumptions": ["需要根据时间投入调整学习预期。"]}
+    },
+    {
+      "id": "biology-short-input",
+      "core": false,
+      "category": "short_input",
+      "name": "生物",
+      "goal": "",
+      "level": "beginner",
+      "expected_decision": "clarify",
+      "required_topics": ["基础", "应用"],
+      "notes": "极短领域名无法确定学习层级与分支。",
+      "offline_payload": {"decision": "clarify", "confidence": 0.72, "reason": "生物覆盖基础科学和多个应用分支。", "understanding": "生物可以从生命科学基础、医学方向或生物技术应用进入。", "question": "你希望先从生物的哪个方向学习？", "options": [{"value": "life-science", "label": "生命科学基础", "description": "细胞、遗传、进化与生理基础。", "scope": "生命科学基础"}, {"value": "biotechnology", "label": "生物技术应用", "description": "合成生物、工程化与产业应用。", "scope": "生物技术应用"}, {"value": "medical-biology", "label": "医学与健康", "description": "人体、疾病机制和健康场景。", "scope": "医学相关生物学"}], "recommended_option": "life-science", "default_scope": "生命科学基础", "assumptions": ["当前输入没有指定学科或应用场景。"]}
+    },
+    {
+      "id": "rag-acronym",
+      "core": false,
+      "category": "english_acronym",
+      "name": "RAG",
+      "goal": "",
+      "level": "beginner",
+      "expected_decision": "clarify",
+      "required_topics": ["检索", "生成"],
+      "notes": "英文缩写可能需要确认是概念原理还是工程系统。",
+      "offline_payload": {"decision": "clarify", "confidence": 0.71, "reason": "RAG 可以按检索原理、生成应用或系统工程学习。", "understanding": "RAG 涉及检索增强生成的原理、评估和工程实现。", "question": "你希望优先从 RAG 的哪个层面学习？", "options": [{"value": "retrieval", "label": "检索基础", "description": "切分、嵌入、召回和重排。", "scope": "RAG 检索系统基础"}, {"value": "generation", "label": "生成与提示", "description": "上下文组织、回答生成和引用。", "scope": "RAG 生成与提示设计"}, {"value": "production", "label": "工程评估", "description": "评测、监控、成本和生产部署。", "scope": "RAG 工程评估与部署"}], "recommended_option": "retrieval", "default_scope": "RAG 检索系统基础", "assumptions": ["学习者尚未指定原理或工程目标。"]}
+    },
+    {
+      "id": "ai-product-manager-mixed",
+      "core": false,
+      "category": "mixed_language",
+      "name": "AI 产品经理",
+      "goal": "",
+      "level": "beginner",
+      "expected_decision": "clarify",
+      "required_topics": ["产品", "模型"],
+      "notes": "中英混写的角色词可指产品方法、模型能力或行业场景。",
+      "offline_payload": {"decision": "clarify", "confidence": 0.73, "reason": "AI 产品经理需要先明确产品职责和模型技术的学习比重。", "understanding": "AI 产品经理可以从产品方法、模型能力或行业解决方案切入。", "question": "你希望优先补齐哪一部分 AI 产品经理能力？", "options": [{"value": "product-method", "label": "产品方法", "description": "需求、用户研究、指标和产品策略。", "scope": "AI 产品经理的产品方法"}, {"value": "model-literacy", "label": "模型能力", "description": "模型边界、提示和评估方法。", "scope": "AI 产品经理的模型能力"}, {"value": "industry-solution", "label": "行业方案", "description": "行业场景、交付和价值验证。", "scope": "AI 产品经理的行业解决方案"}], "recommended_option": "product-method", "default_scope": "AI 产品经理的产品方法", "assumptions": ["当前输入未指定岗位或行业背景。"]}
+    },
+    {
+      "id": "postgres-index-clear",
+      "core": false,
+      "category": "clear_specific",
+      "name": "PostgreSQL 索引优化",
+      "goal": "排查线上慢查询并掌握 EXPLAIN、索引设计和验证方法",
+      "level": "intermediate",
+      "expected_decision": "clear",
+      "required_topics": [],
+      "notes": "技术主题、问题和产出明确。",
+      "offline_payload": {"decision": "clear", "confidence": 0.92, "reason": "技术主题和实践目标已足够具体。", "understanding": "将围绕 PostgreSQL 索引优化，学习慢查询分析、EXPLAIN、索引设计和验证。", "question": "", "options": [], "recommended_option": "", "default_scope": "PostgreSQL 索引优化", "assumptions": ["学习材料优先选择官方文档与可复现实验。"]}
+    }
+  ]
+}

@@ -12,6 +12,7 @@ data/
 uploads/
 *.sqlite
 *.sqlite3
+reports/intake/*.json
 dist/
 build/
 *.egg-info/

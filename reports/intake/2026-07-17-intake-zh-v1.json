@@ -1,0 +1,312 @@
+{
+  "report_version": 1,
+  "case_set": "intake-zh-v1",
+  "schema_version": 1,
+  "mode": "live",
+  "generated_at": "2026-07-17T15:58:09+00:00",
+  "results": [
+    {
+      "case_id": "dataphin-specific-clear",
+      "category": "clear_specific",
+      "core": true,
+      "expected_decision": "clear",
+      "actual_decision": "clarify",
+      "status": "assessed",
+      "confidence": 0.7,
+      "passed": false,
+      "failure_categories": [
+        "decision_mismatch"
+      ],
+      "checks": {
+        "assessment_available": true,
+        "decision_match": false,
+        "structure_valid": true,
+        "topic_coverage": true,
+        "sensitive_content_safe": true,
+        "fallback_safe": true
+      },
+      "elapsed_ms": 2843
+    },
+    {
+      "case_id": "agent-ambiguous",
+      "category": "ambiguous",
+      "core": true,
+      "expected_decision": "clarify",
+      "actual_decision": "clarify",
+      "status": "assessed",
+      "confidence": 0.7,
+      "passed": false,
+      "failure_categories": [
+        "missing_required_topics"
+      ],
+      "checks": {
+        "assessment_available": true,
+        "decision_match": true,
+        "structure_valid": true,
+        "topic_coverage": false,
+        "sensitive_content_safe": true,
+        "fallback_safe": true
+      },
+      "elapsed_ms": 2384
+    },
+    {
+      "case_id": "data-governance-broad",
+      "category": "broad",
+      "core": true,
+      "expected_decision": "clarify",
+      "actual_decision": "clarify",
+      "status": "assessed",
+      "confidence": 0.7,
+      "passed": false,
+      "failure_categories": [
+        "missing_required_topics"
+      ],
+      "checks": {
+        "assessment_available": true,
+        "decision_match": true,
+        "structure_valid": true,
+        "topic_coverage": false,
+        "sensitive_content_safe": true,
+        "fallback_safe": true
+      },
+      "elapsed_ms": 2873
+    },
+    {
+      "case_id": "product-operations-broad",
+      "category": "broad",
+      "core": true,
+      "expected_decision": "clarify",
+      "actual_decision": "clarify",
+      "status": "assessed",
+      "confidence": 0.7,
+      "passed": true,
+      "failure_categories": [],
+      "checks": {
+        "assessment_available": true,
+        "decision_match": true,
+        "structure_valid": true,
+        "topic_coverage": true,
+        "sensitive_content_safe": true,
+        "fallback_safe": true
+      },
+      "elapsed_ms": 2501
+    },
+    {
+      "case_id": "workflow-broad",
+      "category": "broad",
+      "core": false,
+      "expected_decision": "clarify",
+      "actual_decision": "clarify",
+      "status": "assessed",
+      "confidence": 0.7,
+      "passed": false,
+      "failure_categories": [
+        "missing_required_topics"
+      ],
+      "checks": {
+        "assessment_available": true,
+        "decision_match": true,
+        "structure_valid": true,
+        "topic_coverage": false,
+        "sensitive_content_safe": true,
+        "fallback_safe": true
+      },
+      "elapsed_ms": 2728
+    },
+    {
+      "case_id": "model-ambiguous",
+      "category": "ambiguous",
+      "core": false,
+      "expected_decision": "clarify",
+      "actual_decision": "clarify",
+      "status": "assessed",
+      "confidence": 0.7,
+      "passed": false,
+      "failure_categories": [
+        "missing_required_topics"
+      ],
+      "checks": {
+        "assessment_available": true,
+        "decision_match": true,
+        "structure_valid": true,
+        "topic_coverage": false,
+        "sensitive_content_safe": true,
+        "fallback_safe": true
+      },
+      "elapsed_ms": 2356
+    },
+    {
+      "case_id": "security-ambiguous",
+      "category": "ambiguous",
+      "core": false,
+      "expected_decision": "clarify",
+      "actual_decision": "clarify",
+      "status": "assessed",
+      "confidence": 0.6,
+      "passed": true,
+      "failure_categories": [],
+      "checks": {
+        "assessment_available": true,
+        "decision_match": true,
+        "structure_valid": true,
+        "topic_coverage": true,
+        "sensitive_content_safe": true,
+        "fallback_safe": true
+      },
+      "elapsed_ms": 2180
+    },
+    {
+      "case_id": "data-governance-specific-clear",
+      "category": "clear_specific_goal",
+      "core": true,
+      "expected_decision": "clear",
+      "actual_decision": "clarify",
+      "status": "assessed",
+      "confidence": 0.7,
+      "passed": false,
+      "failure_categories": [
+        "decision_mismatch"
+      ],
+      "checks": {
+        "assessment_available": true,
+        "decision_match": false,
+        "structure_valid": true,
+        "topic_coverage": true,
+        "sensitive_content_safe": true,
+        "fallback_safe": true
+      },
+      "elapsed_ms": 3031
+    },
+    {
+      "case_id": "advanced-level-conflict",
+      "category": "level_goal_conflict",
+      "core": false,
+      "expected_decision": "clarify",
+      "actual_decision": "clarify",
+      "status": "assessed",
+      "confidence": 0.7,
+      "passed": false,
+      "failure_categories": [
+        "missing_required_topics"
+      ],
+      "checks": {
+        "assessment_available": true,
+        "decision_match": true,
+        "structure_valid": true,
+        "topic_coverage": false,
+        "sensitive_content_safe": true,
+        "fallback_safe": true
+      },
+      "elapsed_ms": 2920
+    },
+    {
+      "case_id": "biology-short-input",
+      "category": "short_input",
+      "core": false,
+      "expected_decision": "clarify",
+      "actual_decision": "clarify",
+      "status": "assessed",
+      "confidence": 0.9,
+      "passed": false,
+      "failure_categories": [
+        "missing_required_topics"
+      ],
+      "checks": {
+        "assessment_available": true,
+        "decision_match": true,
+        "structure_valid": true,
+        "topic_coverage": false,
+        "sensitive_content_safe": true,
+        "fallback_safe": true
+      },
+      "elapsed_ms": 1984
+    },
+    {
+      "case_id": "rag-acronym",
+      "category": "english_acronym",
+      "core": false,
+      "expected_decision": "clarify",
+      "actual_decision": "clarify",
+      "status": "assessed",
+      "confidence": 0.7,
+      "passed": true,
+      "failure_categories": [],
+      "checks": {
+        "assessment_available": true,
+        "decision_match": true,
+        "structure_valid": true,
+        "topic_coverage": true,
+        "sensitive_content_safe": true,
+        "fallback_safe": true
+      },
+      "elapsed_ms": 2887
+    },
+    {
+      "case_id": "ai-product-manager-mixed",
+      "category": "mixed_language",
+      "core": false,
+      "expected_decision": "clarify",
+      "actual_decision": "clarify",
+      "status": "assessed",
+      "confidence": 0.7,
+      "passed": false,
+      "failure_categories": [
+        "missing_required_topics"
+      ],
+      "checks": {
+        "assessment_available": true,
+        "decision_match": true,
+        "structure_valid": true,
+        "topic_coverage": false,
+        "sensitive_content_safe": true,
+        "fallback_safe": true
+      },
+      "elapsed_ms": 2636
+    },
+    {
+      "case_id": "postgres-index-clear",
+      "category": "clear_specific",
+      "core": false,
+      "expected_decision": "clear",
+      "actual_decision": "clear",
+      "status": "fallback",
+      "confidence": null,
+      "passed": false,
+      "failure_categories": [
+        "invalid_assessment",
+        "fallback_used"
+      ],
+      "checks": {
+        "assessment_available": false,
+        "decision_match": true,
+        "structure_valid": true,
+        "topic_coverage": true,
+        "sensitive_content_safe": true,
+        "fallback_safe": true
+      },
+      "elapsed_ms": 1784
+    }
+  ],
+  "metrics": {
+    "total_cases": 13,
+    "core_cases": 5,
+    "passed_cases": 3,
+    "assessment_availability_rate": 0.9230769230769231,
+    "decision_accuracy": 0.8461538461538461,
+    "false_interrupt_rate": 0.6666666666666666,
+    "false_pass_rate": 0.0,
+    "clarification_structure_rate": 1.0,
+    "topic_coverage_rate": 0.3,
+    "fallback_count": 1,
+    "fallback_safe_rate": 1.0
+  },
+  "gate_passed": false,
+  "gate_failures": [
+    "core:dataphin-specific-clear",
+    "core:agent-ambiguous",
+    "core:data-governance-broad",
+    "core:data-governance-specific-clear",
+    "decision_accuracy",
+    "topic_coverage_rate"
+  ]
+}
