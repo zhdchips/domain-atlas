@@ -331,6 +331,14 @@ def _validate_payload(payload: dict[str, Any]) -> None:
 
 
 def _normalize_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    profiles = payload.get("source_profiles")
+    if isinstance(profiles, list):
+        for profile in profiles:
+            if not isinstance(profile, dict):
+                continue
+            source_id = _source_id(profile.get("source_id"))
+            if source_id is not None:
+                profile["source_id"] = source_id
     modules = payload.get("learning_modules")
     if not isinstance(modules, list):
         return payload
@@ -509,7 +517,9 @@ def _source_pages(source_profiles, sources) -> list[dict[str, Any]]:
     for profile in source_profiles if isinstance(source_profiles, list) else []:
         if not isinstance(profile, dict):
             continue
-        source_id = int(profile.get("source_id") or 0)
+        source_id = _source_id(profile.get("source_id"))
+        if source_id is None:
+            continue
         source = source_by_id.get(source_id)
         title = source.title if source else f"Source {source_id}"
         slug = _slug(f"source-{source_id}-{title or 'untitled'}")
@@ -541,6 +551,16 @@ def _source_pages(source_profiles, sources) -> list[dict[str, Any]]:
             }
         )
     return pages
+
+
+def _source_id(value: Any) -> int | None:
+    if isinstance(value, int) and value > 0:
+        return value
+    raw = _str(value)
+    if raw.isdecimal() and int(raw) > 0:
+        return int(raw)
+    match = re.fullmatch(r"[sS](\d+)(?:-[cC]\d+)?", raw)
+    return int(match.group(1)) if match and int(match.group(1)) > 0 else None
 
 
 def _concept_pages(concepts) -> list[dict[str, Any]]:

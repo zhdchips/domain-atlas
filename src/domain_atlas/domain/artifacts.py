@@ -122,6 +122,9 @@ class KnowledgeArtifactRepository:
                 connection.execute(f"DELETE FROM {table} WHERE project_id = ?", (project_id,))
 
             for profile in _list(payload.get("source_profiles")):
+                source_id = _source_id(profile.get("source_id"))
+                if source_id is None:
+                    continue
                 connection.execute(
                     """
                     INSERT INTO source_profiles (
@@ -131,7 +134,7 @@ class KnowledgeArtifactRepository:
                     """,
                     (
                         project_id,
-                        int(profile.get("source_id") or 0),
+                        source_id,
                         _str(profile.get("summary")),
                         _str(profile.get("authority_note")),
                         _str(profile.get("coverage_note")),
@@ -472,6 +475,17 @@ def _list(value: Any) -> list[dict[str, Any]]:
 
 def _str(value: Any) -> str:
     return value.strip() if isinstance(value, str) else ""
+
+
+def _source_id(value: Any) -> int | None:
+    """Accept source ids emitted as a citation-like label by an LLM."""
+    if isinstance(value, int) and value > 0:
+        return value
+    raw = _str(value)
+    if raw.isdecimal() and int(raw) > 0:
+        return int(raw)
+    match = re.fullmatch(r"[sS](\d+)(?:-[cC]\d+)?", raw)
+    return int(match.group(1)) if match and int(match.group(1)) > 0 else None
 
 
 def _string_list(value: Any) -> list[str]:
