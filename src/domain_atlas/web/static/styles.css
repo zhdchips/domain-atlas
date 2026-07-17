@@ -129,6 +129,13 @@ body {
   line-height: 1.65;
 }
 
+.suggestion-note {
+  margin: 0 0 14px;
+  color: #1e40af;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
 .intake-options {
   display: grid;
   gap: 10px;

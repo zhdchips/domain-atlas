@@ -19,6 +19,7 @@ from domain_atlas.core.settings import Settings
 from domain_atlas.domain.artifacts import KnowledgeArtifactRepository
 from domain_atlas.domain.projects import CreateDomainProject, DomainProjectRepository
 from domain_atlas.domain.workflow import WorkflowRepository
+from domain_atlas.intake.assessment import IntakeSuggestion, apply_suggestion, assess_project_intake
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -38,7 +39,7 @@ def main() -> int:
     try:
         data_dir = workdir / "data"
         settings = Settings(data_dir=data_dir)
-        project_id = _create_wiki_fixture(settings)
+        project_id, llm_intake_project_id = _create_wiki_fixture(settings)
         port = _free_port()
         server = _start_server(data_dir=data_dir, port=port)
         base_url = f"http://127.0.0.1:{port}"
@@ -56,6 +57,8 @@ def main() -> int:
             _assert_learning_navigation(page, base_url=base_url, project_id=project_id)
             page.goto(f"{base_url}/domains/{project_id}", wait_until="networkidle")
             _assert_dashboard_task_feedback(page)
+            page.goto(f"{base_url}/domains/{llm_intake_project_id}/intake", wait_until="networkidle")
+            _assert_llm_enhanced_intake(page)
             page.goto(f"{base_url}/", wait_until="networkidle")
             _assert_project_intake(page)
             page.set_viewport_size({"width": 390, "height": 844})
@@ -81,7 +84,7 @@ def main() -> int:
     return 0
 
 
-def _create_wiki_fixture(settings: Settings) -> int:
+def _create_wiki_fixture(settings: Settings) -> tuple[int, int]:
     initialize_database(settings.database_path)
     project = DomainProjectRepository(settings.database_path).create(
         CreateDomainProject(
@@ -173,7 +176,40 @@ def _create_wiki_fixture(settings: Settings) -> int:
         run_id, step_name="compile_context", status="completed", output={"chunk_count": 1}
     )
     workflow_repository.finish_run(run_id)
-    return project.id
+    assessment = assess_project_intake(name="Agent", goal="学习", level="beginner")
+    enhanced = apply_suggestion(
+        assessment,
+        IntakeSuggestion(
+            understanding="“Agent”需要先确认是面向 LLM 工程还是智能体理论。",
+            question="你希望优先建立哪一类 Agent 学习边界？",
+            options=[
+                {
+                    "value": option["value"],
+                    "label": f"增强：{option['label']}",
+                    "description": f"增强说明：{option['description']}",
+                    "scope": option["scope"],
+                }
+                for option in assessment.options[:2]
+            ],
+            default_scope=assessment.default_scope,
+            assumptions=["本次展示使用了受规则约束的模型建议。"],
+        ),
+    )
+    llm_project = DomainProjectRepository(settings.database_path).create(
+        CreateDomainProject(
+            name="Agent",
+            goal="学习",
+            scope=enhanced.default_scope,
+            intake_status="needs_clarification",
+            intake_metadata={
+                **enhanced.to_metadata(),
+                "rule_reason": assessment.reason,
+                "suggestion_source": "llm",
+                "suggestion_status": "applied",
+            },
+        )
+    )
+    return project.id, llm_project.id
 
 
 def _learning_guide_payload() -> dict[str, Any]:
@@ -488,6 +524,15 @@ def _assert_dashboard_task_feedback(page) -> None:
         raise RuntimeError("build button was not disabled after submit")
     if "正在生成 LLM Wiki、课程和引用索引" not in form.inner_text():
         raise RuntimeError("build pending status is missing")
+
+
+def _assert_llm_enhanced_intake(page) -> None:
+    page.locator(".intake-panel").wait_for(state="visible", timeout=5000)
+    body_text = page.locator("body").inner_text()
+    if "模型已在本地规则边界内优化" not in body_text:
+        raise RuntimeError("LLM-enhanced clarification provenance is missing")
+    if "增强：LLM Agent" not in body_text:
+        raise RuntimeError("LLM-enhanced clarification option is missing")
 
 
 def _assert_project_intake(page) -> None:

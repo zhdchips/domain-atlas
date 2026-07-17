@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     chat_model: str = "deepseek-chat"
     chat_max_tokens: int = 12_000
+    intake_llm_suggestions_enabled: bool = False
+    intake_llm_timeout_seconds: float = 15.0
 
     embedding_provider: str = "dashscope"
     embedding_base_url: str = ""

@@ -10,9 +10,16 @@ DEFAULT_GOAL = "建立可溯源的入门领域地图"
 
 
 class IntakeSuggestionProvider(Protocol):
-    """Optional future enhancer; the MVP does not invoke this provider."""
+    """Optional enhancer that may improve copy, never intake control flow."""
 
-    def suggest(self, *, name: str, goal: str, level: str) -> "IntakeAssessment | None":
+    def suggest(
+        self,
+        *,
+        name: str,
+        goal: str,
+        level: str,
+        assessment: "IntakeAssessment",
+    ) -> "IntakeSuggestion | None":
         ...
 
 
@@ -35,6 +42,15 @@ class IntakeAssessment:
             "default_scope": self.default_scope,
             "assumptions": self.assumptions,
         }
+
+
+@dataclass(frozen=True)
+class IntakeSuggestion:
+    understanding: str
+    question: str
+    options: list[dict[str, str]]
+    default_scope: str
+    assumptions: list[str]
 
 
 def assess_project_intake(*, name: str, goal: str, level: str) -> IntakeAssessment:
@@ -65,6 +81,95 @@ def assess_project_intake(*, name: str, goal: str, level: str) -> IntakeAssessme
         options=[],
         default_scope=clean_name,
         assumptions=assumptions,
+    )
+
+
+def validate_suggestion_payload(
+    payload: object,
+    *,
+    assessment: IntakeAssessment,
+    domain_name: str = "",
+) -> IntakeSuggestion | None:
+    """Accept only a bounded presentation overlay over rule-owned choices."""
+    if not isinstance(payload, dict) or not assessment.needs_clarification:
+        return None
+    understanding = _safe_text(payload.get("understanding"), max_chars=280)
+    question = _safe_text(payload.get("question"), max_chars=120)
+    if not understanding or not question:
+        return None
+    normalized_domain = "".join(domain_name.casefold().split())
+    suggestion_text = "".join(f"{understanding} {question}".casefold().split())
+    if normalized_domain and normalized_domain not in suggestion_text:
+        return None
+    allowed_options = {
+        option.get("value"): option
+        for option in assessment.options
+        if option.get("value") and option.get("scope")
+    }
+    raw_options = payload.get("options")
+    if not isinstance(raw_options, list) or not 2 <= len(raw_options) <= 3:
+        return None
+    options: list[dict[str, str]] = []
+    seen_values: set[str] = set()
+    for raw_option in raw_options:
+        if not isinstance(raw_option, dict):
+            return None
+        value = raw_option.get("value")
+        baseline = allowed_options.get(value)
+        label = _safe_text(raw_option.get("label"), max_chars=60)
+        description = _safe_text(raw_option.get("description"), max_chars=160)
+        scope = _safe_text(raw_option.get("scope"), max_chars=180)
+        if (
+            baseline is None
+            or value in seen_values
+            or not label
+            or not description
+            or scope != baseline["scope"]
+        ):
+            return None
+        options.append(
+            {
+                "value": value,
+                "label": label,
+                "description": description,
+                "scope": baseline["scope"],
+            }
+        )
+        seen_values.add(value)
+    default_scope = _safe_text(payload.get("default_scope"), max_chars=180)
+    if default_scope != assessment.default_scope:
+        return None
+    assumptions = _safe_text_list(payload.get("assumptions"), max_items=3, max_chars=160)
+    if assumptions is None:
+        return None
+    return IntakeSuggestion(
+        understanding=understanding,
+        question=question,
+        options=options,
+        default_scope=default_scope,
+        assumptions=assumptions,
+    )
+
+
+def apply_suggestion(assessment: IntakeAssessment, suggestion: IntakeSuggestion) -> IntakeAssessment:
+    """Merge a validated overlay while preserving rule-owned fields and mappings."""
+    baseline_by_value = {option["value"]: option for option in assessment.options}
+    options = [
+        {
+            **baseline_by_value[item["value"]],
+            "label": item["label"],
+            "description": item["description"],
+        }
+        for item in suggestion.options
+    ]
+    return IntakeAssessment(
+        needs_clarification=assessment.needs_clarification,
+        reason=assessment.reason,
+        understanding=suggestion.understanding,
+        question=suggestion.question,
+        options=options,
+        default_scope=assessment.default_scope,
+        assumptions=[*assessment.assumptions, *suggestion.assumptions],
     )
 
 
@@ -124,6 +229,29 @@ def assessment_from_metadata(value: dict[str, Any]) -> IntakeAssessment:
 
 def resolved_goal(goal: str) -> str:
     return goal.strip() or DEFAULT_GOAL
+
+
+def _safe_text(value: object, *, max_chars: int) -> str:
+    if not isinstance(value, str):
+        return ""
+    text = " ".join(value.split())
+    if not text or len(text) > max_chars:
+        return ""
+    lowered = text.casefold()
+    if any(token in lowered for token in ("api key", "authorization", "password", "secret")):
+        return ""
+    return text
+
+
+def _safe_text_list(value: object, *, max_items: int, max_chars: int) -> list[str] | None:
+    if value is None:
+        return []
+    if not isinstance(value, list) or len(value) > max_items:
+        return None
+    items = [_safe_text(item, max_chars=max_chars) for item in value]
+    if any(not item for item in items) or len(set(items)) != len(items):
+        return None
+    return items
 
 
 def _ambiguous_assessment(

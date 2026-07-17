@@ -4,6 +4,8 @@ from fastapi.testclient import TestClient
 
 from domain_atlas.core.settings import Settings
 from domain_atlas.discovery.exa import SourceDiscoveryError
+from domain_atlas.domain.projects import DomainProjectRepository
+from domain_atlas.intake.assessment import IntakeSuggestion
 from domain_atlas.domain.source_candidates import SourceCandidateDraft
 from domain_atlas.providers.vector_index import RetrievedChunk, RetrievedWikiSection
 from domain_atlas.web.app import create_app
@@ -54,6 +56,34 @@ class FakeDiscoveryProvider:
 class FailingDiscoveryProvider:
     def search(self, query: str, limit: int) -> list[SourceCandidateDraft]:
         raise SourceDiscoveryError("搜索服务暂时不可用")
+
+
+class FakeIntakeSuggestionProvider:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def suggest(self, *, name: str, goal: str, level: str, assessment) -> IntakeSuggestion:
+        self.calls.append(name)
+        return IntakeSuggestion(
+            understanding=f"“{name}”需要先确定具体学习方向。",
+            question="你最希望先建立哪一种 Agent 能力？",
+            options=[
+                {
+                    "value": option["value"],
+                    "label": f"增强：{option['label']}",
+                    "description": f"增强说明：{option['description']}",
+                    "scope": option["scope"],
+                }
+                for option in assessment.options[:2]
+            ],
+            default_scope=assessment.default_scope,
+            assumptions=["本次选项由模型在规则边界内优化。"],
+        )
+
+
+class FailingIntakeSuggestionProvider:
+    def suggest(self, **kwargs):
+        raise TimeoutError("provider api key should never be shown")
 
 
 class FakeEmbeddingProvider:
@@ -334,6 +364,61 @@ def test_ambiguous_domain_enters_clarification_then_persists_selected_scope(tmp_
     assert "建立可溯源的入门领域地图" in dashboard.text
     assert "初始化状态" in dashboard.text
     assert "已确认" in dashboard.text
+
+
+def test_llm_suggestion_enhances_only_rule_required_clarification(tmp_path):
+    provider = FakeIntakeSuggestionProvider()
+    app = create_app(Settings(data_dir=tmp_path), intake_suggestion_provider=provider)
+    client = TestClient(app)
+
+    clear = client.post("/domains", data={"name": "Dataphin"}, follow_redirects=False)
+    ambiguous = client.post("/domains", data={"name": "Agent"}, follow_redirects=False)
+
+    assert clear.headers["location"] == "/domains/1"
+    assert provider.calls == ["Agent"]
+    clarification = client.get(ambiguous.headers["location"])
+    assert "模型已在本地规则边界内优化" in clarification.text
+    assert "你最希望先建立哪一种 Agent 能力" in clarification.text
+    assert "增强：LLM Agent" in clarification.text
+    project = DomainProjectRepository(tmp_path / "domain_atlas.sqlite3").get(2)
+    assert project is not None
+    assert project.intake_metadata["rule_reason"] == "ambiguous_domain"
+    assert project.intake_metadata["suggestion_source"] == "llm"
+    assert project.intake_metadata["suggestion_status"] == "applied"
+
+
+def test_failed_or_unconfigured_intake_suggestion_falls_back_without_raw_error(tmp_path):
+    failing_app = create_app(
+        Settings(data_dir=tmp_path / "failed"),
+        intake_suggestion_provider=FailingIntakeSuggestionProvider(),
+    )
+    failing_client = TestClient(failing_app)
+    failed = failing_client.post("/domains", data={"name": "Agent"}, follow_redirects=False)
+    fallback_page = failing_client.get(failed.headers["location"])
+    failed_project = DomainProjectRepository(tmp_path / "failed" / "domain_atlas.sqlite3").get(1)
+
+    assert "当前展示可靠的规则建议" in fallback_page.text
+    assert "provider api key" not in fallback_page.text
+    assert failed_project is not None
+    assert failed_project.intake_metadata["suggestion_source"] == "fallback"
+    assert failed_project.intake_metadata["suggestion_status"] == "fallback"
+
+    unconfigured_app = create_app(
+        Settings(
+            data_dir=tmp_path / "unconfigured",
+            intake_llm_suggestions_enabled=True,
+            llm_api_key="",
+            llm_base_url="",
+        )
+    )
+    unconfigured_client = TestClient(unconfigured_app)
+    unconfigured = unconfigured_client.post("/domains", data={"name": "Agent"}, follow_redirects=False)
+    unconfigured_project = DomainProjectRepository(tmp_path / "unconfigured" / "domain_atlas.sqlite3").get(1)
+
+    assert unconfigured.status_code == 303
+    assert unconfigured_project is not None
+    assert unconfigured_project.intake_metadata["suggestion_source"] == "rule"
+    assert unconfigured_project.intake_metadata["suggestion_status"] == "not_requested"
 
 
 def test_intake_allows_custom_scope_or_default_and_keeps_expert_manual(tmp_path):
