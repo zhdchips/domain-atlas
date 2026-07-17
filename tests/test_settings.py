@@ -25,3 +25,12 @@ def test_provider_defaults_match_mvp_contract():
     assert settings.embedding_provider == "dashscope"
     assert settings.embedding_model == "text-embedding-v4"
     assert settings.embedding_dimensions == 1024
+
+
+def test_intake_assessment_is_enabled_by_default_when_not_explicitly_disabled(monkeypatch):
+    monkeypatch.delenv("INTAKE_LLM_ASSESSMENT_ENABLED", raising=False)
+    monkeypatch.delenv("INTAKE_LLM_SUGGESTIONS_ENABLED", raising=False)
+
+    settings = Settings(_env_file=None)
+
+    assert settings.intake_llm_assessment_enabled is True

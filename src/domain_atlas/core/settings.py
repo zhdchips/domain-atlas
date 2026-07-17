@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     chat_model: str = "deepseek-chat"
     chat_max_tokens: int = 12_000
     intake_llm_assessment_enabled: bool = Field(
-        default=False,
+        default=True,
         validation_alias=AliasChoices(
             "INTAKE_LLM_ASSESSMENT_ENABLED",
             "INTAKE_LLM_SUGGESTIONS_ENABLED",
