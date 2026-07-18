@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     exa_api_key: str = ""
     search_max_results: int = 12
     search_display_results: int = 8
+    search_timeout_seconds: float = 30.0
+    search_max_retries: int = 2
 
     llm_provider: str = "deepseek"
     llm_base_url: str = "https://api.deepseek.com"

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import time
 from typing import Any
 from urllib.parse import urlparse
 
@@ -25,12 +26,16 @@ class ExaSearchProvider:
         *,
         api_key: str,
         base_url: str = "https://api.exa.ai",
-        timeout_seconds: float = 20.0,
+        timeout_seconds: float = 30.0,
+        max_retries: int = 2,
+        retry_delay_seconds: float = 1.0,
         client: httpx.Client | None = None,
     ) -> None:
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
+        self.max_retries = max(0, max_retries)
+        self.retry_delay_seconds = retry_delay_seconds
         self.client = client
 
     def search(self, query: str, limit: int) -> list[SourceCandidateDraft]:
@@ -65,25 +70,7 @@ class ExaSearchProvider:
             "Content-Type": "application/json",
             "x-api-key": self.api_key,
         }
-        try:
-            if self.client is not None:
-                response = self.client.post(
-                    f"{self.base_url}/search",
-                    headers=headers,
-                    json=payload,
-                    timeout=self.timeout_seconds,
-                )
-            else:
-                with httpx.Client(timeout=self.timeout_seconds) as client:
-                    response = client.post(
-                        f"{self.base_url}/search",
-                        headers=headers,
-                        json=payload,
-                    )
-        except httpx.TimeoutException as exc:
-            raise SourceDiscoveryError("Exa search timed out.") from exc
-        except httpx.HTTPError as exc:
-            raise SourceDiscoveryError("Exa search request failed.") from exc
+        response = self._post_with_retries(headers=headers, payload=payload)
 
         if response.status_code in {401, 403}:
             raise SourceDiscoveryError("Exa search is not configured correctly.")
@@ -99,6 +86,51 @@ class ExaSearchProvider:
         if not isinstance(data, dict):
             raise SourceDiscoveryError("Exa search returned invalid JSON.")
         return data
+
+    def _post_with_retries(
+        self,
+        *,
+        headers: dict[str, str],
+        payload: dict[str, Any],
+    ) -> httpx.Response:
+        attempts = self.max_retries + 1
+        last_error: httpx.HTTPError | None = None
+        for attempt in range(attempts):
+            try:
+                if self.client is not None:
+                    response = self.client.post(
+                        f"{self.base_url}/search",
+                        headers=headers,
+                        json=payload,
+                        timeout=self.timeout_seconds,
+                    )
+                else:
+                    with httpx.Client(timeout=self.timeout_seconds) as client:
+                        response = client.post(
+                            f"{self.base_url}/search",
+                            headers=headers,
+                            json=payload,
+                        )
+            except httpx.HTTPError as exc:
+                last_error = exc
+                if attempt + 1 >= attempts:
+                    raise SourceDiscoveryError(
+                        "Exa search connection failed "
+                        f"after {attempts} attempts: {type(exc).__name__}."
+                    ) from exc
+                _sleep_before_retry(self.retry_delay_seconds, attempt)
+                continue
+
+            if response.status_code not in {429, 500, 502, 503, 504}:
+                return response
+            if attempt + 1 >= attempts:
+                return response
+            _sleep_before_retry(self.retry_delay_seconds, attempt)
+
+        error_kind = type(last_error).__name__ if last_error is not None else "unknown error"
+        raise SourceDiscoveryError(
+            f"Exa search connection failed after {attempts} attempts: {error_kind}."
+        ) from last_error
 
     def _normalize_result(self, item: dict[str, Any], *, rank: int) -> SourceCandidateDraft:
         title = _optional_str(item.get("title"))
@@ -154,6 +186,11 @@ def _first_text(values: list[str]) -> str:
 def _stable_source_id(url: str) -> str:
     digest = hashlib.sha256(url.encode("utf-8")).hexdigest()[:16]
     return f"exa:{digest}"
+
+
+def _sleep_before_retry(base_delay: float, attempt: int) -> None:
+    if base_delay > 0:
+        time.sleep(base_delay * (2**attempt))
 
 
 def _publisher_from_url(url: str) -> str:

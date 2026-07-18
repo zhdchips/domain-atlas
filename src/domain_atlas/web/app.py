@@ -93,7 +93,11 @@ def create_app(
     task_runner = background_runner or BackgroundWorkflowRunner(workflow_repository())
 
     def source_discovery_provider() -> ExaSearchProvider:
-        return discovery_provider or ExaSearchProvider(api_key=app_settings.exa_api_key)
+        return discovery_provider or ExaSearchProvider(
+            api_key=app_settings.exa_api_key,
+            timeout_seconds=app_settings.search_timeout_seconds,
+            max_retries=app_settings.search_max_retries,
+        )
 
     def configured_intake_assessment_provider() -> IntakeAssessmentProvider | None:
         if intake_assessment_provider is not None:

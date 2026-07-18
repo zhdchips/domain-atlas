@@ -91,3 +91,53 @@ def test_exa_provider_requires_api_key():
         assert "API key" in str(exc)
     else:
         raise AssertionError("Expected missing API key to fail.")
+
+
+def test_exa_provider_retries_transient_overload():
+    calls = {"count": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return httpx.Response(503, json={"error": "temporarily overloaded"})
+        return httpx.Response(
+            200,
+            json={
+                "results": [
+                    {
+                        "id": "src-1",
+                        "title": "Official Agent Docs",
+                        "url": "https://docs.example.com/agents",
+                    }
+                ]
+            },
+        )
+
+    provider = ExaSearchProvider(
+        api_key="not-a-real-key",
+        max_retries=1,
+        retry_delay_seconds=0,
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    assert len(provider.search("LLM Agents", limit=1)) == 1
+    assert calls["count"] == 2
+
+
+def test_exa_provider_reports_connection_error_kind_after_retries():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection failed", request=request)
+
+    provider = ExaSearchProvider(
+        api_key="not-a-real-key",
+        max_retries=1,
+        retry_delay_seconds=0,
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    try:
+        provider.search("LLM Agents", limit=1)
+    except SourceDiscoveryError as exc:
+        assert str(exc) == "Exa search connection failed after 2 attempts: ConnectError."
+    else:
+        raise AssertionError("Expected connection failure to be raised.")
