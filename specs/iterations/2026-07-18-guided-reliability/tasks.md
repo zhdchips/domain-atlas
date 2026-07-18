@@ -27,7 +27,7 @@
 
 - [x] Run fast, deterministic E2E, browser E2E, live fixed-build E2E, and live guided E2E.
 - [x] Record actual live timings and source outcome counts in this task file.
-- [ ] Verify server health and a clean worktree after commits.
+- [x] Verify server health and a clean worktree after commits.
 - [x] Complete requirement-by-requirement audit and commit Phase 4.
 - [ ] Push deferred by user request.
 
