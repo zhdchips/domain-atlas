@@ -8,12 +8,12 @@
 
 ## Phase 2: Reliable Candidate Consumption
 
-- [ ] Add ordered candidate queue behavior with two-source build gate and queue exhaustion result.
-- [ ] Persist structured source attempts, failure categories, and terminal reason.
-- [ ] Preserve source-ranking, deduplication, and per-domain constraints.
-- [ ] Render learner-facing exhaustion/recovery summary and success counts.
-- [ ] Add deterministic workflow coverage for queue and failure cases.
-- [ ] Commit Phase 2 after targeted tests pass.
+- [x] Add ordered candidate queue behavior with two-source build gate and queue exhaustion result.
+- [x] Persist structured source attempts, failure categories, and terminal reason.
+- [x] Preserve source-ranking, deduplication, and per-domain constraints.
+- [x] Render learner-facing exhaustion/recovery summary and success counts.
+- [x] Add deterministic workflow coverage for queue and failure cases.
+- [x] Commit Phase 2 after targeted tests pass.
 
 ## Phase 3: Regression Layers
 

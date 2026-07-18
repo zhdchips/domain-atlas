@@ -634,6 +634,45 @@ def test_discover_sources_lists_candidates_and_confirm_accepts(tmp_path):
     assert "pending" in accepted_dashboard.text
 
 
+def test_dashboard_explains_guided_candidate_exhaustion(tmp_path):
+    settings = Settings(data_dir=tmp_path)
+    app = create_app(settings)
+    client = TestClient(app)
+    project = DomainProjectRepository(settings.database_path).create(
+        CreateDomainProject(name="agent", scope="旅行代理", interaction_mode="guided")
+    )
+    workflow = WorkflowRepository(settings.database_path)
+    run_id = workflow.start_run(project.id, "guided_autopilot")
+    recovery_message = (
+        "候选资料已尝试完毕，仅成功摄取 0/2 份。失败原因包括：访问受限。"
+        "可稍后重试，或手动添加可访问的 URL、Markdown/PDF，也可调整领域范围后重新搜索。"
+    )
+    workflow.record_step(
+        run_id,
+        step_name="ingest_sources",
+        status="failed",
+        output={
+            "completed": 0,
+            "total": 2,
+            "success_count": 0,
+            "attempted_count": 2,
+            "failed_count": 2,
+            "minimum_build_sources": 2,
+            "terminal_reason": "candidates_exhausted",
+            "recovery_message": recovery_message,
+        },
+    )
+    workflow.fail_run(run_id, recovery_message)
+
+    dashboard = client.get(f"/domains/{project.id}")
+
+    assert dashboard.status_code == 200
+    assert "获得至少 2 份可用资料后再构建" in dashboard.text
+    assert recovery_message in dashboard.text
+    assert "已尝试 2 条，2 条未成功" in dashboard.text
+    assert 'value="旅行代理"' in dashboard.text
+
+
 def test_add_url_source_route_lists_pending_source(tmp_path):
     app = create_app(Settings(data_dir=tmp_path))
     client = TestClient(app)

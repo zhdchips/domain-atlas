@@ -25,6 +25,8 @@ PREFERRED_SOURCE_TYPES = {
     "repository",
     "encyclopedia",
 }
+MIN_BUILD_SOURCES = 2
+MAX_SOURCES_PER_DOMAIN = 2
 
 
 class SourceDiscoveryProvider(Protocol):
@@ -49,6 +51,30 @@ class AutopilotResult:
     candidate_ids: list[int]
 
 
+@dataclass(frozen=True)
+class SourceAttempt:
+    candidate_id: int
+    source_id: int
+    title: str
+    url: str
+    outcome: str
+    error_category: str = ""
+    detail: str = ""
+    retryable: bool = False
+
+    def to_output(self) -> dict[str, object]:
+        return {
+            "candidate_id": self.candidate_id,
+            "source_id": self.source_id,
+            "title": self.title,
+            "url": self.url,
+            "outcome": self.outcome,
+            "error_category": self.error_category,
+            "detail": self.detail,
+            "retryable": self.retryable,
+        }
+
+
 def select_autopilot_candidates(
     candidates: list[SourceCandidateDraft],
     *,
@@ -57,7 +83,23 @@ def select_autopilot_candidates(
     fallback_min_authority_score: float = 0.5,
     max_per_domain: int = 2,
 ) -> list[SourceCandidateDraft]:
-    """Select high-authority candidates for guided mode."""
+    """Return the first display-sized slice of the guided candidate queue."""
+    return build_autopilot_candidate_queue(
+        candidates,
+        min_authority_score=min_authority_score,
+        fallback_min_authority_score=fallback_min_authority_score,
+        max_per_domain=max_per_domain,
+    )[:max_sources]
+
+
+def build_autopilot_candidate_queue(
+    candidates: list[SourceCandidateDraft],
+    *,
+    min_authority_score: float = 0.65,
+    fallback_min_authority_score: float = 0.5,
+    max_per_domain: int = MAX_SOURCES_PER_DOMAIN,
+) -> list[SourceCandidateDraft]:
+    """Rank every usable candidate so ingestion can replenish after failures."""
     strict_eligible = [
         candidate
         for candidate in candidates
@@ -74,7 +116,7 @@ def select_autopilot_candidates(
     eligible = _unique_candidates([*strict_eligible, *fallback_eligible])
     return _select_ranked_candidates(
         eligible,
-        max_sources=max_sources,
+        max_sources=None,
         max_per_domain=max_per_domain,
     )
 
@@ -94,12 +136,15 @@ def _selection_mode(selected: list[SourceCandidateDraft]) -> str:
 
 
 def _unique_candidates(candidates: list[SourceCandidateDraft]) -> list[SourceCandidateDraft]:
-    seen: set[str] = set()
+    seen_provider_ids: set[str] = set()
+    seen_urls: set[str] = set()
     unique: list[SourceCandidateDraft] = []
     for candidate in candidates:
-        if candidate.provider_source_id in seen:
+        normalized_url = candidate.url.rstrip("/")
+        if candidate.provider_source_id in seen_provider_ids or normalized_url in seen_urls:
             continue
-        seen.add(candidate.provider_source_id)
+        seen_provider_ids.add(candidate.provider_source_id)
+        seen_urls.add(normalized_url)
         unique.append(candidate)
     return unique
 
@@ -107,7 +152,7 @@ def _unique_candidates(candidates: list[SourceCandidateDraft]) -> list[SourceCan
 def _select_ranked_candidates(
     candidates: list[SourceCandidateDraft],
     *,
-    max_sources: int,
+    max_sources: int | None,
     max_per_domain: int,
 ) -> list[SourceCandidateDraft]:
     ranked = sorted(
@@ -126,7 +171,7 @@ def _select_ranked_candidates(
             continue
         selected.append(candidate)
         domain_counts[domain] += 1
-        if len(selected) >= max_sources:
+        if max_sources is not None and len(selected) >= max_sources:
             break
     return selected
 
@@ -151,6 +196,7 @@ class AutopilotWorkflow:
         self.ingestion_runner = ingestion_runner
         self.build_runner = build_runner
         self.search_limit = search_limit
+        self.minimum_build_sources = MIN_BUILD_SOURCES
 
     def run(self, project_id: int, *, run_id: int | None = None) -> AutopilotResult:
         if run_id is None:
@@ -176,14 +222,16 @@ class AutopilotWorkflow:
             self.workflow_repository.record_step(
                 run_id, step_name="select_candidates", status="running"
             )
-            selected_drafts = select_autopilot_candidates(drafts)
-            if not selected_drafts:
+            candidate_queue = build_autopilot_candidate_queue(drafts)
+            if not candidate_queue:
                 raise ValueError("No usable candidates passed guided mode filtering.")
-            selected_source_ids = {candidate.provider_source_id for candidate in selected_drafts}
+            persisted_by_provider_id = {
+                candidate.provider_source_id: candidate for candidate in persisted
+            }
             selected = [
-                candidate
-                for candidate in persisted
-                if candidate.provider_source_id in selected_source_ids
+                persisted_by_provider_id[candidate.provider_source_id]
+                for candidate in candidate_queue
+                if candidate.provider_source_id in persisted_by_provider_id
             ]
             self.workflow_repository.record_step(
                 run_id,
@@ -191,18 +239,25 @@ class AutopilotWorkflow:
                 status="completed",
                 output={
                     "selected_count": len(selected),
+                    "queued_count": len(selected),
+                    "minimum_build_sources": self.minimum_build_sources,
                     "candidate_ids": [candidate.id for candidate in selected],
-                    "selection_mode": _selection_mode(selected_drafts),
+                    "selection_mode": _selection_mode(candidate_queue),
                 },
             )
 
             source_ids: list[int] = []
             failed_sources: list[dict[str, object]] = []
+            attempts: list[SourceAttempt] = []
             self.workflow_repository.record_step(
                 run_id,
                 step_name="ingest_sources",
                 status="running",
-                output={"completed": 0, "total": len(selected)},
+                output={
+                    "completed": 0,
+                    "total": len(selected),
+                    "minimum_build_sources": self.minimum_build_sources,
+                },
             )
             for candidate in selected:
                 accepted = self.candidate_repository.accept(project_id, candidate.id)
@@ -212,6 +267,18 @@ class AutopilotWorkflow:
                 try:
                     self.ingestion_runner.ingest_source(source.id)
                 except Exception as exc:
+                    category, retryable = classify_ingestion_failure(exc)
+                    attempt = SourceAttempt(
+                        candidate_id=candidate.id,
+                        source_id=source.id,
+                        title=candidate.title,
+                        url=candidate.url,
+                        outcome="failed",
+                        error_category=category,
+                        detail=str(exc),
+                        retryable=retryable,
+                    )
+                    attempts.append(attempt)
                     failed_sources.append(
                         {
                             "source_id": source.id,
@@ -219,25 +286,82 @@ class AutopilotWorkflow:
                             "title": candidate.title,
                             "url": candidate.url,
                             "error": str(exc),
+                            "error_category": category,
+                            "retryable": retryable,
                         }
+                    )
+                    self.workflow_repository.record_step(
+                        run_id,
+                        step_name="ingest_sources",
+                        status="running",
+                        output=_ingestion_progress_output(
+                            source_ids=source_ids,
+                            attempts=attempts,
+                            queue_size=len(selected),
+                            minimum_build_sources=self.minimum_build_sources,
+                        ),
                     )
                     continue
                 source_ids.append(source.id)
+                attempts.append(
+                    SourceAttempt(
+                        candidate_id=candidate.id,
+                        source_id=source.id,
+                        title=candidate.title,
+                        url=candidate.url,
+                        outcome="ingested",
+                    )
+                )
                 self.workflow_repository.record_step(
                     run_id,
                     step_name="ingest_sources",
                     status="running",
-                    output={"completed": len(source_ids), "total": len(selected), "source_id": source.id},
+                    output=_ingestion_progress_output(
+                        source_ids=source_ids,
+                        attempts=attempts,
+                        queue_size=len(selected),
+                        minimum_build_sources=self.minimum_build_sources,
+                        source_id=source.id,
+                    ),
                 )
 
+                if len(source_ids) >= self.minimum_build_sources:
+                    break
+
+            terminal_reason = (
+                "minimum_sources_reached"
+                if len(source_ids) >= self.minimum_build_sources
+                else "candidates_exhausted"
+            )
             self.workflow_repository.record_step(
                 run_id,
                 step_name="ingest_sources",
-                status="completed" if source_ids else "failed",
-                output={"source_ids": source_ids, "failed_sources": failed_sources},
+                status="completed" if terminal_reason == "minimum_sources_reached" else "failed",
+                output={
+                    **_ingestion_progress_output(
+                        source_ids=source_ids,
+                        attempts=attempts,
+                        queue_size=len(selected),
+                        minimum_build_sources=self.minimum_build_sources,
+                    ),
+                    "source_ids": source_ids,
+                    "failed_sources": failed_sources,
+                    "terminal_reason": terminal_reason,
+                    "recovery_message": _recovery_message(
+                        successful_sources=len(source_ids),
+                        minimum_build_sources=self.minimum_build_sources,
+                        attempts=attempts,
+                    ),
+                },
             )
-            if not source_ids:
-                raise ValueError("All selected sources failed ingestion.")
+            if terminal_reason == "candidates_exhausted":
+                raise ValueError(
+                    _recovery_message(
+                        successful_sources=len(source_ids),
+                        minimum_build_sources=self.minimum_build_sources,
+                        attempts=attempts,
+                    )
+                )
             self.workflow_repository.record_step(
                 run_id,
                 step_name="build_knowledge",
@@ -287,3 +411,90 @@ class AutopilotWorkflow:
 def _domain(url: str) -> str:
     host = urlparse(url).netloc.lower()
     return host[4:] if host.startswith("www.") else host
+
+
+def classify_ingestion_failure(error: Exception) -> tuple[str, bool]:
+    """Return a stable learner-recovery category without leaking provider internals."""
+    messages = _error_messages(error)
+    text = " ".join(messages).lower()
+    if "http 401" in text or "http 403" in text or "access denied" in text:
+        return "access_denied", False
+    if "timeout" in text or "timed out" in text:
+        return "timeout", True
+    if "embedding" in text or "vector" in text:
+        return "embedding", True
+    if any(
+        marker in text
+        for marker in (
+            "extractable text",
+            "produce any chunks",
+            "unsupported source",
+            "pdf",
+            "parse",
+        )
+    ):
+        return "parse", False
+    if "url fetch failed" in text or "connect" in text or "network" in text:
+        return "network", True
+    return "unknown", True
+
+
+def _error_messages(error: Exception) -> list[str]:
+    messages: list[str] = []
+    current: BaseException | None = error
+    while current is not None:
+        messages.append(str(current))
+        current = current.__cause__ or current.__context__
+    return messages
+
+
+def _ingestion_progress_output(
+    *,
+    source_ids: list[int],
+    attempts: list[SourceAttempt],
+    queue_size: int,
+    minimum_build_sources: int,
+    source_id: int | None = None,
+) -> dict[str, object]:
+    output: dict[str, object] = {
+        "completed": len(source_ids),
+        "total": queue_size,
+        "success_count": len(source_ids),
+        "attempted_count": len(attempts),
+        "failed_count": sum(attempt.outcome == "failed" for attempt in attempts),
+        "minimum_build_sources": minimum_build_sources,
+        "attempted_sources": [attempt.to_output() for attempt in attempts],
+    }
+    if source_id is not None:
+        output["source_id"] = source_id
+    return output
+
+
+def _recovery_message(
+    *,
+    successful_sources: int,
+    minimum_build_sources: int,
+    attempts: list[SourceAttempt],
+) -> str:
+    if successful_sources >= minimum_build_sources:
+        return f"已获得 {successful_sources} 份可用资料，开始构建知识库。"
+    failed_categories = sorted(
+        {attempt.error_category for attempt in attempts if attempt.error_category}
+    )
+    category_text = "、".join(_failure_category_label(category) for category in failed_categories)
+    detail = f"失败原因包括：{category_text}。" if category_text else ""
+    return (
+        f"候选资料已尝试完毕，仅成功摄取 {successful_sources}/{minimum_build_sources} 份。"
+        f"{detail}可稍后重试，或手动添加可访问的 URL、Markdown/PDF，也可调整领域范围后重新搜索。"
+    )
+
+
+def _failure_category_label(category: str) -> str:
+    return {
+        "access_denied": "访问受限",
+        "network": "网络请求失败",
+        "timeout": "请求超时",
+        "parse": "内容解析失败",
+        "embedding": "向量化失败",
+        "unknown": "未知错误",
+    }.get(category, category)

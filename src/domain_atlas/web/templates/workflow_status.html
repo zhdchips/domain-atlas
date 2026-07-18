@@ -22,8 +22,17 @@
                 <small>{{ step.status }}</small>
                 {% if step.output.get('completed') is not none and step.output.get('total') is not none %}
                   <small>{{ step.output.get('completed') }}/{{ step.output.get('total') }}</small>
+                  {% if step.output.get('minimum_build_sources') is not none %}
+                    <small>已成功 {{ step.output.get('success_count', step.output.get('completed')) }} / 至少 {{ step.output.get('minimum_build_sources') }} 份资料</small>
+                  {% endif %}
                 {% elif step.output.get('chunk_count') is not none %}
                   <small>{{ step.output.get('chunk_count') }} 个片段</small>
+                {% endif %}
+                {% if step.output.get('terminal_reason') == 'minimum_sources_reached' %}
+                  <small>已尝试 {{ step.output.get('attempted_count', 0) }} 条，{{ step.output.get('failed_count', 0) }} 条未成功；资料门槛已满足。</small>
+                {% elif step.output.get('terminal_reason') == 'candidates_exhausted' %}
+                  <p class="workflow-error">{{ step.output.get('recovery_message') }}</p>
+                  <small>已尝试 {{ step.output.get('attempted_count', 0) }} 条，{{ step.output.get('failed_count', 0) }} 条未成功。</small>
                 {% endif %}
                 {% if step.error %}
                   <small class="workflow-error">{{ step.error }}</small>

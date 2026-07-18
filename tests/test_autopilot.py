@@ -7,7 +7,12 @@ from domain_atlas.domain.projects import CreateDomainProject, DomainProjectRepos
 from domain_atlas.domain.source_candidates import SourceCandidateDraft, SourceCandidateRepository
 from domain_atlas.domain.sources import SourceRepository
 from domain_atlas.domain.workflow import WorkflowRepository
-from domain_atlas.workflow.autopilot import AutopilotWorkflow, select_autopilot_candidates
+from domain_atlas.workflow.autopilot import (
+    AutopilotWorkflow,
+    build_autopilot_candidate_queue,
+    classify_ingestion_failure,
+    select_autopilot_candidates,
+)
 
 
 class FakeDiscoveryProvider:
@@ -83,6 +88,24 @@ def test_autopilot_candidate_selection_adds_fallbacks_when_strict_set_is_small()
         "official",
         "practical-a",
         "practical-b",
+    ]
+
+
+def test_autopilot_candidate_queue_deduplicates_urls_and_applies_domain_cap():
+    drafts = [
+        _draft("official-a", "https://docs.example.com/a", "official_docs", 0.9),
+        _draft("official-a-copy", "https://docs.example.com/a", "official_docs", 0.89),
+        _draft("official-b", "https://docs.example.com/b", "official_docs", 0.88),
+        _draft("official-c", "https://docs.example.com/c", "official_docs", 0.87),
+        _draft("fallback", "https://fallback.example.com/a", "web", 0.5),
+    ]
+
+    queue = build_autopilot_candidate_queue(drafts)
+
+    assert [candidate.provider_source_id for candidate in queue] == [
+        "official-a",
+        "official-b",
+        "fallback",
     ]
 
 
@@ -190,6 +213,7 @@ def test_autopilot_continues_when_one_source_fails_ingestion(tmp_path):
     drafts = [
         _draft("docs", "https://help.aliyun.com/dataphin", "official_docs", 0.95),
         _draft("product", "https://www.alibabacloud.com/product/dataphin", "official_docs", 0.8),
+        _draft("fallback", "https://community.example.com/dataphin", "web", 0.5),
     ]
     build = FakeBuildRunner()
 
@@ -201,7 +225,7 @@ def test_autopilot_continues_when_one_source_fails_ingestion(tmp_path):
         search_limit=12,
     ).run(project.id)
 
-    assert result.source_ids == [2]
+    assert result.source_ids == [2, 3]
     assert build.project_ids == [project.id]
 
     runs = WorkflowRepository(database_path).list_for_project(project.id)
@@ -210,7 +234,8 @@ def test_autopilot_continues_when_one_source_fails_ingestion(tmp_path):
         for step in reversed(runs[0].steps)
         if step.step_name == "ingest_sources" and step.status in {"completed", "failed"}
     )
-    assert ingest_step.output["source_ids"] == [2]
+    assert ingest_step.output["source_ids"] == [2, 3]
+    assert ingest_step.output["terminal_reason"] == "minimum_sources_reached"
     assert ingest_step.output["failed_sources"][0]["source_id"] == 1
     assert ingest_step.output["failed_sources"][0]["error"] == "URL fetch failed."
 
@@ -249,6 +274,65 @@ def test_autopilot_uses_fallback_sources_when_all_strict_sources_fail(tmp_path):
     assert select_step.output["selection_mode"] == "strict_with_fallback"
 
 
+def test_autopilot_reports_exhaustion_with_structured_attempts(tmp_path):
+    database_path = tmp_path / "domain_atlas.sqlite3"
+    initialize_database(database_path)
+    project = DomainProjectRepository(database_path).create(
+        CreateDomainProject(name="旅行代理", interaction_mode="guided")
+    )
+    drafts = [
+        _draft("wiki", "https://zh.wikipedia.org/wiki/Travel_agency", "encyclopedia", 0.8),
+        _draft("baike", "https://baike.baidu.com/item/travel", "encyclopedia", 0.8),
+    ]
+
+    try:
+        AutopilotWorkflow(
+            database_path=database_path,
+            discovery_provider=FakeDiscoveryProvider(drafts),
+            ingestion_runner=PartiallyFailingIngestionRunner(failing_source_ids={1, 2}),
+            build_runner=FakeBuildRunner(),
+            search_limit=12,
+        ).run(project.id)
+    except ValueError as exc:
+        assert "仅成功摄取 0/2 份" in str(exc)
+        assert "手动添加可访问的 URL、Markdown/PDF" in str(exc)
+    else:
+        raise AssertionError("Expected candidate exhaustion to fail the workflow.")
+
+    run = WorkflowRepository(database_path).list_for_project(project.id)[0]
+    final_ingestion = next(
+        step
+        for step in reversed(run.steps)
+        if step.step_name == "ingest_sources" and step.status == "failed"
+    )
+    assert final_ingestion.output["terminal_reason"] == "candidates_exhausted"
+    assert final_ingestion.output["success_count"] == 0
+    assert final_ingestion.output["attempted_count"] == 2
+    assert [item["error_category"] for item in final_ingestion.output["attempted_sources"]] == [
+        "network",
+        "network",
+    ]
+
+
+def test_classify_ingestion_failure_uses_stable_recovery_categories():
+    assert classify_ingestion_failure(ValueError("URL fetch failed with HTTP 403.")) == (
+        "access_denied",
+        False,
+    )
+    assert classify_ingestion_failure(ValueError("Source did not contain extractable text.")) == (
+        "parse",
+        False,
+    )
+    assert classify_ingestion_failure(ValueError("Embedding request timed out.")) == (
+        "timeout",
+        True,
+    )
+    assert classify_ingestion_failure(ValueError("Embedding provider failed.")) == (
+        "embedding",
+        True,
+    )
+
+
 def test_autopilot_workflow_uses_fallback_selection_for_practical_domains(tmp_path):
     database_path = tmp_path / "domain_atlas.sqlite3"
     initialize_database(database_path)
@@ -272,7 +356,7 @@ def test_autopilot_workflow_uses_fallback_selection_for_practical_domains(tmp_pa
     ).run(project.id)
 
     assert result.selected_count == 3
-    assert len(result.source_ids) == 3
+    assert len(result.source_ids) == 2
     assert build.project_ids == [project.id]
 
     runs = WorkflowRepository(database_path).list_for_project(project.id)
