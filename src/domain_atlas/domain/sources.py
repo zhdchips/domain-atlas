@@ -183,6 +183,40 @@ class SourceRepository:
             row = connection.execute("SELECT * FROM sources WHERE id = ?", (source_id,)).fetchone()
         return _row_to_source(row)
 
+    def update_excluded(
+        self,
+        source_id: int,
+        *,
+        raw_path: str,
+        normalized_path: str,
+        checksum: str,
+        metadata: dict[str, Any],
+        reason: str,
+    ) -> Source:
+        updated_metadata = {**metadata, "exclusion_reason": reason}
+        with connect(self.database_path) as connection:
+            connection.execute(
+                """
+                UPDATE sources
+                SET raw_path = ?,
+                    normalized_path = ?,
+                    checksum = ?,
+                    status = 'excluded',
+                    metadata_json = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (
+                    raw_path,
+                    normalized_path,
+                    checksum,
+                    json.dumps(updated_metadata, ensure_ascii=False),
+                    source_id,
+                ),
+            )
+            row = connection.execute("SELECT * FROM sources WHERE id = ?", (source_id,)).fetchone()
+        return _row_to_source(row)
+
 
 class ChunkRepository:
     """SQLite-backed chunk repository."""

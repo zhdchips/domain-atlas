@@ -19,6 +19,7 @@ from domain_atlas.domain.sources import (
 )
 from domain_atlas.ingestion.chunking import chunk_segments
 from domain_atlas.ingestion.loaders import LoadedDocument, MarkdownLoader, PDFLoader, URLLoader
+from domain_atlas.ingestion.quality import assess_url_content, is_obvious_near_duplicate
 from domain_atlas.providers.vector_index import VectorIndex
 
 
@@ -69,10 +70,20 @@ class IngestionService:
         try:
             _emit_progress(progress, "load", "running")
             document = self._load(source)
-            if not document.normalized_text.strip():
-                raise ValueError("Source did not contain extractable text.")
             checksum = hashlib.sha256(document.raw_bytes).hexdigest()
             raw_path, normalized_path = self._write_artifacts(source, document)
+            quality_metadata = self._quality_metadata(source, document)
+            exclusion_reason = self._exclusion_reason(source, document)
+            if exclusion_reason:
+                self.source_repository.update_excluded(
+                    source.id,
+                    raw_path=str(raw_path),
+                    normalized_path=str(normalized_path),
+                    checksum=checksum,
+                    metadata={**source.metadata, **document.metadata, "content_quality": quality_metadata},
+                    reason=exclusion_reason,
+                )
+                raise ValueError(exclusion_reason)
             _emit_progress(progress, "load", "completed")
             _emit_progress(progress, "parse", "running")
             text_chunks = chunk_segments(
@@ -119,12 +130,19 @@ class IngestionService:
                 raw_path=str(raw_path),
                 normalized_path=str(normalized_path),
                 checksum=checksum,
-                metadata={**source.metadata, **document.metadata, "chunk_count": len(chunk_rows)},
+                metadata={
+                    **source.metadata,
+                    **document.metadata,
+                    "content_quality": quality_metadata,
+                    "chunk_count": len(chunk_rows),
+                },
             )
             return updated, chunk_rows
         except Exception as exc:
             _emit_progress(progress, "ingest", "failed", {"error": str(exc)})
-            self.source_repository.update_failed(source.id, str(exc))
+            latest = self.source_repository.get(source.id)
+            if latest is None or latest.status != "excluded":
+                self.source_repository.update_failed(source.id, str(exc))
             raise
 
     def _load(self, source: Source) -> LoadedDocument:
@@ -157,6 +175,32 @@ class IngestionService:
         raw_path.write_bytes(document.raw_bytes)
         normalized_path.write_text(document.normalized_text, encoding="utf-8")
         return raw_path, normalized_path
+
+    def _quality_metadata(self, source: Source, document: LoadedDocument) -> dict[str, object]:
+        if source.source_type != "url":
+            return {"accepted": True, "reason": "非 URL 资料不使用网页正文质量门。"}
+        return assess_url_content(document.normalized_text).to_metadata()
+
+    def _exclusion_reason(self, source: Source, document: LoadedDocument) -> str:
+        if not document.normalized_text.strip():
+            return "Source content quality is too low: no meaningful extractable text."
+        if source.source_type == "url":
+            quality = assess_url_content(document.normalized_text)
+            if not quality.accepted:
+                return f"Source content quality is too low: {quality.reason}"
+            duplicate_source = self._find_duplicate_source(source, document.normalized_text)
+            if duplicate_source is not None:
+                return f"Source is near-duplicate evidence of source {duplicate_source.id}."
+        return ""
+
+    def _find_duplicate_source(self, source: Source, text: str) -> Source | None:
+        for existing in self.source_repository.list_for_project(source.project_id):
+            if existing.id == source.id or existing.status != "ingested" or not existing.normalized_path:
+                continue
+            path = Path(existing.normalized_path)
+            if path.exists() and is_obvious_near_duplicate(text, path.read_text(encoding="utf-8")):
+                return existing
+        return None
 
 
 def _emit_progress(

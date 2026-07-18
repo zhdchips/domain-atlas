@@ -17,10 +17,10 @@
 
 ## Phase 3: Ingestion Quality
 
-- [ ] Exclude HTML chrome from normalized text.
-- [ ] Record local URL quality signals and preserve excluded raw artifacts.
-- [ ] Reject exact/obvious near-duplicate source text before chunk/vector persistence.
-- [ ] Commit ingestion implementation after targeted tests.
+- [x] Exclude HTML chrome from normalized text.
+- [x] Record local URL quality signals and preserve excluded raw artifacts.
+- [x] Reject exact/obvious near-duplicate source text before chunk/vector persistence.
+- [x] Commit ingestion implementation after targeted tests.
 
 ## Phase 4: Regression And Audit
 

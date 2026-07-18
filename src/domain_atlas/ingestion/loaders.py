@@ -138,13 +138,16 @@ class _TextHTMLParser(HTMLParser):
         return " ".join(" ".join(self._text_parts).split())
 
     def handle_starttag(self, tag: str, attrs) -> None:
-        if tag in {"script", "style", "noscript"}:
+        if tag in {"script", "style", "noscript", "nav", "header", "footer", "aside", "form"}:
             self._skip_depth += 1
         if tag == "title":
             self._in_title = True
 
     def handle_endtag(self, tag: str) -> None:
-        if tag in {"script", "style", "noscript"} and self._skip_depth:
+        if (
+            tag in {"script", "style", "noscript", "nav", "header", "footer", "aside", "form"}
+            and self._skip_depth
+        ):
             self._skip_depth -= 1
         if tag == "title":
             self._in_title = False

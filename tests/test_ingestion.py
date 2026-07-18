@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import httpx
 
 from domain_atlas.core.db import initialize_database
@@ -79,7 +81,12 @@ def test_url_ingestion_uses_mock_http_client(tmp_path):
         return httpx.Response(
             200,
             headers={"content-type": "text/html"},
-            text="<html><head><title>Agent Docs</title></head><body><h1>Agents</h1><p>Use tools.</p></body></html>",
+            text=(
+                "<html><head><title>Agent Docs</title></head><body><h1>Agents</h1>"
+                "<p>Agents plan tasks, call tools, inspect evidence, and verify each outcome. "
+                "This documentation explains the lifecycle, constraints, and recovery behavior "
+                "for a reliable agent workflow.</p></body></html>"
+            ),
         )
 
     database_path = tmp_path / "domain_atlas.sqlite3"
@@ -105,7 +112,7 @@ def test_url_ingestion_uses_mock_http_client(tmp_path):
 
     assert updated.status == "ingested"
     assert updated.metadata["title"] == "Agent Docs"
-    assert "Agents Use tools" in chunks[0].text
+    assert "Agents plan tasks" in chunks[0].text
 
 
 def test_url_ingestion_retries_read_failure_without_duplicate_records(tmp_path):
@@ -118,7 +125,13 @@ def test_url_ingestion_retries_read_failure_without_duplicate_records(tmp_path):
         return httpx.Response(
             200,
             headers={"content-type": "text/html"},
-            text="<html><head><title>Agent Docs</title></head><body><p>Use tools.</p></body></html>",
+            text=(
+                "<html><head><title>Agent Docs</title></head><body><p>"
+                "Use tools with explicit plans, inspect returned evidence, and verify every "
+                "result before continuing. This page documents a complete agent workflow, "
+                "including its lifecycle, constraints, recovery behavior, and evidence checks."
+                "</p></body></html>"
+            ),
         )
 
     database_path = tmp_path / "domain_atlas.sqlite3"
@@ -154,6 +167,131 @@ def test_url_ingestion_retries_read_failure_without_duplicate_records(tmp_path):
     assert ChunkRepository(database_path).list_for_source(source.id) == second_chunks
     assert len(first_chunks) == len(second_chunks) == 1
     assert len(vector_index.calls) == 2
+
+
+def test_url_ingestion_excludes_navigation_only_html_and_keeps_artifacts(tmp_path):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/html"},
+            text=(
+                "<html><head><title>Template</title></head><body><nav>Sign in Navigation Menu "
+                "Footer Navigation Cookie Settings</nav><footer>All rights reserved</footer></body></html>"
+            ),
+        )
+
+    database_path = tmp_path / "domain_atlas.sqlite3"
+    initialize_database(database_path)
+    project = DomainProjectRepository(database_path).create(CreateDomainProject(name="LLM Agents"))
+    source_repository = SourceRepository(database_path)
+    source = source_repository.create(
+        CreateSource(project_id=project.id, source_type="url", title="Template", locator="https://example.com")
+    )
+    service = IngestionService(
+        database_path=database_path,
+        data_dir=tmp_path / "data",
+        embedding_provider=FakeEmbeddingProvider(),
+        vector_index=FakeVectorIndex(),
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    try:
+        service.ingest_source(source.id)
+    except ValueError as exc:
+        assert "content quality" in str(exc)
+    else:
+        raise AssertionError("Expected navigation-only page to be excluded.")
+
+    excluded = source_repository.get(source.id)
+    assert excluded is not None
+    assert excluded.status == "excluded"
+    assert excluded.metadata["content_quality"]["accepted"] is False
+    assert Path(excluded.raw_path).exists()
+    assert Path(excluded.normalized_path).exists()
+    assert ChunkRepository(database_path).list_for_source(source.id) == []
+
+
+def test_url_ingestion_ignores_navigation_chrome_when_main_content_is_present(tmp_path):
+    main_text = (
+        "Agent systems should separate plans, tool calls, evidence, verification, retries, and "
+        "human review. This primary content explains how to inspect every operation, preserve "
+        "citations, and recover from failures without allowing page templates to dominate the source."
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/html"},
+            text=(
+                "<html><head><title>Agent Docs</title></head><body>"
+                "<nav>Sign in Navigation Menu Footer Navigation Cookie Settings</nav>"
+                f"<main><h1>Agents</h1><p>{main_text}</p></main>"
+                "<footer>All rights reserved</footer></body></html>"
+            ),
+        )
+
+    database_path = tmp_path / "domain_atlas.sqlite3"
+    initialize_database(database_path)
+    project = DomainProjectRepository(database_path).create(CreateDomainProject(name="LLM Agents"))
+    source = SourceRepository(database_path).create(
+        CreateSource(project_id=project.id, source_type="url", title="Agent Docs", locator="https://example.com/docs")
+    )
+    service = IngestionService(
+        database_path=database_path,
+        data_dir=tmp_path / "data",
+        embedding_provider=FakeEmbeddingProvider(),
+        vector_index=FakeVectorIndex(),
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    _, chunks = service.ingest_source(source.id)
+
+    assert main_text in chunks[0].text
+    assert "Navigation Menu" not in chunks[0].text
+    assert "All rights reserved" not in chunks[0].text
+
+
+def test_url_ingestion_excludes_obvious_duplicate_before_chunks_are_written(tmp_path):
+    body = (
+        "<html><head><title>Agent Docs</title></head><body><main><h1>Agents</h1><p>"
+        "Agents plan tasks, call tools, inspect evidence, and verify each outcome. "
+        "This documentation explains the lifecycle, constraints, and recovery behavior "
+        "for a reliable agent workflow with enough detail to be treated as source material."
+        "</p></main></body></html>"
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, headers={"content-type": "text/html"}, text=body)
+
+    database_path = tmp_path / "domain_atlas.sqlite3"
+    initialize_database(database_path)
+    project = DomainProjectRepository(database_path).create(CreateDomainProject(name="LLM Agents"))
+    source_repository = SourceRepository(database_path)
+    first = source_repository.create(
+        CreateSource(project_id=project.id, source_type="url", title="Agent Docs", locator="https://docs.example.com/a")
+    )
+    second = source_repository.create(
+        CreateSource(project_id=project.id, source_type="url", title="Mirror", locator="https://mirror.example.com/a")
+    )
+    service = IngestionService(
+        database_path=database_path,
+        data_dir=tmp_path / "data",
+        embedding_provider=FakeEmbeddingProvider(),
+        vector_index=FakeVectorIndex(),
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    service.ingest_source(first.id)
+    try:
+        service.ingest_source(second.id)
+    except ValueError as exc:
+        assert "near-duplicate evidence" in str(exc)
+    else:
+        raise AssertionError("Expected duplicate source to be excluded.")
+
+    assert source_repository.get(second.id).status == "excluded"
+    assert ChunkRepository(database_path).list_for_source(second.id) == []
+    assert len(ChunkRepository(database_path).list_for_source(first.id)) == 1
 
 
 def test_url_ingestion_does_not_retry_access_error(tmp_path):
