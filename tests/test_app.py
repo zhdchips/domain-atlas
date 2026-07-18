@@ -5,13 +5,14 @@ import time
 from fastapi.testclient import TestClient
 
 from domain_atlas.core.settings import Settings
+from domain_atlas.core.resilience import ProviderFailure, RetryEvent
 from domain_atlas.discovery.exa import SourceDiscoveryError
 from domain_atlas.domain.projects import CreateDomainProject, DomainProjectRepository
 from domain_atlas.intake.assessment import IntakeAssessment
 from domain_atlas.domain.source_candidates import SourceCandidateDraft
 from domain_atlas.domain.workflow import WorkflowRepository
 from domain_atlas.providers.vector_index import RetrievedChunk, RetrievedWikiSection
-from domain_atlas.web.app import create_app
+from domain_atlas.web.app import _workflow_retry_observer, create_app
 
 
 GUIDE_QUESTIONS = [
@@ -703,6 +704,43 @@ def test_form_error_redirects_to_dashboard_instead_of_exposing_json(tmp_path):
     dashboard = client.get(response.headers["location"])
     assert "搜索候选资料失败：搜索服务暂时不可用" in dashboard.text
     assert '{"detail"' not in dashboard.text
+
+
+def test_workflow_status_renders_provider_retry_recovery_and_safe_terminal_failure(tmp_path):
+    app = create_app(Settings(data_dir=tmp_path))
+    client = TestClient(app)
+    client.post("/domains", data={"name": "LLM Agents"})
+    repository = WorkflowRepository(tmp_path / "domain_atlas.sqlite3")
+    run_id = repository.start_run(1, "source_ingestion")
+    observer = _workflow_retry_observer(repository, run_id)
+    retryable = ProviderFailure(
+        provider="URL 资料",
+        operation="抓取",
+        category="timeout",
+        attempts=1,
+        max_attempts=3,
+        retryable=True,
+    )
+    terminal = ProviderFailure(
+        provider="Embedding",
+        operation="向量化",
+        category="configuration",
+        attempts=1,
+        max_attempts=3,
+        retryable=False,
+    )
+    observer(RetryEvent(phase="retrying", failure=retryable, next_delay_seconds=1.2))
+    observer(RetryEvent(phase="recovered", failure=retryable))
+    observer(RetryEvent(phase="failed", failure=terminal))
+    repository.fail_run(run_id, terminal.safe_message)
+
+    status = client.get("/domains/1/workflow-status")
+
+    assert "正在重试 URL 资料抓取" in status.text
+    assert "URL 资料抓取已在重试后恢复" in status.text
+    assert "Embedding向量化最终失败" in status.text
+    assert "Provider 配置或访问权限" in status.text
+    assert "api_key" not in status.text
 
 
 def test_upload_markdown_and_ingest_from_dashboard(tmp_path):

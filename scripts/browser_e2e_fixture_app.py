@@ -21,12 +21,44 @@ class BrowserAutopilotRunner:
         if run_id is None:
             run_id = repository.start_run(project_id, "guided_autopilot")
         repository.record_step(run_id, step_name="discover_candidates", status="running")
+        repository.record_step(
+            run_id,
+            step_name="provider_retry",
+            status="running",
+            output={
+                "phase": "retrying",
+                "provider": "Exa",
+                "operation": "搜索",
+                "category": "server_error",
+                "attempts": 1,
+                "max_attempts": 3,
+                "retryable": True,
+                "recovery_message": "服务暂时不可用，请稍后重试。",
+                "next_delay_seconds": 0.2,
+            },
+        )
         time.sleep(0.45)
         repository.record_step(
             run_id,
             step_name="discover_candidates",
             status="completed",
             output={"candidate_count": 4},
+        )
+        repository.record_step(
+            run_id,
+            step_name="provider_retry",
+            status="completed",
+            output={
+                "phase": "recovered",
+                "provider": "Exa",
+                "operation": "搜索",
+                "category": "server_error",
+                "attempts": 1,
+                "max_attempts": 3,
+                "retryable": True,
+                "recovery_message": "服务暂时不可用，请稍后重试。",
+                "next_delay_seconds": 0,
+            },
         )
         repository.record_step(
             run_id,

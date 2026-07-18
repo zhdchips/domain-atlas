@@ -138,6 +138,33 @@ def test_exa_provider_reports_connection_error_kind_after_retries():
     try:
         provider.search("LLM Agents", limit=1)
     except SourceDiscoveryError as exc:
-        assert str(exc) == "Exa search connection failed after 2 attempts: ConnectError."
+        assert "Exa搜索网络连接失败" in str(exc)
+        assert "2/2" in str(exc)
+        assert "not-a-real-key" not in str(exc)
     else:
         raise AssertionError("Expected connection failure to be raised.")
+
+
+def test_exa_provider_does_not_retry_configuration_error_or_expose_response_body():
+    calls = {"count": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["count"] += 1
+        return httpx.Response(403, text="secret provider response")
+
+    provider = ExaSearchProvider(
+        api_key="not-a-real-key",
+        max_retries=2,
+        retry_delay_seconds=0,
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    try:
+        provider.search("LLM Agents", limit=1)
+    except SourceDiscoveryError as exc:
+        assert "配置或访问受限" in str(exc)
+        assert "secret provider response" not in str(exc)
+        assert "not-a-real-key" not in str(exc)
+    else:
+        raise AssertionError("Expected configuration failure to be raised.")
+    assert calls["count"] == 1

@@ -20,6 +20,15 @@
               <li class="workflow-step workflow-step-{{ step.status }}">
                 <span>{{ step_labels.get(step.step_name, step.step_name) }}</span>
                 <small>{{ step.status }}</small>
+                {% if step.step_name == 'provider_retry' %}
+                  {% if step.output.get('phase') == 'retrying' %}
+                    <p class="muted">正在重试 {{ step.output.get('provider') }}{{ step.output.get('operation') }}（第 {{ step.output.get('attempts') + 1 }}/{{ step.output.get('max_attempts') }} 次，{{ step.output.get('recovery_message') }}）</p>
+                  {% elif step.output.get('phase') == 'recovered' %}
+                    <p class="muted">{{ step.output.get('provider') }}{{ step.output.get('operation') }}已在重试后恢复。</p>
+                  {% elif step.output.get('phase') == 'failed' %}
+                    <p class="workflow-error">{{ step.output.get('provider') }}{{ step.output.get('operation') }}最终失败：{{ step.output.get('recovery_message') }}</p>
+                  {% endif %}
+                {% endif %}
                 {% if step.output.get('completed') is not none and step.output.get('total') is not none %}
                   <small>{{ step.output.get('completed') }}/{{ step.output.get('total') }}</small>
                   {% if step.output.get('minimum_build_sources') is not none %}

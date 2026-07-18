@@ -10,6 +10,12 @@ from typing import Any
 import httpx
 from pypdf import PdfReader
 
+from domain_atlas.core.resilience import (
+    ProviderRequestError,
+    RetryObserver,
+    RetryPolicy,
+    execute_http_request,
+)
 from domain_atlas.ingestion.chunking import TextSegment
 
 
@@ -23,9 +29,23 @@ class LoadedDocument:
 
 
 class URLLoader:
-    def __init__(self, client: httpx.Client | None = None, timeout_seconds: float = 30.0) -> None:
+    def __init__(
+        self,
+        client: httpx.Client | None = None,
+        timeout_seconds: float = 30.0,
+        max_retries: int = 2,
+        retry_base_delay_seconds: float = 1.0,
+        retry_jitter_seconds: float = 0.2,
+        retry_observer: RetryObserver | None = None,
+    ) -> None:
         self.client = client
-        self.timeout_seconds = timeout_seconds
+        self.retry_policy = RetryPolicy(
+            timeout_seconds=timeout_seconds,
+            max_retries=max(0, max_retries),
+            base_delay_seconds=retry_base_delay_seconds,
+            jitter_seconds=retry_jitter_seconds,
+        )
+        self.retry_observer = retry_observer
 
     def load(self, url: str) -> LoadedDocument:
         headers = {
@@ -37,15 +57,15 @@ class URLLoader:
             "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
         }
         try:
-            if self.client is not None:
-                response = self.client.get(url, timeout=self.timeout_seconds, headers=headers)
-            else:
-                with httpx.Client(timeout=self.timeout_seconds, follow_redirects=True) as client:
-                    response = client.get(url, headers=headers)
-        except httpx.HTTPError as exc:
-            raise ValueError("URL fetch failed.") from exc
-        if response.status_code >= 400:
-            raise ValueError(f"URL fetch failed with HTTP {response.status_code}.")
+            response = execute_http_request(
+                provider="URL 资料",
+                operation="抓取",
+                policy=self.retry_policy,
+                observer=self.retry_observer,
+                send=lambda timeout: self._get(url=url, headers=headers, timeout=timeout),
+            )
+        except ProviderRequestError as exc:
+            raise ValueError(str(exc)) from exc
 
         raw = response.content
         parser = _TextHTMLParser()
@@ -59,6 +79,12 @@ class URLLoader:
             segments=[TextSegment(text=text, metadata={"locator": url})],
             metadata={"content_type": response.headers.get("content-type", ""), "title": title},
         )
+
+    def _get(self, *, url: str, headers: dict[str, str], timeout: float) -> httpx.Response:
+        if self.client is not None:
+            return self.client.get(url, timeout=timeout, headers=headers)
+        with httpx.Client(timeout=timeout, follow_redirects=True) as client:
+            return client.get(url, headers=headers)
 
 
 class MarkdownLoader:

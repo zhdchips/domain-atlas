@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     search_display_results: int = 8
     search_timeout_seconds: float = 30.0
     search_max_retries: int = 2
+    embedding_timeout_seconds: float = 45.0
+    embedding_max_retries: int = 2
+    url_fetch_timeout_seconds: float = 30.0
+    url_fetch_max_retries: int = 2
+    provider_retry_base_delay_seconds: float = 1.0
+    provider_retry_jitter_seconds: float = 0.2
 
     llm_provider: str = "deepseek"
     llm_base_url: str = "https://api.deepseek.com"

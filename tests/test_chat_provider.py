@@ -119,37 +119,63 @@ def test_chat_provider_reports_request_error_kind_after_retries():
     try:
         provider.complete_json(system_prompt="system", user_prompt="user")
     except Exception as exc:
-        assert str(exc) == "Chat completion request failed after 2 attempts: ReadTimeout."
+        assert "LLM生成请求超时" in str(exc)
+        assert "2/2" in str(exc)
+        assert "not-a-real-key" not in str(exc)
     else:
         raise AssertionError("Expected request failure to be raised.")
 
 
-def test_chat_provider_retries_invalid_json_content():
+def test_chat_provider_does_not_retry_invalid_json_content():
     calls = {"count": 0}
 
     def handler(request: httpx.Request) -> httpx.Response:
         calls["count"] += 1
-        body = request.read()
         if calls["count"] == 1:
-            assert b"Your previous response was not parseable JSON" not in body
             return httpx.Response(
                 200,
                 json={"choices": [{"message": {"content": '{"ok": true'}}]},
             )
-        assert b"Your previous response was not parseable JSON" in body
-        return httpx.Response(
-            200,
-            json={"choices": [{"message": {"content": '{"ok": true}'}}]},
-        )
 
     provider = OpenAICompatibleChatProvider(
         api_key="not-a-real-key",
         base_url="https://llm.example.com",
         model="test-chat",
-        json_retries=1,
         retry_delay_seconds=0,
         client=httpx.Client(transport=httpx.MockTransport(handler)),
     )
 
-    assert provider.complete_json(system_prompt="system", user_prompt="user") == {"ok": True}
-    assert calls["count"] == 2
+    try:
+        provider.complete_json(system_prompt="system", user_prompt="user")
+    except Exception as exc:
+        assert "LLM生成返回格式无效" in str(exc)
+    else:
+        raise AssertionError("Expected invalid JSON to fail without retry.")
+    assert calls["count"] == 1
+
+
+def test_chat_provider_does_not_retry_client_error_or_expose_response_body():
+    calls = {"count": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["count"] += 1
+        return httpx.Response(400, text="secret provider response")
+
+    provider = OpenAICompatibleChatProvider(
+        api_key="not-a-real-key",
+        base_url="https://llm.example.com",
+        model="test-chat",
+        max_retries=2,
+        retry_delay_seconds=0,
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    try:
+        provider.complete_json(system_prompt="system", user_prompt="user")
+    except Exception as exc:
+        assert "请求失败" in str(exc)
+        assert "secret provider response" not in str(exc)
+        assert "not-a-real-key" not in str(exc)
+    else:
+        raise AssertionError("Expected client error to fail without retry.")
+    assert calls["count"] == 1

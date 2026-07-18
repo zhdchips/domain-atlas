@@ -9,6 +9,7 @@ from typing import Protocol
 
 import httpx
 
+from domain_atlas.core.resilience import RetryObserver
 from domain_atlas.domain.sources import (
     Chunk,
     ChunkRepository,
@@ -37,6 +38,11 @@ class IngestionService:
         embedding_provider: EmbeddingProvider,
         vector_index: VectorIndex,
         http_client: httpx.Client | None = None,
+        url_fetch_timeout_seconds: float = 30.0,
+        url_fetch_max_retries: int = 2,
+        retry_base_delay_seconds: float = 1.0,
+        retry_jitter_seconds: float = 0.2,
+        retry_observer: RetryObserver | None = None,
     ) -> None:
         self.source_repository = SourceRepository(database_path)
         self.chunk_repository = ChunkRepository(database_path)
@@ -44,6 +50,11 @@ class IngestionService:
         self.embedding_provider = embedding_provider
         self.vector_index = vector_index
         self.http_client = http_client
+        self.url_fetch_timeout_seconds = url_fetch_timeout_seconds
+        self.url_fetch_max_retries = url_fetch_max_retries
+        self.retry_base_delay_seconds = retry_base_delay_seconds
+        self.retry_jitter_seconds = retry_jitter_seconds
+        self.retry_observer = retry_observer
 
     def ingest_source(
         self,
@@ -118,7 +129,14 @@ class IngestionService:
 
     def _load(self, source: Source) -> LoadedDocument:
         if source.source_type == "url":
-            return URLLoader(client=self.http_client).load(source.locator)
+            return URLLoader(
+                client=self.http_client,
+                timeout_seconds=self.url_fetch_timeout_seconds,
+                max_retries=self.url_fetch_max_retries,
+                retry_base_delay_seconds=self.retry_base_delay_seconds,
+                retry_jitter_seconds=self.retry_jitter_seconds,
+                retry_observer=self.retry_observer,
+            ).load(source.locator)
         raw_path = Path(source.raw_path)
         if source.source_type == "markdown":
             return MarkdownLoader().load(raw_path)

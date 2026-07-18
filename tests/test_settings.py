@@ -19,6 +19,8 @@ def test_provider_defaults_match_mvp_contract():
     assert settings.search_provider == "exa"
     assert settings.search_max_results == 12
     assert settings.search_display_results == 8
+    assert settings.search_timeout_seconds == 30.0
+    assert settings.search_max_retries == 2
     assert settings.llm_provider == "deepseek"
     assert settings.chat_model == "deepseek-chat"
     assert settings.chat_max_tokens == 12_000
@@ -27,6 +29,12 @@ def test_provider_defaults_match_mvp_contract():
     assert settings.embedding_provider == "dashscope"
     assert settings.embedding_model == "text-embedding-v4"
     assert settings.embedding_dimensions == 1024
+    assert settings.embedding_timeout_seconds == 45.0
+    assert settings.embedding_max_retries == 2
+    assert settings.url_fetch_timeout_seconds == 30.0
+    assert settings.url_fetch_max_retries == 2
+    assert settings.provider_retry_base_delay_seconds == 1.0
+    assert settings.provider_retry_jitter_seconds == 0.2
 
 
 def test_intake_assessment_is_enabled_by_default_when_not_explicitly_disabled(monkeypatch):

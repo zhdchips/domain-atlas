@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from domain_atlas.core.db import initialize_database
+from domain_atlas.core.resilience import RetryEvent, RetryObserver
 from domain_atlas.core.settings import Settings, get_settings
 from domain_atlas.discovery.exa import ExaSearchProvider, SourceDiscoveryError
 from domain_atlas.domain.artifacts import PAGE_TYPE_ORDER, KnowledgeArtifactRepository
@@ -92,11 +93,16 @@ def create_app(
 
     task_runner = background_runner or BackgroundWorkflowRunner(workflow_repository())
 
-    def source_discovery_provider() -> ExaSearchProvider:
+    def source_discovery_provider(
+        *, retry_observer: RetryObserver | None = None
+    ) -> ExaSearchProvider:
         return discovery_provider or ExaSearchProvider(
             api_key=app_settings.exa_api_key,
             timeout_seconds=app_settings.search_timeout_seconds,
             max_retries=app_settings.search_max_retries,
+            retry_base_delay_seconds=app_settings.provider_retry_base_delay_seconds,
+            retry_jitter_seconds=app_settings.provider_retry_jitter_seconds,
+            retry_observer=retry_observer,
         )
 
     def configured_intake_assessment_provider() -> IntakeAssessmentProvider | None:
@@ -115,12 +121,15 @@ def create_app(
                 model=app_settings.chat_model,
                 max_tokens=900,
                 timeout_seconds=app_settings.intake_llm_timeout_seconds,
-                max_retries=0,
-                json_retries=0,
+                max_retries=app_settings.llm_max_retries,
+                retry_base_delay_seconds=app_settings.provider_retry_base_delay_seconds,
+                retry_jitter_seconds=app_settings.provider_retry_jitter_seconds,
             )
         )
 
-    def knowledge_build_workflow() -> KnowledgeBuildWorkflow:
+    def knowledge_build_workflow(
+        *, retry_observer: RetryObserver | None = None
+    ) -> KnowledgeBuildWorkflow:
         chat = chat_provider or OpenAICompatibleChatProvider(
             api_key=app_settings.llm_api_key,
             base_url=app_settings.llm_base_url,
@@ -128,6 +137,9 @@ def create_app(
             max_tokens=app_settings.chat_max_tokens,
             timeout_seconds=app_settings.llm_timeout_seconds,
             max_retries=app_settings.llm_max_retries,
+            retry_base_delay_seconds=app_settings.provider_retry_base_delay_seconds,
+            retry_jitter_seconds=app_settings.provider_retry_jitter_seconds,
+            retry_observer=retry_observer,
         )
         return KnowledgeBuildWorkflow(
             database_path=app_settings.database_path,
@@ -138,16 +150,28 @@ def create_app(
                 base_url=app_settings.embedding_base_url,
                 model=app_settings.embedding_model,
                 dimensions=app_settings.embedding_dimensions,
+                timeout_seconds=app_settings.embedding_timeout_seconds,
+                max_retries=app_settings.embedding_max_retries,
+                retry_base_delay_seconds=app_settings.provider_retry_base_delay_seconds,
+                retry_jitter_seconds=app_settings.provider_retry_jitter_seconds,
+                retry_observer=retry_observer,
             ),
             vector_index=vector_index or ChromaVectorIndex(app_settings.chroma_path),
         )
 
-    def source_ingestion_service() -> IngestionService:
+    def source_ingestion_service(
+        *, retry_observer: RetryObserver | None = None
+    ) -> IngestionService:
         embedder = embedding_provider or OpenAICompatibleEmbeddingProvider(
             api_key=app_settings.embedding_api_key,
             base_url=app_settings.embedding_base_url,
             model=app_settings.embedding_model,
             dimensions=app_settings.embedding_dimensions,
+            timeout_seconds=app_settings.embedding_timeout_seconds,
+            max_retries=app_settings.embedding_max_retries,
+            retry_base_delay_seconds=app_settings.provider_retry_base_delay_seconds,
+            retry_jitter_seconds=app_settings.provider_retry_jitter_seconds,
+            retry_observer=retry_observer,
         )
         index = vector_index or ChromaVectorIndex(app_settings.chroma_path)
         return IngestionService(
@@ -155,6 +179,11 @@ def create_app(
             data_dir=app_settings.data_dir,
             embedding_provider=embedder,
             vector_index=index,
+            url_fetch_timeout_seconds=app_settings.url_fetch_timeout_seconds,
+            url_fetch_max_retries=app_settings.url_fetch_max_retries,
+            retry_base_delay_seconds=app_settings.provider_retry_base_delay_seconds,
+            retry_jitter_seconds=app_settings.provider_retry_jitter_seconds,
+            retry_observer=retry_observer,
         )
 
     def retrieval_qa_service() -> RetrievalQAService:
@@ -163,6 +192,10 @@ def create_app(
             base_url=app_settings.embedding_base_url,
             model=app_settings.embedding_model,
             dimensions=app_settings.embedding_dimensions,
+            timeout_seconds=app_settings.embedding_timeout_seconds,
+            max_retries=app_settings.embedding_max_retries,
+            retry_base_delay_seconds=app_settings.provider_retry_base_delay_seconds,
+            retry_jitter_seconds=app_settings.provider_retry_jitter_seconds,
         )
         index = vector_index or ChromaVectorIndex(app_settings.chroma_path)
         chat = chat_provider or OpenAICompatibleChatProvider(
@@ -172,6 +205,8 @@ def create_app(
             max_tokens=app_settings.chat_max_tokens,
             timeout_seconds=app_settings.llm_timeout_seconds,
             max_retries=app_settings.llm_max_retries,
+            retry_base_delay_seconds=app_settings.provider_retry_base_delay_seconds,
+            retry_jitter_seconds=app_settings.provider_retry_jitter_seconds,
         )
         return RetrievalQAService(
             database_path=app_settings.database_path,
@@ -180,14 +215,16 @@ def create_app(
             chat_provider=chat,
         )
 
-    def autopilot_workflow() -> AutopilotWorkflow:
+    def autopilot_workflow(
+        *, retry_observer: RetryObserver | None = None
+    ) -> AutopilotWorkflow:
         if autopilot_runner is not None:
             return autopilot_runner
         return AutopilotWorkflow(
             database_path=app_settings.database_path,
-            discovery_provider=source_discovery_provider(),
-            ingestion_runner=source_ingestion_service(),
-            build_runner=knowledge_build_workflow(),
+            discovery_provider=source_discovery_provider(retry_observer=retry_observer),
+            ingestion_runner=source_ingestion_service(retry_observer=retry_observer),
+            build_runner=knowledge_build_workflow(retry_observer=retry_observer),
             search_limit=app_settings.search_max_results,
         )
 
@@ -508,7 +545,12 @@ def create_app(
                 project_id=project_id,
                 workflow_name="source_ingestion",
                 work=lambda run_id: _run_source_ingestion(
-                    source_ingestion_service(), workflow_repository(), source_id, run_id
+                    source_ingestion_service(
+                        retry_observer=_workflow_retry_observer(workflow_repository(), run_id)
+                    ),
+                    workflow_repository(),
+                    source_id,
+                    run_id,
                 ),
             )
         except WorkflowConflictError as exc:
@@ -524,7 +566,9 @@ def create_app(
             task_runner.submit(
                 project_id=project_id,
                 workflow_name="knowledge_build",
-                work=lambda run_id: knowledge_build_workflow().run(project_id, run_id=run_id),
+                work=lambda run_id: knowledge_build_workflow(
+                    retry_observer=_workflow_retry_observer(workflow_repository(), run_id)
+                ).run(project_id, run_id=run_id),
             )
         except WorkflowConflictError as exc:
             return _dashboard_redirect(project_id, error=str(exc))
@@ -539,7 +583,13 @@ def create_app(
             task_runner.submit(
                 project_id=project_id,
                 workflow_name="guided_autopilot",
-                work=lambda run_id: _run_autopilot(autopilot_workflow(), project_id, run_id),
+                work=lambda run_id: _run_autopilot(
+                    autopilot_workflow(
+                        retry_observer=_workflow_retry_observer(workflow_repository(), run_id)
+                    ),
+                    project_id,
+                    run_id,
+                ),
             )
         except WorkflowConflictError as exc:
             return _dashboard_redirect(project_id, error=str(exc))
@@ -736,6 +786,21 @@ def _run_autopilot(workflow: object, project_id: int, run_id: int) -> object:
         return workflow.run(project_id)
 
 
+def _workflow_retry_observer(
+    repository: WorkflowRepository, run_id: int
+) -> RetryObserver:
+    def observe(event: RetryEvent) -> None:
+        repository.record_step(
+            run_id,
+            step_name="provider_retry",
+            status={"retrying": "running", "recovered": "completed", "failed": "failed"}[event.phase],
+            output=event.to_output(),
+            error=event.failure.safe_message if event.phase == "failed" else "",
+        )
+
+    return observe
+
+
 def _workflow_labels() -> dict[str, str]:
     return {
         "guided_autopilot": "一键构建领域地图",
@@ -758,6 +823,7 @@ def _step_labels() -> dict[str, str]:
         "parse": "解析与切分",
         "embed": "生成 Embedding",
         "index": "写入索引",
+        "provider_retry": "外部服务请求",
         "ingest": "完成摄取",
         "workflow": "任务执行",
         "interrupted": "任务中断",

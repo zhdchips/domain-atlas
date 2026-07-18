@@ -575,6 +575,8 @@ def _assert_guided_autopilot_flow(page) -> None:
     page.locator(".workflow-run-active").wait_for(state="visible", timeout=5000)
     if "任务正在执行" not in page.locator("[data-workflow-poll]").inner_text():
         raise RuntimeError("guided workflow did not expose active state")
+    if "正在重试 Exa搜索" not in page.locator("[data-workflow-poll]").inner_text():
+        raise RuntimeError("guided workflow did not expose provider retry state")
     page.wait_for_function(
         "() => document.body.innerText.includes('资料门槛已满足')",
         timeout=8000,
@@ -582,6 +584,8 @@ def _assert_guided_autopilot_flow(page) -> None:
     text = page.locator("[data-workflow-poll]").inner_text()
     if "已成功 2 / 至少 2 份资料" not in text:
         raise RuntimeError("guided workflow did not expose the source success count")
+    if "Exa搜索已在重试后恢复" not in text:
+        raise RuntimeError("guided workflow did not expose provider recovery state")
     print("verified guided browser success workflow")
 
 

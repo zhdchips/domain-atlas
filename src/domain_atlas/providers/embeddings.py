@@ -6,6 +6,14 @@ from typing import Any
 
 import httpx
 
+from domain_atlas.core.resilience import (
+    ProviderRequestError,
+    RetryObserver,
+    RetryPolicy,
+    execute_http_request,
+    invalid_response_failure,
+)
+
 
 class EmbeddingProviderError(Exception):
     """Raised when embedding generation fails."""
@@ -20,6 +28,10 @@ class OpenAICompatibleEmbeddingProvider:
         model: str,
         dimensions: int | None = None,
         timeout_seconds: float = 45.0,
+        max_retries: int = 2,
+        retry_base_delay_seconds: float = 1.0,
+        retry_jitter_seconds: float = 0.2,
+        retry_observer: RetryObserver | None = None,
         max_batch_size: int = 8,
         client: httpx.Client | None = None,
     ) -> None:
@@ -27,7 +39,13 @@ class OpenAICompatibleEmbeddingProvider:
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.dimensions = dimensions
-        self.timeout_seconds = timeout_seconds
+        self.retry_policy = RetryPolicy(
+            timeout_seconds=timeout_seconds,
+            max_retries=max(0, max_retries),
+            base_delay_seconds=retry_base_delay_seconds,
+            jitter_seconds=retry_jitter_seconds,
+        )
+        self.retry_observer = retry_observer
         self.max_batch_size = max(1, max_batch_size)
         self.client = client
 
@@ -49,34 +67,63 @@ class OpenAICompatibleEmbeddingProvider:
         headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
 
         try:
-            if self.client is not None:
-                response = self.client.post(
-                    f"{self.base_url}/embeddings",
-                    headers=headers,
-                    json=body,
-                    timeout=self.timeout_seconds,
-                )
-            else:
-                with httpx.Client(timeout=self.timeout_seconds) as client:
-                    response = client.post(
-                        f"{self.base_url}/embeddings",
-                        headers=headers,
-                        json=body,
-                    )
-        except httpx.HTTPError as exc:
-            raise EmbeddingProviderError("Embedding request failed.") from exc
-
-        if response.status_code >= 400:
-            raise EmbeddingProviderError(f"Embedding request failed with HTTP {response.status_code}.")
+            response = execute_http_request(
+                provider="Embedding",
+                operation="向量化",
+                policy=self.retry_policy,
+                observer=self.retry_observer,
+                send=lambda timeout: self._post(headers=headers, body=body, timeout=timeout),
+            )
+        except ProviderRequestError as exc:
+            raise EmbeddingProviderError(str(exc)) from exc
         try:
             data = response.json()
         except ValueError as exc:
-            raise EmbeddingProviderError("Embedding response was invalid JSON.") from exc
+            raise EmbeddingProviderError(
+                str(
+                    invalid_response_failure(
+                        provider="Embedding", operation="向量化", observer=self.retry_observer
+                    )
+                )
+            ) from exc
 
         rows = data.get("data")
         if not isinstance(rows, list):
-            raise EmbeddingProviderError("Embedding response did not include data rows.")
+            raise EmbeddingProviderError(
+                str(
+                    invalid_response_failure(
+                        provider="Embedding", operation="向量化", observer=self.retry_observer
+                    )
+                )
+            )
         vectors = [row.get("embedding") for row in rows if isinstance(row, dict)]
         if len(vectors) != len(texts) or not all(isinstance(vector, list) for vector in vectors):
-            raise EmbeddingProviderError("Embedding response shape did not match input texts.")
+            raise EmbeddingProviderError(
+                str(
+                    invalid_response_failure(
+                        provider="Embedding", operation="向量化", observer=self.retry_observer
+                    )
+                )
+            )
         return vectors
+
+    def _post(
+        self,
+        *,
+        headers: dict[str, str],
+        body: dict[str, Any],
+        timeout: float,
+    ) -> httpx.Response:
+        if self.client is not None:
+            return self.client.post(
+                f"{self.base_url}/embeddings",
+                headers=headers,
+                json=body,
+                timeout=timeout,
+            )
+        with httpx.Client(timeout=timeout) as client:
+            return client.post(
+                f"{self.base_url}/embeddings",
+                headers=headers,
+                json=body,
+            )

@@ -106,3 +106,90 @@ def test_url_ingestion_uses_mock_http_client(tmp_path):
     assert updated.status == "ingested"
     assert updated.metadata["title"] == "Agent Docs"
     assert "Agents Use tools" in chunks[0].text
+
+
+def test_url_ingestion_retries_read_failure_without_duplicate_records(tmp_path):
+    calls = {"count": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise httpx.ReadTimeout("temporary timeout", request=request)
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/html"},
+            text="<html><head><title>Agent Docs</title></head><body><p>Use tools.</p></body></html>",
+        )
+
+    database_path = tmp_path / "domain_atlas.sqlite3"
+    initialize_database(database_path)
+    project = DomainProjectRepository(database_path).create(CreateDomainProject(name="LLM Agents"))
+    source_repository = SourceRepository(database_path)
+    source = source_repository.create(
+        CreateSource(
+            project_id=project.id,
+            source_type="url",
+            title="Agent Docs",
+            locator="https://docs.example.com/agents",
+        )
+    )
+    vector_index = FakeVectorIndex()
+    service = IngestionService(
+        database_path=database_path,
+        data_dir=tmp_path / "data",
+        embedding_provider=FakeEmbeddingProvider(),
+        vector_index=vector_index,
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+        url_fetch_max_retries=1,
+        retry_base_delay_seconds=0,
+        retry_jitter_seconds=0,
+    )
+
+    updated, first_chunks = service.ingest_source(source.id)
+    _, second_chunks = service.ingest_source(source.id)
+
+    assert updated.status == "ingested"
+    assert calls["count"] == 3
+    assert len(source_repository.list_for_project(project.id)) == 1
+    assert ChunkRepository(database_path).list_for_source(source.id) == second_chunks
+    assert len(first_chunks) == len(second_chunks) == 1
+    assert len(vector_index.calls) == 2
+
+
+def test_url_ingestion_does_not_retry_access_error(tmp_path):
+    calls = {"count": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["count"] += 1
+        return httpx.Response(403, text="secret provider response")
+
+    database_path = tmp_path / "domain_atlas.sqlite3"
+    initialize_database(database_path)
+    project = DomainProjectRepository(database_path).create(CreateDomainProject(name="LLM Agents"))
+    source = SourceRepository(database_path).create(
+        CreateSource(
+            project_id=project.id,
+            source_type="url",
+            title="Agent Docs",
+            locator="https://docs.example.com/agents",
+        )
+    )
+    service = IngestionService(
+        database_path=database_path,
+        data_dir=tmp_path / "data",
+        embedding_provider=FakeEmbeddingProvider(),
+        vector_index=FakeVectorIndex(),
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+        url_fetch_max_retries=2,
+        retry_base_delay_seconds=0,
+        retry_jitter_seconds=0,
+    )
+
+    try:
+        service.ingest_source(source.id)
+    except ValueError as exc:
+        assert "配置或访问受限" in str(exc)
+        assert "secret provider response" not in str(exc)
+    else:
+        raise AssertionError("Expected access failure.")
+    assert calls["count"] == 1
