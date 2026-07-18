@@ -85,7 +85,10 @@ def _run_live_guided_e2e(workdir: Path) -> dict[str, int]:
         workflow_name="guided_autopilot",
         timeout_seconds=720,
     )
-    run = WorkflowRepository(settings.database_path).list_for_project(project.id, limit=1)[0]
+    runs = WorkflowRepository(settings.database_path).list_for_project(project.id, limit=10)
+    run = next((item for item in runs if item.workflow_name == "guided_autopilot"), None)
+    if run is None:
+        raise RuntimeError("guided workflow record was not found after completion")
     ingestion_step = next(
         (
             step
