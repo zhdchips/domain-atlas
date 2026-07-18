@@ -11,7 +11,7 @@
         {% elif run.status == 'running' %}
           <p class="muted">任务正在执行，页面会自动更新进度。</p>
         {% endif %}
-        {% if run.error %}
+        {% if run.error and not run.steps %}
           <p class="workflow-error">{{ run.error }}</p>
         {% endif %}
         {% if run.steps %}
@@ -44,11 +44,17 @@
                 {% elif step.output.get('terminal_reason') == 'evidence_insufficient' %}
                   <p class="workflow-error">{{ step.output.get('recovery_message') }}</p>
                   <small>请从下方候选中手动确认资料，或补充官方帮助页、公告、服务规则。</small>
+                {% elif step.output.get('terminal_reason') == 'cross_region_official_only' %}
+                  <p class="workflow-error">{{ step.output.get('recovery_message') }}</p>
+                  <small>请确认候选资料的地区，或补充当前地区的官方服务入口。</small>
+                {% elif step.output.get('terminal_reason') in ['official_entry_requires_confirmation', 'official_entry_unavailable'] %}
+                  <p class="workflow-error">{{ step.output.get('recovery_message') }}</p>
+                  <small>候选列表已保留官方发现页与目标入口；确认后可按你的判断继续摄取。</small>
                 {% elif step.output.get('terminal_reason') == 'candidates_exhausted' %}
                   <p class="workflow-error">{{ step.output.get('recovery_message') }}</p>
                   <small>已尝试 {{ step.output.get('attempted_count', 0) }} 条，{{ step.output.get('failed_count', 0) }} 条未成功。</small>
                 {% endif %}
-                {% if step.error %}
+                {% if step.error and not step.output.get('terminal_reason') %}
                   <small class="workflow-error">{{ step.error }}</small>
                 {% endif %}
               </li>

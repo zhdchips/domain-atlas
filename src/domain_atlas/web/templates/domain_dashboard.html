@@ -143,6 +143,14 @@
             </small>
             <small>权威性 {{ "%.2f"|format(candidate.authority_score) }} · {{ candidate.authority_reason }}</small>
             <small>来源角色 {{ candidate.metadata.get("source_role", "unverified") }} · 来源族 {{ candidate.metadata.get("source_family", "未识别") }}</small>
+            {% if candidate.metadata.get("source_region") or candidate.metadata.get("target_region") %}
+              <small>资料地区 {{ candidate.metadata.get("source_region") or "未识别" }} · 项目地区 {{ candidate.metadata.get("target_region") or "未指定" }} · 匹配 {{ candidate.metadata.get("region_match", "unknown") }}</small>
+            {% endif %}
+            {% if candidate.metadata.get("official_entry_evidence_type") %}
+              <small>官方入口证据：{{ candidate.metadata.get("official_entry_evidence_type") }} · 地区 {{ candidate.metadata.get("official_entry_region", "未识别") }}</small>
+              <small>发现页 <a href="{{ candidate.metadata.get("official_entry_discovery_url") }}" target="_blank" rel="noreferrer">{{ candidate.metadata.get("official_entry_discovery_url") }}</a></small>
+              <small>目标入口 <a href="{{ candidate.metadata.get("official_entry_target_url") }}" target="_blank" rel="noreferrer">{{ candidate.metadata.get("official_entry_target_url") }}</a></small>
+            {% endif %}
             {% if candidate.metadata.get("selection_reason") %}
               <small>{{ candidate.metadata.get("selection_reason") }}</small>
             {% endif %}

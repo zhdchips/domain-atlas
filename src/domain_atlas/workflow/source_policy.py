@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass, replace
+import re
 from urllib.parse import urlparse, urlunparse
 
 from domain_atlas.domain.source_candidates import SourceCandidateDraft
@@ -60,6 +61,21 @@ TECHNICAL_SCOPE_MARKERS = (
     "开发",
 )
 MIRROR_MARKERS = ("fork", "forked from", "镜像", "转载", "mirror")
+REGION_LABELS = {
+    "CN": ("中国大陆", "中国", "大陆", "广州", "北京", "上海", "深圳", "成都", "中国内地"),
+    "TW": ("台湾", "台灣", "taiwan"),
+    "HK": ("香港", "hong kong"),
+}
+OFFICIAL_PRESENTATION_MARKERS = (
+    "欢迎光临",
+    "歡迎光臨",
+    "官方网站",
+    "官方網站",
+    "official",
+    "about sushiro",
+)
+GENERIC_DOMAIN_LABELS = {"www", "com", "net", "org", "co", "cn", "tw", "hk", "nps"}
+TRADITIONAL_TO_SIMPLIFIED = str.maketrans({"壽": "寿", "臺": "台", "灣": "湾", "廣": "广", "陸": "陆", "國": "国"})
 
 
 @dataclass(frozen=True)
@@ -68,6 +84,7 @@ class SelectionPlan:
     queue: list[SourceCandidateDraft]
     requires_direct_authority: bool
     evidence_insufficient_reason: str = ""
+    terminal_reason: str = ""
 
     @property
     def policy_name(self) -> str:
@@ -77,9 +94,21 @@ class SelectionPlan:
 def assess_candidates(
     scope: str,
     candidates: list[SourceCandidateDraft],
+    *,
+    language: str = "zh",
 ) -> list[SourceCandidateDraft]:
     """Attach stable source role/family explanations without external calls."""
-    assessed = [_assess_candidate(scope, candidate) for candidate in candidates]
+    target_region = infer_target_region(scope, language=language)
+    identity_tokens = _brand_identity_tokens(scope, candidates)
+    assessed = [
+        _assess_candidate(
+            scope,
+            candidate,
+            target_region=target_region,
+            identity_tokens=identity_tokens,
+        )
+        for candidate in candidates
+    ]
     by_family: dict[str, list[SourceCandidateDraft]] = defaultdict(list)
     for candidate in assessed:
         by_family[_metadata_str(candidate, "source_family")].append(candidate)
@@ -109,9 +138,14 @@ def assess_candidates(
     return result
 
 
-def build_selection_plan(scope: str, candidates: list[SourceCandidateDraft]) -> SelectionPlan:
+def build_selection_plan(
+    scope: str,
+    candidates: list[SourceCandidateDraft],
+    *,
+    language: str = "zh",
+) -> SelectionPlan:
     """Choose a guided queue, or fail closed when direct evidence is required."""
-    assessed = assess_candidates(scope, candidates)
+    assessed = assess_candidates(scope, candidates, language=language)
     requires_direct_authority = scope_requires_direct_authority(scope)
     representatives = [
         candidate
@@ -121,17 +155,16 @@ def build_selection_plan(scope: str, candidates: list[SourceCandidateDraft]) -> 
     direct = [
         candidate
         for candidate in representatives
-        if _metadata_str(candidate, "source_role") in DIRECT_AUTHORITY_ROLES
+        if candidate.metadata.get("is_direct_authority") is True
     ]
     if requires_direct_authority and not direct:
+        terminal_reason, reason = _official_evidence_gap(assessed)
         return SelectionPlan(
             assessed=assessed,
             queue=[],
             requires_direct_authority=True,
-            evidence_insufficient_reason=(
-                "该领域涉及品牌或机构服务流程，但未找到可验证的一方或直接权威资料。"
-                "已保留第三方候选供手动确认；请补充官方帮助页、公告、服务规则或可访问的原始资料。"
-            ),
+            evidence_insufficient_reason=reason,
+            terminal_reason=terminal_reason,
         )
 
     eligible = [candidate for candidate in representatives if _is_guided_eligible(scope, candidate)]
@@ -155,15 +188,45 @@ def candidate_metadata(candidate: SourceCandidateDraft) -> dict[str, object]:
     return dict(candidate.metadata)
 
 
-def _assess_candidate(scope: str, candidate: SourceCandidateDraft) -> SourceCandidateDraft:
+def _assess_candidate(
+    scope: str,
+    candidate: SourceCandidateDraft,
+    *,
+    target_region: str,
+    identity_tokens: set[str],
+) -> SourceCandidateDraft:
     metadata = dict(candidate.metadata)
-    role = _source_role(candidate)
+    brand_domain_candidate = _is_brand_domain_candidate(scope, candidate, identity_tokens)
+    role = _source_role(candidate, brand_domain_candidate=brand_domain_candidate)
     family = _source_family(candidate)
-    direct = role in DIRECT_AUTHORITY_ROLES
+    source_region = _source_region(candidate)
+    region_match = _region_match(target_region, source_region)
+    auto_ingestible = metadata.get("auto_ingestible") is not False
+    direct = (
+        role in DIRECT_AUTHORITY_ROLES
+        and region_match != "cross_region"
+        and auto_ingestible
+    )
     technical_scope = not scope_requires_direct_authority(scope) and any(
         marker in scope.lower() for marker in TECHNICAL_SCOPE_MARKERS
     )
-    if role == "repository" and technical_scope:
+    if region_match == "cross_region" and role in DIRECT_AUTHORITY_ROLES:
+        reason = (
+            f"该资料属于 {_region_label(source_region)}官方来源，但当前项目面向"
+            f"{_region_label(target_region)}，不会自动作为本地区服务流程依据。"
+        )
+        warning = "地区不匹配；可作为背景资料手动确认，但不替代本地区官方规则。"
+    elif metadata.get("official_entry_evidence_type"):
+        target = _metadata_str(candidate, "official_entry_target_url")
+        reason = "该入口由品牌官方站点明确链接，可作为地区官方入口证据。"
+        if target:
+            reason += f"目标入口：{target}。"
+        warning = (
+            "该入口为公众号、小程序或其他不可直接抓取服务，需手动确认后再摄取。"
+            if not auto_ingestible
+            else ""
+        )
+    elif role == "repository" and technical_scope:
         reason = "代码仓库与当前开源/工具范围直接相关，可作为主资料候选。"
         warning = ""
     elif role == "repository":
@@ -186,6 +249,11 @@ def _assess_candidate(scope: str, candidate: SourceCandidateDraft) -> SourceCand
             "source_role": role,
             "source_family": family,
             "is_direct_authority": direct,
+            "source_region": source_region,
+            "target_region": target_region,
+            "region_match": region_match,
+            "brand_domain_candidate": brand_domain_candidate,
+            "auto_ingestible": auto_ingestible,
             "selection_reason": reason,
             "manual_warning": warning,
         }
@@ -193,11 +261,15 @@ def _assess_candidate(scope: str, candidate: SourceCandidateDraft) -> SourceCand
     return replace(candidate, metadata=metadata)
 
 
-def _source_role(candidate: SourceCandidateDraft) -> str:
+def _source_role(candidate: SourceCandidateDraft, *, brand_domain_candidate: bool = False) -> str:
     hinted = _metadata_str(candidate, "source_role")
     if hinted in ROLE_ORDER:
         return hinted
     combined = f"{candidate.title} {candidate.snippet}".lower()
+    if _metadata_str(candidate, "official_entry_evidence_type"):
+        return "first_party"
+    if brand_domain_candidate:
+        return "first_party"
     if candidate.source_type == "official_docs":
         return "primary_document"
     if candidate.source_type == "institution":
@@ -236,6 +308,10 @@ def _is_guided_eligible(scope: str, candidate: SourceCandidateDraft) -> bool:
         return False
     if role in {"repository", "community_tool"} and scope_requires_direct_authority(scope):
         return False
+    if candidate.metadata.get("auto_ingestible") is False:
+        return False
+    if candidate.metadata.get("region_match") == "cross_region":
+        return False
     return candidate.authority_score >= 0.5 or role in DIRECT_AUTHORITY_ROLES
 
 
@@ -267,3 +343,138 @@ def _apply_domain_cap(
 def _metadata_str(candidate: SourceCandidateDraft, key: str) -> str:
     value = candidate.metadata.get(key)
     return value.strip() if isinstance(value, str) else ""
+
+
+def infer_target_region(scope: str, *, language: str = "zh") -> str:
+    """Infer a bounded regional target; Chinese-first defaults to mainland China."""
+    normalized = scope.lower()
+    for region in ("TW", "HK", "CN"):
+        if any(marker in normalized for marker in REGION_LABELS[region]):
+            return region
+    return "CN" if language.lower().startswith("zh") else ""
+
+
+def regional_official_query(scope: str, *, language: str = "zh") -> str:
+    """Return one bounded regional query for an official-first evidence gap."""
+    region = infer_target_region(scope, language=language)
+    brand = _comparable_text(_brand_from_scope(scope))
+    if not brand or not region:
+        return ""
+    labels = {"CN": "中国大陆", "TW": "台湾", "HK": "香港"}
+    workflow_term = next((marker for marker in SERVICE_WORKFLOW_MARKERS if marker in scope.lower()), "服务流程")
+    return f"{brand} {labels.get(region, region)} 官方 微信公众号 小程序 服务规则 {workflow_term}"
+
+
+def _official_evidence_gap(candidates: list[SourceCandidateDraft]) -> tuple[str, str]:
+    if any(candidate.metadata.get("official_entry_evidence_type") for candidate in candidates):
+        unavailable = any(
+            candidate.metadata.get("official_entry_verification") == "unavailable"
+            for candidate in candidates
+        )
+        reason = (
+            "已找到品牌官方站点指向的本地区服务入口，但该入口暂时无法自动抓取或验证。"
+            "已保留发现页、目标地址和地区信息；请先手动确认入口，或补充可访问的官方服务规则。"
+        )
+        return ("official_entry_unavailable" if unavailable else "official_entry_requires_confirmation", reason)
+    if any(
+        candidate.metadata.get("region_match") == "cross_region"
+        and candidate.metadata.get("source_role") in DIRECT_AUTHORITY_ROLES
+        for candidate in candidates
+    ):
+        return (
+            "cross_region_official_only",
+            "已找到其他地区的官方资料，但与当前项目地区不匹配，不能自动作为服务流程依据。"
+            "请补充本地区官方帮助页、公告、服务规则或确认可用的地区入口。",
+        )
+    return (
+        "evidence_insufficient",
+        "该领域涉及品牌或机构服务流程，但未找到可验证的一方或直接权威资料。"
+        "已保留第三方候选供手动确认；请补充官方帮助页、公告、服务规则或可访问的原始资料。",
+    )
+
+
+def _brand_identity_tokens(scope: str, candidates: list[SourceCandidateDraft]) -> set[str]:
+    brand = _brand_from_scope(scope)
+    if not brand:
+        return set()
+    tokens: set[str] = set()
+    for candidate in candidates:
+        title = _comparable_text(candidate.title)
+        if brand not in title:
+            continue
+        if not (
+            any(marker in title for marker in OFFICIAL_PRESENTATION_MARKERS)
+            or _source_region(candidate) in {"CN", "TW", "HK"}
+        ):
+            continue
+        tokens.update(_domain_identity_labels(candidate.url))
+    return tokens
+
+
+def _brand_from_scope(scope: str) -> str:
+    normalized = scope.strip()
+    if not normalized:
+        return ""
+    positions = [normalized.lower().find(marker) for marker in SERVICE_WORKFLOW_MARKERS]
+    positions = [position for position in positions if position >= 0]
+    brand = normalized[: min(positions)] if positions else normalized
+    brand = re.sub(r"(?:在线|线下|门店|服务|流程|业务|系统)$", "", brand, flags=re.IGNORECASE)
+    return brand.strip(" -_，,：:")
+
+
+def _is_brand_domain_candidate(
+    scope: str,
+    candidate: SourceCandidateDraft,
+    identity_tokens: set[str],
+) -> bool:
+    if candidate.metadata.get("brand_domain_candidate") is True:
+        return True
+    labels = _domain_identity_labels(candidate.url)
+    if not labels or not identity_tokens.intersection(labels):
+        return False
+    brand = _comparable_text(_brand_from_scope(scope))
+    title = _comparable_text(candidate.title)
+    return bool(brand and (brand in title or any(token in title for token in identity_tokens)))
+
+
+def _domain_identity_labels(url: str) -> set[str]:
+    host = urlparse(url).netloc.lower().split(":", 1)[0].removeprefix("www.")
+    parts = host.split(".")
+    if len(parts) >= 3 and ".".join(parts[-2:]) in {"com.cn", "com.tw", "com.hk", "co.jp"}:
+        parts = parts[-3:]
+    else:
+        parts = parts[-2:]
+    parts = [part for part in parts if part and part not in GENERIC_DOMAIN_LABELS]
+    return {part for part in parts if len(part) >= 4 and part.replace("-", "").isalnum()}
+
+
+def _source_region(candidate: SourceCandidateDraft) -> str:
+    explicit = _metadata_str(candidate, "source_region") or _metadata_str(candidate, "official_entry_region")
+    if explicit:
+        return explicit.upper()
+    host = urlparse(candidate.url).netloc.lower()
+    if host.endswith(".com.cn") or host.endswith(".cn"):
+        return "CN"
+    if host.endswith(".com.tw") or host.endswith(".tw"):
+        return "TW"
+    if host.endswith(".com.hk") or host.endswith(".hk"):
+        return "HK"
+    combined = f"{candidate.title} {candidate.snippet}".lower()
+    for region, markers in REGION_LABELS.items():
+        if any(marker in combined for marker in markers):
+            return region
+    return ""
+
+
+def _region_match(target_region: str, source_region: str) -> str:
+    if not target_region or not source_region:
+        return "unknown"
+    return "match" if target_region == source_region else "cross_region"
+
+
+def _region_label(region: str) -> str:
+    return {"CN": "中国大陆", "TW": "台湾", "HK": "香港"}.get(region, "目标地区")
+
+
+def _comparable_text(value: str) -> str:
+    return value.lower().translate(TRADITIONAL_TO_SIMPLIFIED)

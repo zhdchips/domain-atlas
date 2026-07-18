@@ -16,10 +16,8 @@ from domain_atlas.domain.source_candidates import (
 )
 from domain_atlas.domain.sources import CreateSource, SourceRepository
 from domain_atlas.domain.workflow import WorkflowRepository
-from domain_atlas.workflow.source_policy import (
-    DIRECT_AUTHORITY_ROLES,
-    build_selection_plan,
-)
+from domain_atlas.workflow.source_policy import build_selection_plan, infer_target_region, regional_official_query
+from domain_atlas.workflow.official_entries import HttpOfficialEntryInspector, OfficialEntryInspector
 
 
 PREFERRED_SOURCE_TYPES = {
@@ -193,6 +191,7 @@ class AutopilotWorkflow:
         ingestion_runner: IngestionRunner,
         build_runner: BuildRunner,
         search_limit: int = 12,
+        official_entry_inspector: OfficialEntryInspector | None = None,
     ) -> None:
         self.project_repository = DomainProjectRepository(database_path)
         self.candidate_repository = SourceCandidateRepository(database_path)
@@ -203,6 +202,7 @@ class AutopilotWorkflow:
         self.build_runner = build_runner
         self.search_limit = search_limit
         self.minimum_build_sources = MIN_BUILD_SOURCES
+        self.official_entry_inspector = official_entry_inspector or HttpOfficialEntryInspector()
 
     def run(self, project_id: int, *, run_id: int | None = None) -> AutopilotResult:
         if run_id is None:
@@ -217,12 +217,12 @@ class AutopilotWorkflow:
                 run_id, step_name="discover_candidates", status="running"
             )
             drafts = self.discovery_provider.search(project.effective_scope, limit=self.search_limit)
-            selection_plan = build_selection_plan(project.effective_scope, drafts)
+            selection_plan = build_selection_plan(
+                project.effective_scope, drafts, language=project.language
+            )
             official_search_attempted = False
-            if selection_plan.requires_direct_authority and not any(
-                candidate.metadata.get("source_role") in DIRECT_AUTHORITY_ROLES
-                for candidate in selection_plan.assessed
-            ):
+            regional_search_attempted = False
+            if selection_plan.requires_direct_authority and not _has_direct_authority(selection_plan.assessed):
                 official_search_attempted = True
                 try:
                     focused_drafts = self.discovery_provider.search(
@@ -232,7 +232,43 @@ class AutopilotWorkflow:
                     focused_drafts = []
                 if focused_drafts:
                     drafts = [*drafts, *focused_drafts]
-                    selection_plan = build_selection_plan(project.effective_scope, drafts)
+                    selection_plan = build_selection_plan(
+                        project.effective_scope, drafts, language=project.language
+                    )
+            if selection_plan.requires_direct_authority and not _has_direct_authority(selection_plan.assessed):
+                regional_query = regional_official_query(
+                    project.effective_scope, language=project.language
+                )
+                if regional_query:
+                    regional_search_attempted = True
+                    try:
+                        regional_drafts = self.discovery_provider.search(
+                            regional_query, limit=self.search_limit
+                        )
+                    except Exception:
+                        regional_drafts = []
+                    if regional_drafts:
+                        drafts = [*drafts, *regional_drafts]
+                        selection_plan = build_selection_plan(
+                            project.effective_scope, drafts, language=project.language
+                        )
+            official_entry_count = 0
+            if selection_plan.requires_direct_authority:
+                try:
+                    entry_drafts = self.official_entry_inspector.inspect(
+                        target_region=infer_target_region(
+                            project.effective_scope, language=project.language
+                        ),
+                        candidates=selection_plan.assessed,
+                    )
+                except Exception:
+                    entry_drafts = []
+                if entry_drafts:
+                    official_entry_count = len(entry_drafts)
+                    drafts = [*drafts, *entry_drafts]
+                    selection_plan = build_selection_plan(
+                        project.effective_scope, drafts, language=project.language
+                    )
             persisted = self.candidate_repository.replace_discovered(
                 project_id, selection_plan.assessed
             )
@@ -243,6 +279,8 @@ class AutopilotWorkflow:
                 output={
                     "candidate_count": len(persisted),
                     "official_search_attempted": official_search_attempted,
+                    "regional_search_attempted": regional_search_attempted,
+                    "official_entry_count": official_entry_count,
                 },
             )
 
@@ -268,7 +306,7 @@ class AutopilotWorkflow:
                     step_name="select_candidates",
                     status="failed",
                     output={
-                        "terminal_reason": "evidence_insufficient",
+                        "terminal_reason": selection_plan.terminal_reason or "evidence_insufficient",
                         "policy": selection_plan.policy_name,
                         "requires_direct_authority": selection_plan.requires_direct_authority,
                         "candidate_count": len(persisted),
@@ -478,6 +516,18 @@ class AutopilotWorkflow:
                     "source_role": candidate.metadata.get("source_role", "unverified"),
                     "source_family": _candidate_family(candidate),
                     "selection_reason": candidate.metadata.get("selection_reason", ""),
+                    "source_region": candidate.metadata.get("source_region", ""),
+                    "target_region": candidate.metadata.get("target_region", ""),
+                    "region_match": candidate.metadata.get("region_match", "unknown"),
+                    "official_entry_evidence_type": candidate.metadata.get(
+                        "official_entry_evidence_type", ""
+                    ),
+                    "official_entry_discovery_url": candidate.metadata.get(
+                        "official_entry_discovery_url", ""
+                    ),
+                    "official_entry_target_url": candidate.metadata.get(
+                        "official_entry_target_url", ""
+                    ),
                     "auto_accepted": True,
                 },
             )
@@ -494,6 +544,10 @@ def _candidate_family(candidate: SourceCandidate | SourceCandidateDraft) -> str:
     if isinstance(family, str) and family:
         return family
     return candidate.url.rstrip("/").lower()
+
+
+def _has_direct_authority(candidates: list[SourceCandidateDraft]) -> bool:
+    return any(candidate.metadata.get("is_direct_authority") is True for candidate in candidates)
 
 
 def _official_source_query(scope: str) -> str:

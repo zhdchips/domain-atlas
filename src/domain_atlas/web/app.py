@@ -608,6 +608,18 @@ def create_app(
                     "source_family": candidate.metadata.get("source_family", candidate.url),
                     "selection_reason": candidate.metadata.get("selection_reason", ""),
                     "manual_warning": candidate.metadata.get("manual_warning", ""),
+                    "source_region": candidate.metadata.get("source_region", ""),
+                    "target_region": candidate.metadata.get("target_region", ""),
+                    "region_match": candidate.metadata.get("region_match", "unknown"),
+                    "official_entry_evidence_type": candidate.metadata.get(
+                        "official_entry_evidence_type", ""
+                    ),
+                    "official_entry_discovery_url": candidate.metadata.get(
+                        "official_entry_discovery_url", ""
+                    ),
+                    "official_entry_target_url": candidate.metadata.get(
+                        "official_entry_target_url", ""
+                    ),
                     "manual_override": True,
                 },
             )
