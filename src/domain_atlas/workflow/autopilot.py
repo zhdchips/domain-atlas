@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Protocol
 from urllib.parse import urlparse
@@ -265,7 +265,11 @@ class AutopilotWorkflow:
                     entry_drafts = []
                 if entry_drafts:
                     official_entry_count = len(entry_drafts)
-                    drafts = [*drafts, *entry_drafts]
+                    drafts = [
+                        _mark_discovery_as_entry_only(candidate, entry_drafts)
+                        for candidate in drafts
+                    ]
+                    drafts.extend(entry_drafts)
                     selection_plan = build_selection_plan(
                         project.effective_scope, drafts, language=project.language
                     )
@@ -548,6 +552,37 @@ def _candidate_family(candidate: SourceCandidate | SourceCandidateDraft) -> str:
 
 def _has_direct_authority(candidates: list[SourceCandidateDraft]) -> bool:
     return any(candidate.metadata.get("is_direct_authority") is True for candidate in candidates)
+
+
+def _mark_discovery_as_entry_only(
+    candidate: SourceCandidateDraft,
+    entries: list[SourceCandidateDraft],
+) -> SourceCandidateDraft:
+    """Do not ingest a brand landing page as if it documented its linked service flow."""
+    matching = [
+        entry
+        for entry in entries
+        if entry.metadata.get("official_entry_discovery_url") == candidate.url
+        and entry.metadata.get("auto_ingestible") is False
+    ]
+    if not matching:
+        return candidate
+    entry = matching[0]
+    metadata = dict(candidate.metadata)
+    metadata.update(
+        {
+            "official_entry_evidence_type": "official_regional_entry_discovery",
+            "official_entry_discovery_url": candidate.url,
+            "official_entry_target_url": entry.url,
+            "official_entry_target_label": entry.metadata.get("official_entry_target_label", ""),
+            "official_entry_region": entry.metadata.get("official_entry_region", ""),
+            "official_entry_verification": entry.metadata.get(
+                "official_entry_verification", "requires_manual_confirmation"
+            ),
+            "auto_ingestible": False,
+        }
+    )
+    return replace(candidate, metadata=metadata)
 
 
 def _official_source_query(scope: str) -> str:

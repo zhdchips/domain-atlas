@@ -16,6 +16,15 @@
 ## Phase 3: UX And Regression
 
 - [x] Render provenance and distinct recovery feedback without duplicate errors.
-- [ ] Add deterministic unit/E2E/browser coverage for all required scenarios.
-- [ ] Run regression suite and isolated live compatibility check.
-- [ ] Commit verification phase.
+- [x] Add deterministic unit/E2E/browser coverage for all required scenarios.
+- [x] Run regression suite and isolated live compatibility check.
+- [x] Commit verification phase.
+
+## Verification Record
+
+- `uv run python scripts/regression.py --fast`: passed, 136 pytest cases plus the 13-case offline intake evaluation.
+- `uv run python scripts/regression.py --e2e`: passed, including the mainland official-entry confirmation flow.
+- `uv run python scripts/regression.py --golden-demo-eval`: passed, 25/25.
+- `uv run python scripts/regression.py --browser-e2e`: passed, including official-entry provenance and single-error rendering.
+- `uv run python scripts/regression.py --live-guided-e2e`: isolated provider run exited and removed its temporary directory through the script's success path. The desktop runner did not relay the final summary line, so no exact cost/time/candidate count is recorded.
+- Read-only live `寿司郎在线取号流程` discovery diagnosis: the bounded regional query returned the operator's Simplified-Chinese site and its Guangzhou WeChat entry; the final policy had 37 candidates, 1 official entry, an empty automatic queue, and `official_entry_requires_confirmation`.

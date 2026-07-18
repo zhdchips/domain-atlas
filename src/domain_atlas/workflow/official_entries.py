@@ -61,7 +61,7 @@ class HttpOfficialEntryInspector:
                 target_region_for_link = _link_region(anchor, target_url)
                 if target_region_for_link != target_region or target_url in seen_targets:
                     continue
-                if not _is_supported_entry_target(target_url):
+                if not _is_supported_entry_target(candidate.url, target_url):
                     continue
                 seen_targets.add(target_url)
                 entries.append(_entry_draft(candidate, target_url, anchor, target_region))
@@ -130,14 +130,25 @@ def _entry_draft(
     )
 
 
-def _is_supported_entry_target(url: str) -> bool:
-    parsed = urlparse(url)
-    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+def _is_supported_entry_target(discovery_url: str, target_url: str) -> bool:
+    parsed = urlparse(target_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return False
+    if _is_social_or_app_target(target_url):
+        return True
+    return _registrable_domain(discovery_url) == _registrable_domain(target_url)
 
 
 def _is_social_or_app_target(url: str) -> bool:
     host = urlparse(url).netloc.lower()
     return any(marker in host for marker in ("weixin.qq.com", "weixin", "wechat", "douyin", "xiaohongshu"))
+
+
+def _registrable_domain(url: str) -> str:
+    parts = urlparse(url).netloc.lower().split(":", 1)[0].removeprefix("www.").split(".")
+    if len(parts) >= 3 and ".".join(parts[-2:]) in {"com.cn", "com.tw", "com.hk", "co.jp"}:
+        return ".".join(parts[-3:])
+    return ".".join(parts[-2:])
 
 
 def _link_region(anchor: _Anchor, url: str) -> str:

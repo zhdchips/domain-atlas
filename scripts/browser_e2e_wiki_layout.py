@@ -47,6 +47,7 @@ def main() -> int:
             mobile_intake_project_id,
             exhaustion_project_id,
             evidence_insufficient_project_id,
+            official_entry_project_id,
         ) = _create_wiki_fixture(settings)
         port = _free_port()
         server = _start_server(data_dir=data_dir, port=port)
@@ -71,6 +72,8 @@ def main() -> int:
             _assert_guided_exhaustion_feedback(page)
             page.goto(f"{base_url}/domains/{evidence_insufficient_project_id}", wait_until="networkidle")
             _assert_evidence_insufficient_feedback(page)
+            page.goto(f"{base_url}/domains/{official_entry_project_id}", wait_until="networkidle")
+            _assert_official_entry_feedback(page)
             page.goto(f"{base_url}/domains/{llm_intake_project_id}/intake", wait_until="networkidle")
             _assert_llm_enhanced_intake(page)
             page.goto(f"{base_url}/", wait_until="networkidle")
@@ -98,7 +101,7 @@ def main() -> int:
     return 0
 
 
-def _create_wiki_fixture(settings: Settings) -> tuple[int, int, int, int, int]:
+def _create_wiki_fixture(settings: Settings) -> tuple[int, int, int, int, int, int]:
     initialize_database(settings.database_path)
     project = DomainProjectRepository(settings.database_path).create(
         CreateDomainProject(
@@ -264,7 +267,62 @@ def _create_wiki_fixture(settings: Settings) -> tuple[int, int, int, int, int]:
         error=evidence_message,
     )
     workflow_repository.fail_run(evidence_run_id, evidence_message)
-    return project.id, llm_project.id, mobile_llm_project.id, exhausted_project.id, evidence_project.id
+    entry_project = DomainProjectRepository(settings.database_path).create(
+        CreateDomainProject(name="寿司郎取号入口", scope="寿司郎在线取号流程", interaction_mode="guided")
+    )
+    entry_url = "https://mp.weixin.qq.com/s/sushiro-guangzhou"
+    SourceCandidateRepository(settings.database_path).replace_discovered(
+        entry_project.id,
+        [
+            SourceCandidateDraft(
+                provider="official_entry",
+                provider_source_id="sushiro-guangzhou",
+                title="广州寿司郎官方服务入口",
+                url=entry_url,
+                snippet="由官方简体中文站的广州入口链接发现。",
+                source_type="web",
+                authority_score=0.8,
+                authority_reason="品牌官方站点的地区入口链接",
+                metadata={
+                    "source_role": "first_party",
+                    "source_family": "official-entry:sushiro-cn->mp.weixin.qq.com",
+                    "source_region": "CN",
+                    "target_region": "CN",
+                    "region_match": "match",
+                    "official_entry_evidence_type": "official_regional_link",
+                    "official_entry_region": "CN",
+                    "official_entry_discovery_url": "https://www.akindo-sushiro.co.jp/cn/",
+                    "official_entry_target_url": entry_url,
+                    "selection_reason": "该入口由品牌官方站点明确链接，可作为地区官方入口证据。",
+                    "manual_warning": "该入口为公众号、小程序或其他不可直接抓取服务，需手动确认后再摄取。",
+                },
+            )
+        ],
+    )
+    entry_run_id = workflow_repository.start_run(entry_project.id, "guided_autopilot")
+    entry_message = "已找到品牌官方站点指向的本地区服务入口，但该入口暂时无法自动抓取或验证。"
+    workflow_repository.record_step(
+        entry_run_id,
+        step_name="select_candidates",
+        status="failed",
+        output={
+            "terminal_reason": "official_entry_requires_confirmation",
+            "policy": "official_first",
+            "requires_direct_authority": True,
+            "candidate_count": 1,
+            "recovery_message": entry_message,
+        },
+        error=entry_message,
+    )
+    workflow_repository.fail_run(entry_run_id, entry_message)
+    return (
+        project.id,
+        llm_project.id,
+        mobile_llm_project.id,
+        exhausted_project.id,
+        evidence_project.id,
+        entry_project.id,
+    )
 
 
 def _create_llm_intake_fixture(settings: Settings, *, name: str):
@@ -708,6 +766,22 @@ def _assert_evidence_insufficient_feedback(page) -> None:
     if page.locator("form[action*='/candidates/'][action$='/confirm']").count() != 1:
         raise RuntimeError("manual confirmation path is missing for supplemental evidence")
     print("verified guided evidence-insufficient feedback and manual path")
+
+
+def _assert_official_entry_feedback(page) -> None:
+    body = page.locator("body").inner_text()
+    message = "已找到品牌官方站点指向的本地区服务入口"
+    if body.count(message) != 1:
+        raise RuntimeError("official-entry recovery message is duplicated or missing")
+    if "官方入口证据：official_regional_link" not in body:
+        raise RuntimeError("official-entry provenance is missing")
+    if "https://www.akindo-sushiro.co.jp/cn/" not in body:
+        raise RuntimeError("official discovery page is missing")
+    if "https://mp.weixin.qq.com/s/sushiro-guangzhou" not in body:
+        raise RuntimeError("official entry target is missing")
+    if page.locator("form[action*='/candidates/'][action$='/confirm']").count() != 1:
+        raise RuntimeError("official entry manual confirmation path is missing")
+    print("verified regional official-entry provenance and single recovery feedback")
 
 
 def _assert_llm_enhanced_intake(page) -> None:

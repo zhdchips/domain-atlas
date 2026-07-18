@@ -73,6 +73,10 @@ OFFICIAL_PRESENTATION_MARKERS = (
     "官方網站",
     "official",
     "about sushiro",
+    "官网",
+    "官網",
+    "首页",
+    "首頁",
 )
 GENERIC_DOMAIN_LABELS = {"www", "com", "net", "org", "co", "cn", "tw", "hk", "nps"}
 TRADITIONAL_TO_SIMPLIFIED = str.maketrans({"壽": "寿", "臺": "台", "灣": "湾", "廣": "广", "陸": "陆", "國": "国"})
@@ -362,7 +366,12 @@ def regional_official_query(scope: str, *, language: str = "zh") -> str:
         return ""
     labels = {"CN": "中国大陆", "TW": "台湾", "HK": "香港"}
     workflow_term = next((marker for marker in SERVICE_WORKFLOW_MARKERS if marker in scope.lower()), "服务流程")
-    return f"{brand} {labels.get(region, region)} 官方 微信公众号 小程序 服务规则 {workflow_term}"
+    locale_hint = "简体中文" if region == "CN" else ""
+    place_hint = "门店" if workflow_term in {"取号", "排队", "预约", "就餐"} else "服务"
+    return (
+        f"{brand} {labels.get(region, region)} 官方 {locale_hint} {place_hint} "
+        f"微信公众号 小程序 {workflow_term}"
+    ).strip()
 
 
 def _official_evidence_gap(candidates: list[SourceCandidateDraft]) -> tuple[str, str]:
@@ -402,10 +411,7 @@ def _brand_identity_tokens(scope: str, candidates: list[SourceCandidateDraft]) -
         title = _comparable_text(candidate.title)
         if brand not in title:
             continue
-        if not (
-            any(marker in title for marker in OFFICIAL_PRESENTATION_MARKERS)
-            or _source_region(candidate) in {"CN", "TW", "HK"}
-        ):
+        if not any(marker in title for marker in OFFICIAL_PRESENTATION_MARKERS):
             continue
         tokens.update(_domain_identity_labels(candidate.url))
     return tokens
@@ -445,24 +451,38 @@ def _domain_identity_labels(url: str) -> set[str]:
     else:
         parts = parts[-2:]
     parts = [part for part in parts if part and part not in GENERIC_DOMAIN_LABELS]
-    return {part for part in parts if len(part) >= 4 and part.replace("-", "").isalnum()}
+    labels = {part for part in parts if len(part) >= 4 and part.replace("-", "").isalnum()}
+    labels.update(
+        token
+        for part in parts
+        for token in part.split("-")
+        if len(token) >= 4 and token.isalnum() and token not in GENERIC_DOMAIN_LABELS
+    )
+    return labels
 
 
 def _source_region(candidate: SourceCandidateDraft) -> str:
     explicit = _metadata_str(candidate, "source_region") or _metadata_str(candidate, "official_entry_region")
     if explicit:
         return explicit.upper()
-    host = urlparse(candidate.url).netloc.lower()
+    domain_region = _country_domain_region(candidate.url)
+    if domain_region:
+        return domain_region
+    combined = f"{candidate.title} {candidate.snippet}".lower()
+    for region, markers in REGION_LABELS.items():
+        if any(marker in combined for marker in markers):
+            return region
+    return ""
+
+
+def _country_domain_region(url: str) -> str:
+    host = urlparse(url).netloc.lower().split(":", 1)[0]
     if host.endswith(".com.cn") or host.endswith(".cn"):
         return "CN"
     if host.endswith(".com.tw") or host.endswith(".tw"):
         return "TW"
     if host.endswith(".com.hk") or host.endswith(".hk"):
         return "HK"
-    combined = f"{candidate.title} {candidate.snippet}".lower()
-    for region, markers in REGION_LABELS.items():
-        if any(marker in combined for marker in markers):
-            return region
     return ""
 
 
