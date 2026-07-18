@@ -90,7 +90,7 @@ def assess_candidates(
         # Discovery order is the provider's strongest available tie-breaker. Keeping
         # it avoids preferring a fork solely because its account name sorts earlier.
         representative = by_family[family][0]
-        if candidate.provider_source_id != representative.provider_source_id:
+        if candidate is not representative:
             metadata = dict(candidate.metadata)
             metadata.update(
                 {

@@ -60,6 +60,16 @@ def test_direct_document_and_institution_are_independent_guided_evidence():
     assert [candidate.provider_source_id for candidate in plan.queue] == ["official", "institution"]
 
 
+def test_repeated_discovery_result_does_not_create_a_second_evidence_family():
+    original = _draft("docs", "https://docs.example.com/guide", "official_docs", 0.8)
+    repeated = _draft("docs", "https://docs.example.com/guide", "official_docs", 0.8)
+
+    plan = build_selection_plan("某平台服务流程", [original, repeated])
+
+    assert len(plan.queue) == 1
+    assert plan.assessed[1].metadata["source_role"] == "mirror_or_fork"
+
+
 def _draft(
     provider_source_id: str,
     url: str,
