@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="intro">
+  <p class="eyebrow">Public Read-Only Demo</p>
+  <h1>{{ project.name }}</h1>
+  <p>{{ project.goal }}</p>
+</section>
+
+<section class="notice notice-success" role="status">
+  这是预构建的公开只读演示：不创建项目、不抓取资料、不上传文件，也不调用 Exa、LLM 或 Embedding Provider。
+</section>
+
+<section class="status-grid">
+  <div class="metric"><span>模式</span><strong>read-only</strong></div>
+  <div class="metric"><span>权威来源</span><strong>{{ sources|length }}</strong></div>
+  <div class="metric"><span>Wiki 页面</span><strong>{{ pages|length }}</strong></div>
+  <div class="metric"><span>学习章节</span><strong>{{ modules|length }}</strong></div>
+  <div class="metric"><span>引用问答</span><strong>{{ qa_records|length }}</strong></div>
+</section>
+
+<section class="workflow-grid">
+  <a class="workflow-item" href="/demo/wiki"><strong>LLM Wiki</strong><span>查看结构化页面、概念关系与 citations。</span></a>
+  <a class="workflow-item" href="/demo/path"><strong>学习路线</strong><span>从核心机制进入五阶段课程与实践。</span></a>
+  <a class="workflow-item" href="/demo/qa"><strong>带引用问答</strong><span>阅读预生成问题、答案和证据 provenance。</span></a>
+</section>
+
+<section id="sources" class="panel">
+  <p class="eyebrow">证据层</p>
+  <h2>精选公开来源与 provenance</h2>
+  <div class="source-list">
+    {% for source in sources %}
+      <article class="source-item">
+        <div>
+          <strong>{{ source.title }}</strong>
+          <p><a href="{{ source.url }}" target="_blank" rel="noreferrer">{{ source.publisher }}</a></p>
+          <small>类型 {{ source.source_type }} · Citations: {{ ", ".join(source.citations) }}</small>
+          <p>{{ source.coverage }}</p>
+        </div>
+      </article>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

@@ -16,6 +16,7 @@ def test_settings_paths_are_under_data_dir(tmp_path):
 def test_provider_defaults_match_mvp_contract():
     settings = Settings()
 
+    assert settings.public_demo_mode is False
     assert settings.search_provider == "exa"
     assert settings.search_max_results == 12
     assert settings.search_display_results == 8

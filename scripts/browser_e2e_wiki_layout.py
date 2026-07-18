@@ -349,6 +349,7 @@ def _page(page_type: str, path: str, title: str, summary: str) -> dict[str, Any]
 def _start_server(*, data_dir: Path, port: int) -> subprocess.Popen[str]:
     env = os.environ.copy()
     env["DATA_DIR"] = str(data_dir)
+    env["PUBLIC_DEMO_MODE"] = "false"
     env["INTAKE_LLM_ASSESSMENT_ENABLED"] = "false"
     return subprocess.Popen(
         [

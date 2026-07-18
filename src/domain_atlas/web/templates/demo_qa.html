@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="intro">
+  <p class="eyebrow">Cited QA Examples</p>
+  <h1>{{ project.name }}</h1>
+  <p>以下答案由 Demo catalog 预生成，仅用于展示 Wiki-first 证据链；此页面不接受匿名提问。</p>
+</section>
+
+<section class="notice notice-success" role="status">
+  公开 Demo 不调用模型。自由问答将在未来有额度、隔离与访问控制后另行开放。
+</section>
+
+<section class="artifact-list">
+  {% for record in records %}
+    <article class="panel">
+      <p class="eyebrow">{{ record.evidence_status }}</p>
+      <h2>{{ record.question }}</h2>
+      <p>{{ record.answer }}</p>
+      <p class="muted">Wiki citations: {{ ", ".join(record.citations) }}</p>
+      <p class="muted">Source provenance: {{ ", ".join(record.source_provenance) }}</p>
+    </article>
+  {% endfor %}
+</section>
+{% endblock %}

@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     app_name: str = "Domain Atlas"
     default_language: str = "zh"
     data_dir: Path = Path("data")
+    public_demo_mode: bool = False
 
     search_provider: str = "exa"
     exa_api_key: str = ""

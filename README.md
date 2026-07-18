@@ -35,6 +35,24 @@ uv sync --extra dev --index-url https://pypi.tuna.tsinghua.edu.cn/simple
 
 Then open `http://127.0.0.1:8000`.
 
+## Public Read-Only Demo
+
+For a portfolio deployment that must not access local project data or call external providers, run:
+
+```bash
+PUBLIC_DEMO_MODE=true uv run uvicorn domain_atlas.web.app:create_app --factory
+```
+
+Open `http://127.0.0.1:8000/demo`. This mode serves a version-controlled,
+prebuilt `Agent Harness Engineering` catalog with source provenance, Wiki,
+learning path, and cited QA examples. It does not initialize runtime data,
+read local projects, accept writes, or call Exa, LLM, embedding, or URL-fetch
+providers. Normal project routes and POST requests return `404`.
+
+This is not an anonymous trial mode. Any future writable deployment requires a
+separate security design for SSRF protection, upload constraints, rate limits,
+quotas, concurrency controls, authentication, and tenant isolation.
+
 ## Configuration
 
 Copy `.env.example` to `.env` and fill local secrets:
@@ -42,6 +60,7 @@ Copy `.env.example` to `.env` and fill local secrets:
 - `EXA_API_KEY` for Exa search.
 - `LLM_BASE_URL`, `LLM_API_KEY`, and `CHAT_MODEL` for the OpenAI-compatible chat provider.
 - `EMBEDDING_BASE_URL`, `EMBEDDING_API_KEY`, `EMBEDDING_MODEL`, and `EMBEDDING_DIMENSIONS` for the OpenAI-compatible embedding provider.
+- `PUBLIC_DEMO_MODE=true` for the zero-provider, in-memory public portfolio Demo.
 
 Secrets belong in an ignored `.env` file. Runtime data belongs under `data/`.
 

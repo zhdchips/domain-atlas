@@ -57,7 +57,13 @@ def main() -> int:
         return _run("live-e2e", [sys.executable, "scripts/live_e2e_domain_build.py"])
     if args.live_guided_e2e:
         return _run("live-guided-e2e", [sys.executable, "scripts/live_guided_e2e.py"])
-    return _run("browser-e2e", [sys.executable, "scripts/browser_e2e_wiki_layout.py"])
+    return _run_many(
+        "browser-e2e",
+        [
+            [sys.executable, "scripts/browser_e2e_wiki_layout.py"],
+            [sys.executable, "scripts/browser_e2e_public_demo.py"],
+        ],
+    )
 
 
 def _run(layer: str, command: list[str]) -> int:

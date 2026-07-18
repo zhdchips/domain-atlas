@@ -8,13 +8,14 @@ from typing import Any
 from urllib.parse import urlencode
 
 from fastapi import FastAPI, Form, HTTPException, Request, UploadFile, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from domain_atlas.core.db import initialize_database
 from domain_atlas.core.resilience import RetryEvent, RetryObserver
 from domain_atlas.core.settings import Settings, get_settings
+from domain_atlas.demo.catalog import PublicDemoCatalog, public_demo_catalog
 from domain_atlas.discovery.exa import ExaSearchProvider, SourceDiscoveryError
 from domain_atlas.domain.artifacts import PAGE_TYPE_ORDER, KnowledgeArtifactRepository
 from domain_atlas.domain.projects import CreateDomainProject, DomainProjectRepository
@@ -63,12 +64,31 @@ def create_app(
 ) -> FastAPI:
     """Create the Domain Atlas web app."""
     app_settings = settings or get_settings()
-    initialize_database(app_settings.database_path)
+    if not app_settings.public_demo_mode:
+        initialize_database(app_settings.database_path)
 
     app = FastAPI(title=app_settings.app_name)
     app.state.settings = app_settings
     app.mount("/static", static_files, name="static")
-    WorkflowRepository(app_settings.database_path).interrupt_active_runs()
+    demo_catalog: PublicDemoCatalog | None = (
+        public_demo_catalog() if app_settings.public_demo_mode else None
+    )
+    if not app_settings.public_demo_mode:
+        WorkflowRepository(app_settings.database_path).interrupt_active_runs()
+
+    @app.middleware("http")
+    async def public_demo_allowlist(request: Request, call_next):
+        if not app_settings.public_demo_mode:
+            return await call_next(request)
+        path = request.url.path
+        is_read_method = request.method in {"GET", "HEAD"}
+        if is_read_method and (
+            path in {"/", "/health", "/demo"}
+            or path.startswith("/demo/")
+            or path.startswith("/static/")
+        ):
+            return await call_next(request)
+        return PlainTextResponse("Not found.", status_code=status.HTTP_404_NOT_FOUND)
 
     def project_repository() -> DomainProjectRepository:
         return DomainProjectRepository(app_settings.database_path)
@@ -234,6 +254,8 @@ def create_app(
 
     @app.get("/", response_class=HTMLResponse)
     def home(request: Request) -> HTMLResponse:
+        if app_settings.public_demo_mode:
+            return RedirectResponse(url="/demo", status_code=status.HTTP_307_TEMPORARY_REDIRECT)
         projects = project_repository().list_recent()
         return templates.TemplateResponse(
             request,
@@ -242,6 +264,86 @@ def create_app(
                 "app_name": app_settings.app_name,
                 "projects": projects,
                 "default_language": app_settings.default_language,
+            },
+        )
+
+    @app.get("/demo", response_class=HTMLResponse)
+    def public_demo_dashboard(request: Request) -> HTMLResponse:
+        demo = _require_public_demo(demo_catalog)
+        return templates.TemplateResponse(
+            request,
+            "demo_dashboard.html",
+            {
+                "app_name": app_settings.app_name,
+                "home_href": "/demo",
+                "nav_label": "公开 Demo",
+                "project": demo.project,
+                "sources": demo.sources,
+                "pages": demo.pages,
+                "modules": demo.modules,
+                "qa_records": demo.qa_records,
+            },
+        )
+
+    @app.get("/demo/wiki", response_class=HTMLResponse)
+    def public_demo_wiki(request: Request) -> HTMLResponse:
+        return _public_demo_wiki_response(
+            request=request,
+            app_name=app_settings.app_name,
+            catalog=demo_catalog,
+            page_path="index",
+        )
+
+    @app.get("/demo/wiki/{page_path:path}", response_class=HTMLResponse)
+    def public_demo_wiki_page(request: Request, page_path: str) -> HTMLResponse:
+        return _public_demo_wiki_response(
+            request=request,
+            app_name=app_settings.app_name,
+            catalog=demo_catalog,
+            page_path=page_path,
+        )
+
+    @app.get("/demo/path", response_class=HTMLResponse)
+    def public_demo_learning_path(request: Request) -> HTMLResponse:
+        demo = _require_public_demo(demo_catalog)
+        return templates.TemplateResponse(
+            request,
+            "learning_path.html",
+            {
+                "app_name": app_settings.app_name,
+                "home_href": "/demo",
+                "nav_label": "公开 Demo",
+                "project": demo.project,
+                "guide": demo.guide,
+                "modules": demo.modules,
+                "mainline_items": _learning_mainline_items(
+                    guide=demo.guide,
+                    modules=demo.modules,
+                    pages=demo.pages,
+                    project_id=demo.project.id,
+                    wiki_base_path="/demo/wiki",
+                ),
+                "guide_core_concepts": _guide_concept_items(
+                    guide=demo.guide,
+                    pages=demo.pages,
+                    project_id=demo.project.id,
+                    wiki_base_path="/demo/wiki",
+                ),
+            },
+        )
+
+    @app.get("/demo/qa", response_class=HTMLResponse)
+    def public_demo_qa(request: Request) -> HTMLResponse:
+        demo = _require_public_demo(demo_catalog)
+        return templates.TemplateResponse(
+            request,
+            "demo_qa.html",
+            {
+                "app_name": app_settings.app_name,
+                "home_href": "/demo",
+                "nav_label": "公开 Demo",
+                "project": demo.project,
+                "records": demo.qa_records,
             },
         )
 
@@ -713,6 +815,42 @@ def create_app(
     return app
 
 
+def _require_public_demo(catalog: PublicDemoCatalog | None) -> PublicDemoCatalog:
+    if catalog is None:
+        raise HTTPException(status_code=404, detail="Public demo is not enabled.")
+    return catalog
+
+
+def _public_demo_wiki_response(
+    *,
+    request: Request,
+    app_name: str,
+    catalog: PublicDemoCatalog | None,
+    page_path: str,
+) -> HTMLResponse:
+    demo = _require_public_demo(catalog)
+    normalized_path = f"wiki/{page_path.removeprefix('wiki/')}"
+    selected_page = next((page for page in demo.pages if page.path == normalized_path), None)
+    if selected_page is None:
+        raise HTTPException(status_code=404, detail="Demo Wiki page not found.")
+    return templates.TemplateResponse(
+        request,
+        "wiki.html",
+        {
+            "app_name": app_name,
+            "home_href": "/demo",
+            "nav_label": "公开 Demo",
+            "wiki_base_path": "/demo/wiki",
+            "project": demo.project,
+            "pages": demo.pages,
+            "groups": demo.page_groups,
+            "selected_page": selected_page,
+            "page_type_order": list(PAGE_TYPE_ORDER),
+            "page_type_labels": _page_type_labels(),
+        },
+    )
+
+
 def _resolve_intake_assessment(
     *,
     fallback: IntakeAssessment,
@@ -845,12 +983,14 @@ def _page_type_labels() -> dict[str, str]:
     }
 
 
-def _learning_mainline_items(*, guide, modules, pages, project_id: int) -> list[dict[str, Any]]:
+def _learning_mainline_items(
+    *, guide, modules, pages, project_id: int, wiki_base_path: str | None = None
+) -> list[dict[str, Any]]:
     """Prepare stable lesson and concept navigation without mutating persisted artifacts."""
     if guide is None:
         return []
     module_by_stage = {module.stage: module for module in modules}
-    concept_urls = _concept_wiki_urls(pages, project_id)
+    concept_urls = _concept_wiki_urls(pages, project_id, wiki_base_path=wiki_base_path)
     items: list[dict[str, Any]] = []
     for index, item in enumerate(guide.mainline):
         if not isinstance(item, dict):
@@ -878,10 +1018,12 @@ def _learning_mainline_items(*, guide, modules, pages, project_id: int) -> list[
     return items
 
 
-def _guide_concept_items(*, guide, pages, project_id: int) -> list[dict[str, Any]]:
+def _guide_concept_items(
+    *, guide, pages, project_id: int, wiki_base_path: str | None = None
+) -> list[dict[str, Any]]:
     if guide is None:
         return []
-    concept_urls = _concept_wiki_urls(pages, project_id)
+    concept_urls = _concept_wiki_urls(pages, project_id, wiki_base_path=wiki_base_path)
     items: list[dict[str, Any]] = []
     for concept in guide.core_concepts:
         if not isinstance(concept, dict):
@@ -897,9 +1039,12 @@ def _guide_concept_items(*, guide, pages, project_id: int) -> list[dict[str, Any
     return items
 
 
-def _concept_wiki_urls(pages, project_id: int) -> dict[str, str]:
+def _concept_wiki_urls(
+    pages, project_id: int, *, wiki_base_path: str | None = None
+) -> dict[str, str]:
+    base_path = wiki_base_path or f"/domains/{project_id}/wiki"
     return {
-        page.title.casefold(): f"/domains/{project_id}/wiki/{page.path.removeprefix('wiki/')}"
+        page.title.casefold(): f"{base_path}/{page.path.removeprefix('wiki/')}"
         for page in pages
         if page.page_type == "concept" and page.title.strip()
     }
