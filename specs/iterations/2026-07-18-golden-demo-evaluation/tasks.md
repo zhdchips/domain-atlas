@@ -22,12 +22,12 @@
 
 ## Verification
 
-- [ ] Extend deterministic public Demo checks and Playwright navigation assertions.
-- [ ] Run the golden evaluator and record its baseline result.
-- [ ] Run `uv run python scripts/regression.py --fast`.
-- [ ] Run `uv run python scripts/regression.py --e2e`.
-- [ ] Run `uv run python scripts/regression.py --browser-e2e`.
-- [ ] Run one isolated `uv run python scripts/regression.py --live-e2e` and report it separately.
-- [ ] Verify public Demo mode remains zero-provider and default local mode still works.
-- [ ] Commit implementation and verification stages.
+- [x] Extend deterministic public Demo checks and Playwright navigation assertions.
+- [x] Run the golden evaluator and record its baseline result.
+- [x] Run `uv run python scripts/regression.py --fast`.
+- [x] Run `uv run python scripts/regression.py --e2e`.
+- [x] Run `uv run python scripts/regression.py --browser-e2e`.
+- [x] Run one isolated `uv run python scripts/regression.py --live-e2e` and report it separately.
+- [x] Verify public Demo mode remains zero-provider and default local mode still works.
+- [x] Commit implementation and verification stages.
 - [ ] Push deferred by user request.
