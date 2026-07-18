@@ -18,9 +18,9 @@
 
 - [x] Add deterministic public-mode isolation, provider non-use, and local-mode compatibility tests.
 - [x] Add Playwright Demo navigation and mutation-block checks.
-- [ ] Run `uv run python scripts/regression.py --fast`.
-- [ ] Run `uv run python scripts/regression.py --e2e`.
-- [ ] Run `uv run python scripts/regression.py --browser-e2e`.
-- [ ] Verify default local and public Demo mode health/routes without live providers.
-- [ ] Commit implementation and verification stages.
+- [x] Run `uv run python scripts/regression.py --fast`.
+- [x] Run `uv run python scripts/regression.py --e2e`.
+- [x] Run `uv run python scripts/regression.py --browser-e2e`.
+- [x] Verify default local and public Demo mode health/routes without live providers.
+- [x] Commit implementation and verification stages.
 - [ ] Push deferred by user request.
