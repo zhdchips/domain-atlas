@@ -72,7 +72,6 @@ OFFICIAL_PRESENTATION_MARKERS = (
     "官方网站",
     "官方網站",
     "official",
-    "about sushiro",
     "官网",
     "官網",
     "首页",
