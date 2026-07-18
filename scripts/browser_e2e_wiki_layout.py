@@ -18,6 +18,7 @@ from domain_atlas.core.db import initialize_database
 from domain_atlas.core.settings import Settings
 from domain_atlas.domain.artifacts import KnowledgeArtifactRepository
 from domain_atlas.domain.projects import CreateDomainProject, DomainProjectRepository
+from domain_atlas.domain.sources import CreateSource, SourceRepository
 from domain_atlas.domain.workflow import WorkflowRepository
 from domain_atlas.intake.assessment import IntakeAssessment
 
@@ -56,6 +57,7 @@ def main() -> int:
             page.goto(f"{base_url}/domains/{project_id}/wiki/index", wait_until="networkidle")
             page.locator(".wiki-workspace").wait_for(state="visible", timeout=5000)
             _assert_wiki_layout(page)
+            _assert_wiki_readability_and_navigation(page, base_url=base_url, project_id=project_id)
             page.goto(f"{base_url}/domains/{project_id}/path", wait_until="networkidle")
             page.locator(".qa-grid").wait_for(state="visible", timeout=5000)
             _assert_learning_guide_layout(page)
@@ -99,6 +101,14 @@ def _create_wiki_fixture(settings: Settings) -> tuple[int, int, int, int]:
             name="Browser Layout Regression",
             goal="Validate Wiki workspace rendering.",
             language="zh",
+        )
+    )
+    SourceRepository(settings.database_path).create(
+        CreateSource(
+            project_id=project.id,
+            source_type="url",
+            title="Domain Atlas Source",
+            locator="https://example.com/domain-atlas-source",
         )
     )
     KnowledgeArtifactRepository(settings.database_path).replace_project_artifacts(
@@ -330,7 +340,13 @@ def _page(page_type: str, path: str, title: str, summary: str) -> dict[str, Any]
         "title": title,
         "topic_path": path.removeprefix("wiki/"),
         "summary": summary,
-        "body_markdown": f"# {title}\n\n{summary}\n\n- [[Provenance]]\n- [[WikiSection]]",
+        "body_markdown": (
+            f"# {title}\n\n{summary}\n\n"
+            "> 引用应当帮助读者回到证据，而不是成为不可读的标签。\n\n"
+            "- [[Provenance]]\n- [[WikiSection]]\n- [[Missing Page]]\n\n"
+            "`citation` 用于追溯事实。[S1-C1] [W:index#1]\n\n"
+            "```text\nlong-running-wiki-content\n```"
+        ),
         "citations": ["S1-C1"] if page_type in {"source", "concept", "entity", "synthesis"} else [],
         "sections": [
             {
@@ -438,6 +454,41 @@ def _assert_wiki_layout(page) -> None:
     )
 
 
+def _assert_wiki_readability_and_navigation(page, *, base_url: str, project_id: int) -> None:
+    if page.locator("pre.markdown-body").count():
+        raise RuntimeError("local Wiki still renders raw Markdown in a pre block")
+    if page.locator(".markdown-body h1").count() != 1:
+        raise RuntimeError("local Wiki heading was not rendered semantically")
+    if not page.locator(".markdown-body ul").count() or not page.locator(".markdown-body blockquote").count():
+        raise RuntimeError("local Wiki list or blockquote was not rendered")
+    if not page.locator(".markdown-body pre code").count():
+        raise RuntimeError("local Wiki code block was not rendered")
+    if not page.locator(".wiki-evidence").count():
+        raise RuntimeError("local Wiki evidence panel is missing")
+    if page.locator('a[href="https://example.com/domain-atlas-source"]').count() == 0:
+        raise RuntimeError("local source citation did not resolve to the project source")
+    if page.locator(f'a[href="/domains/{project_id}/wiki/index#section-1"]').count() == 0:
+        raise RuntimeError("local Wiki citation did not resolve to its section anchor")
+
+    original_url = page.url
+    page.locator(".wiki-link-unresolved").click()
+    if page.url != original_url:
+        raise RuntimeError("unresolved Wiki link navigated unexpectedly")
+
+    page.locator('.markdown-body .wiki-link[href$="/concepts/provenance"]').click()
+    page.wait_for_url(f"**/domains/{project_id}/wiki/concepts/provenance", timeout=5000)
+
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.goto(f"{base_url}/domains/{project_id}/wiki/index", wait_until="networkidle")
+    mobile = page.evaluate(
+        "() => ({ viewport: window.innerWidth, documentWidth: document.documentElement.scrollWidth })"
+    )
+    if mobile["documentWidth"] > mobile["viewport"] + 1:
+        raise RuntimeError(f"local Wiki overflows on mobile: {mobile}")
+    page.set_viewport_size({"width": 1440, "height": 1000})
+    print("verified readable Wiki Markdown, citations, internal links, and mobile layout")
+
+
 def _assert_learning_guide_layout(page) -> None:
     metrics = page.evaluate(
         """
@@ -466,6 +517,7 @@ def _assert_learning_guide_layout(page) -> None:
             lessonTargetCount: document.querySelectorAll(".learning-module[id^='lesson-stage-']").length,
             conceptLinkCount: document.querySelectorAll(".mainline-concepts a").length,
             evidenceHeading: evidence.querySelector("h3")?.textContent || "",
+            citationLinkCount: document.querySelectorAll(".citation-link[href]").length,
             firstCardHeight: firstCard.getBoundingClientRect().height,
             heroWidth: hero.getBoundingClientRect().width,
             qaWidth: qaBox.width,
@@ -493,6 +545,8 @@ def _assert_learning_guide_layout(page) -> None:
         failures.append(f"expected lesson blocks for modules, got {metrics['lessonBlockCount']}")
     if metrics["evidenceHeading"] != "证据来源 / 深入阅读":
         failures.append(f"evidence heading is {metrics['evidenceHeading']!r}")
+    if metrics["citationLinkCount"] < 3:
+        failures.append(f"learning guide citation labels are not clickable: {metrics['citationLinkCount']}")
     if "阅读材料" in metrics["text"]:
         failures.append("legacy reading-material heading is still visible")
     if metrics["firstCardHeight"] < 80:

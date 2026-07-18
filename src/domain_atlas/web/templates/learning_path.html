@@ -1,11 +1,7 @@
 {% extends "base.html" %}
 
 {% macro citation_list(items) -%}
-  {% set links = citation_links|default({}) %}
-  {% for citation in items %}
-    {% set href = links.get(citation) %}
-    {% if href %}<a class="citation-link" href="{{ href }}"{% if href.startswith("https://") %} target="_blank" rel="noreferrer"{% endif %}>{{ citation }}</a>{% else %}{{ citation }}{% endif %}{% if not loop.last %}, {% endif %}
-  {% endfor %}
+  {{ render_citations(items) }}
 {%- endmacro %}
 
 {% block content %}
@@ -19,7 +15,7 @@
   <section class="panel learning-guide-hero">
     <p class="eyebrow">领域速览</p>
     <h2>先建立整体心智模型</h2>
-    <p>{{ guide.summary }}</p>
+    <p>{{ render_inline(guide.summary) }}</p>
     {% if guide.citations %}
       <p class="muted">Citations: {{ citation_list(guide.citations) }}</p>
     {% endif %}
@@ -32,7 +28,7 @@
       {% for item in guide.question_answers %}
         <article class="qa-card">
           <h3>{{ item.get("question", "问题") }}</h3>
-          <p>{{ item.get("answer", "") }}</p>
+          <p>{{ render_inline(item.get("answer", "")) }}</p>
           {% if item.get("citations") %}
             <small>Citations: {{ citation_list(item.get("citations")) }}</small>
           {% endif %}
@@ -52,7 +48,7 @@
             {% if item.get("learning_outcome") %}
               <p class="mainline-outcome">本阶段将掌握：{{ item.get("learning_outcome", "") }}</p>
             {% endif %}
-            {% if item.get("explanation") %}<span>{{ item.get("explanation", "") }}</span>{% endif %}
+            {% if item.get("explanation") %}<span>{{ render_inline(item.get("explanation", "")) }}</span>{% endif %}
             {% if item.get("concepts") %}
               <div class="mainline-concepts" aria-label="关联概念">
                 {% for concept in item.get("concepts") %}
@@ -86,7 +82,7 @@
                 {{ concept.get("name", "概念") }}
               {% endif %}
             </h3>
-            <p>{{ concept.get("explanation", "") }}</p>
+            <p>{{ render_inline(concept.get("explanation", "")) }}</p>
             {% if concept.get("depends_on") %}
               <small>依赖：{{ ", ".join(concept.get("depends_on")) }}</small>
             {% endif %}
@@ -107,7 +103,7 @@
         {% for branch in guide.branches %}
           <section>
             <h3>{{ branch.get("name", "支线") }}</h3>
-            <p>{{ branch.get("description", "") }}</p>
+            <p>{{ render_inline(branch.get("description", "")) }}</p>
             {% if branch.get("when_to_study") %}<small>学习时机：{{ branch.get("when_to_study") }}</small>{% endif %}
             {% if branch.get("citations") %}<small>Citations: {{ citation_list(branch.get("citations")) }}</small>{% endif %}
           </section>
@@ -122,7 +118,7 @@
         {% for detail in guide.details %}
           <section>
             <h3>{{ detail.get("title", "细节") }}</h3>
-            <p>{{ detail.get("description", "") }}</p>
+            <p>{{ render_inline(detail.get("description", "")) }}</p>
             {% if detail.get("practice_or_example") %}<small>实践/例子：{{ detail.get("practice_or_example") }}</small>{% endif %}
             {% if detail.get("citations") %}<small>Citations: {{ citation_list(detail.get("citations")) }}</small>{% endif %}
           </section>
@@ -149,13 +145,13 @@
         {% if module.stage_overview %}
           <section class="lesson-overview">
             <h3>阶段定位</h3>
-            <p>{{ module.stage_overview }}</p>
+          <p>{{ render_inline(module.stage_overview) }}</p>
           </section>
         {% endif %}
         {% if module.core_explanation %}
           <section class="lesson-explanation" aria-label="Agent 课程讲解">
             <h3>核心讲解</h3>
-            <p>{{ module.core_explanation }}</p>
+          <p>{{ render_inline(module.core_explanation) }}</p>
           </section>
         {% endif %}
         {% if module.knowledge_blocks %}
@@ -165,7 +161,7 @@
               {% for block in module.knowledge_blocks %}
                 <article class="lesson-block">
                   <h4>{{ block.get("title", "知识点") }}</h4>
-                  <p>{{ block.get("body", "") }}</p>
+                  <p>{{ render_inline(block.get("body", "")) }}</p>
                   {% if block.get("citations") %}<small>Citations: {{ citation_list(block.get("citations")) }}</small>{% endif %}
                 </article>
               {% endfor %}
@@ -180,7 +176,7 @@
                 {% for example in module.examples %}
                   <article>
                     <h4>{{ example.get("title", "例子") }}</h4>
-                    <p>{{ example.get("body", "") }}</p>
+                    <p>{{ render_inline(example.get("body", "")) }}</p>
                     {% if example.get("citations") %}<small>Citations: {{ citation_list(example.get("citations")) }}</small>{% endif %}
                   </article>
                 {% endfor %}
@@ -195,7 +191,7 @@
                   <article>
                     <h4>{{ misconception.get("title", "误区") }}</h4>
                     {% if misconception.get("misconception") %}<p>{{ misconception.get("misconception") }}</p>{% endif %}
-                    <p>{{ misconception.get("correction", "") }}</p>
+                    <p>{{ render_inline(misconception.get("correction", "")) }}</p>
                     {% if misconception.get("citations") %}<small>Citations: {{ citation_list(misconception.get("citations")) }}</small>{% endif %}
                   </article>
                 {% endfor %}

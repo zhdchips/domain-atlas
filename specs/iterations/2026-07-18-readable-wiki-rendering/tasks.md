@@ -9,16 +9,16 @@
 
 ## Implementation
 
-- [ ] Add the direct Markdown dependency and shared presentation renderer.
-- [ ] Build scoped local and Demo rendering contexts.
-- [ ] Render Wiki bodies, headings, internal links, citations, and evidence panels.
-- [ ] Render embedded citation labels in learning-guide and QA prose.
-- [ ] Add readable Wiki CSS without changing mutable local workflows or Demo allowlists.
+- [x] Add the direct Markdown dependency and shared presentation renderer.
+- [x] Build scoped local and Demo rendering contexts.
+- [x] Render Wiki bodies, headings, internal links, citations, and evidence panels.
+- [x] Render embedded citation labels in learning-guide and QA prose.
+- [x] Add readable Wiki CSS without changing mutable local workflows or Demo allowlists.
 
 ## Verification
 
-- [ ] Add deterministic parser/security/scoping/application tests.
-- [ ] Extend Playwright rendering, navigation, citation, and responsive-layout checks.
+- [x] Add deterministic parser/security/scoping/application tests.
+- [x] Extend Playwright rendering, navigation, citation, and responsive-layout checks.
 - [ ] Run `uv run python scripts/regression.py --golden-demo-eval`.
 - [ ] Run `uv run python scripts/regression.py --fast`.
 - [ ] Run `uv run python scripts/regression.py --e2e`.

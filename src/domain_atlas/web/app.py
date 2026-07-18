@@ -38,6 +38,13 @@ from domain_atlas.providers.chat import OpenAICompatibleChatProvider
 from domain_atlas.providers.embeddings import OpenAICompatibleEmbeddingProvider
 from domain_atlas.providers.vector_index import ChromaVectorIndex, VectorIndex
 from domain_atlas.qa.service import RetrievalQAService
+from domain_atlas.wiki.presentation import (
+    WikiPresentationContext,
+    build_local_context,
+    render_citation_list,
+    render_inline,
+    render_wiki_page,
+)
 from domain_atlas.workflow.build import KnowledgeBuildWorkflow
 from domain_atlas.workflow.autopilot import AutopilotWorkflow
 from domain_atlas.workflow.background import BackgroundWorkflowRunner, WorkflowConflictError
@@ -308,6 +315,7 @@ def create_app(
     @app.get("/demo/path", response_class=HTMLResponse)
     def public_demo_learning_path(request: Request) -> HTMLResponse:
         demo = _require_public_demo(demo_catalog)
+        presentation = _demo_presentation_context(demo)
         return templates.TemplateResponse(
             request,
             "learning_path.html",
@@ -318,7 +326,7 @@ def create_app(
                 "project": demo.project,
                 "guide": demo.guide,
                 "modules": demo.modules,
-                "citation_links": demo.citation_links,
+                **_presentation_template_helpers(presentation),
                 "mainline_items": _learning_mainline_items(
                     guide=demo.guide,
                     modules=demo.modules,
@@ -338,6 +346,7 @@ def create_app(
     @app.get("/demo/qa", response_class=HTMLResponse)
     def public_demo_qa(request: Request) -> HTMLResponse:
         demo = _require_public_demo(demo_catalog)
+        presentation = _demo_presentation_context(demo)
         return templates.TemplateResponse(
             request,
             "demo_qa.html",
@@ -347,7 +356,7 @@ def create_app(
                 "nav_label": "公开 Demo",
                 "project": demo.project,
                 "records": demo.qa_records,
-                "citation_links": demo.citation_links,
+                **_presentation_template_helpers(presentation),
             },
         )
 
@@ -727,6 +736,12 @@ def create_app(
         selected_page = repository.get_wiki_page_by_path(project_id, "wiki/index")
         if selected_page is None and pages:
             selected_page = pages[0]
+        presentation = _local_presentation_context(
+            project_id=project_id,
+            pages=pages,
+            artifact_repository=repository,
+            source_repository=source_repository(),
+        )
         return templates.TemplateResponse(
             request,
             "wiki.html",
@@ -736,6 +751,8 @@ def create_app(
                 "pages": pages,
                 "groups": groups,
                 "selected_page": selected_page,
+                "rendered_page": render_wiki_page(selected_page, presentation) if selected_page else None,
+                **_presentation_template_helpers(presentation),
                 "page_type_order": list(PAGE_TYPE_ORDER),
                 "page_type_labels": _page_type_labels(),
             },
@@ -752,6 +769,12 @@ def create_app(
         selected_page = repository.get_wiki_page_by_path(project_id, page_path)
         if selected_page is None:
             raise HTTPException(status_code=404, detail="Wiki page not found.")
+        presentation = _local_presentation_context(
+            project_id=project_id,
+            pages=pages,
+            artifact_repository=repository,
+            source_repository=source_repository(),
+        )
         return templates.TemplateResponse(
             request,
             "wiki.html",
@@ -761,6 +784,8 @@ def create_app(
                 "pages": pages,
                 "groups": groups,
                 "selected_page": selected_page,
+                "rendered_page": render_wiki_page(selected_page, presentation),
+                **_presentation_template_helpers(presentation),
                 "page_type_order": list(PAGE_TYPE_ORDER),
                 "page_type_labels": _page_type_labels(),
             },
@@ -775,6 +800,12 @@ def create_app(
         guide = repository.get_learning_guide(project_id)
         modules = repository.list_learning_modules(project_id)
         pages = repository.list_wiki_pages(project_id)
+        presentation = _local_presentation_context(
+            project_id=project_id,
+            pages=pages,
+            artifact_repository=repository,
+            source_repository=source_repository(),
+        )
         return templates.TemplateResponse(
             request,
             "learning_path.html",
@@ -783,6 +814,7 @@ def create_app(
                 "project": project,
                 "guide": guide,
                 "modules": modules,
+                **_presentation_template_helpers(presentation),
                 "mainline_items": _learning_mainline_items(
                     guide=guide,
                     modules=modules,
@@ -803,6 +835,14 @@ def create_app(
         if project is None:
             raise HTTPException(status_code=404, detail="Domain project not found.")
         records = qa_repository().list_for_project(project_id)
+        repository = artifact_repository()
+        pages = repository.list_wiki_pages(project_id)
+        presentation = _local_presentation_context(
+            project_id=project_id,
+            pages=pages,
+            artifact_repository=repository,
+            source_repository=source_repository(),
+        )
         return templates.TemplateResponse(
             request,
             "qa.html",
@@ -811,6 +851,7 @@ def create_app(
                 "project": project,
                 "records": records,
                 "error": error,
+                **_presentation_template_helpers(presentation),
             },
         )
 
@@ -840,6 +881,42 @@ def _require_public_demo(catalog: PublicDemoCatalog | None) -> PublicDemoCatalog
     return catalog
 
 
+def _local_presentation_context(
+    *,
+    project_id: int,
+    pages,
+    artifact_repository: KnowledgeArtifactRepository,
+    source_repository: SourceRepository,
+) -> WikiPresentationContext:
+    return build_local_context(
+        pages=pages,
+        sections=artifact_repository.list_wiki_sections(project_id),
+        sources=source_repository.list_for_project(project_id),
+        route_base=f"/domains/{project_id}/wiki",
+    )
+
+
+def _demo_presentation_context(demo: PublicDemoCatalog) -> WikiPresentationContext:
+    citation_details = {
+        citation: (source.title, source.source_type)
+        for source in demo.sources
+        for citation in source.citations
+    }
+    return WikiPresentationContext.for_demo(
+        pages=demo.pages,
+        route_base="/demo/wiki",
+        citation_links=demo.citation_links,
+        citation_details=citation_details,
+    )
+
+
+def _presentation_template_helpers(context: WikiPresentationContext) -> dict[str, object]:
+    return {
+        "render_inline": lambda value: render_inline(str(value or ""), context=context).html,
+        "render_citations": lambda labels: render_citation_list(labels or [], context=context),
+    }
+
+
 def _public_demo_wiki_response(
     *,
     request: Request,
@@ -848,6 +925,7 @@ def _public_demo_wiki_response(
     page_path: str,
 ) -> HTMLResponse:
     demo = _require_public_demo(catalog)
+    presentation = _demo_presentation_context(demo)
     normalized_path = f"wiki/{page_path.removeprefix('wiki/')}"
     selected_page = next((page for page in demo.pages if page.path == normalized_path), None)
     if selected_page is None:
@@ -864,7 +942,8 @@ def _public_demo_wiki_response(
             "pages": demo.pages,
             "groups": demo.page_groups,
             "selected_page": selected_page,
-            "citation_links": demo.citation_links,
+            "rendered_page": render_wiki_page(selected_page, presentation),
+            **_presentation_template_helpers(presentation),
             "page_type_order": list(PAGE_TYPE_ORDER),
             "page_type_labels": _page_type_labels(),
         },

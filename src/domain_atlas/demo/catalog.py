@@ -141,6 +141,8 @@ def public_demo_catalog() -> PublicDemoCatalog:
                 "Harness 不等于更长的 prompt。它规定一个任务如何携带状态、调用受限工具、记录运行事实，"
                 "并在失败时停止、恢复或请求人工判断。模型处理局部决策；系统负责权限、预算和可验证性。"
                 "[S1-C1][S2-C1]\n\n"
+                "> 先证明一个 workflow 的边界，再增加有限自治。\n\n"
+                "- 目标和成功条件\n- 工具与权限\n- 状态、Trace 与评测\n\n"
                 "学习顺序：先理解 [[Agent Loop]]，再定义 [[Tool Contracts]]；随后处理 [[Durable State]]，"
                 "最后用 [[Trace and Evaluation]] 把行为变成可迭代的证据。"
             ),
@@ -203,7 +205,8 @@ def public_demo_catalog() -> PublicDemoCatalog:
                 "# Tool Contracts\n\n"
                 "工具不是给模型的一段自由文本。一个 contract 至少要说明输入 schema、返回事实、"
                 "可调用权限、超时和错误类型。清晰的 contract 让 planner 的选择、executor 的调用和 "
-                "verifier 的判断能依据同一份事实，并能通过测试暴露误用。[S1-C1][S3-C1]"
+                "verifier 的判断能依据同一份事实，并能通过测试暴露误用。[S1-C1][S3-C1]\n\n"
+                "```json\n{\"operation\": \"read_status\", \"side_effect\": false}\n```"
             ),
             citations=["S1-C1", "S3-C1"],
         ),

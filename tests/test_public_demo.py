@@ -34,6 +34,9 @@ def test_public_demo_renders_catalog_without_creating_or_reading_runtime_data(tm
     assert "Harness Map" in wiki.text
     assert 'href="/demo/wiki/concepts/agent-loop"' in wiki.text
     assert 'href="https://openai.github.io/openai-agents-python/#why-use-the-agents-sdk"' in wiki.text
+    assert '<div class="markdown-body">' in wiki.text
+    assert "<pre class=\"markdown-body\"" not in wiki.text
+    assert "引用与来源" in wiki.text
     assert learning_path.status_code == 200
     assert "从主干到支线逐步推进" in learning_path.text
     assert 'href="/demo/wiki/concepts/agent-loop"' in learning_path.text

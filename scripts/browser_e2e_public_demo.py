@@ -50,6 +50,22 @@ def main() -> int:
             page.wait_for_url("**/demo/wiki", timeout=5000)
             if "Harness Map" not in page.locator("body").inner_text():
                 raise RuntimeError("public demo Wiki content is missing")
+            if page.locator("pre.markdown-body").count():
+                raise RuntimeError("public demo still renders Wiki Markdown as a raw pre block")
+            if page.locator(".markdown-body h1").count() != 1:
+                raise RuntimeError("public demo Wiki heading was not rendered semantically")
+            if not page.locator(".markdown-body ul").count() or not page.locator(".markdown-body blockquote").count():
+                raise RuntimeError("public demo Wiki list or blockquote was not rendered")
+            if not page.locator(".wiki-evidence").count():
+                raise RuntimeError("public demo Wiki evidence panel is missing")
+            source_citation = page.locator('.markdown-body a[href^="https://openai.github.io/"]').first
+            if source_citation.count() != 1:
+                raise RuntimeError("public demo source citation is not a safe external link")
+            page.locator(".markdown-body .wiki-link").first.click()
+            page.wait_for_url("**/demo/wiki/concepts/agent-loop", timeout=5000)
+            page.goto(f"{base_url}/demo/wiki/concepts/tool-contracts", wait_until="networkidle")
+            if not page.locator(".markdown-body pre code").count():
+                raise RuntimeError("public demo Wiki code block was not rendered")
             page.goto(f"{base_url}/demo/path", wait_until="networkidle")
             if "从主干到支线逐步推进" not in page.locator("body").inner_text():
                 raise RuntimeError("public demo learning path is missing")
@@ -63,6 +79,13 @@ def main() -> int:
             page.goto(f"{base_url}/demo/evaluation", wait_until="networkidle")
             if "25 / 25" not in page.locator("body").inner_text():
                 raise RuntimeError("public demo evaluation summary is missing")
+            page.set_viewport_size({"width": 390, "height": 844})
+            page.goto(f"{base_url}/demo/wiki/concepts/tool-contracts", wait_until="networkidle")
+            mobile = page.evaluate(
+                "() => ({ viewport: window.innerWidth, documentWidth: document.documentElement.scrollWidth })"
+            )
+            if mobile["documentWidth"] > mobile["viewport"] + 1:
+                raise RuntimeError(f"public demo Wiki overflows on mobile: {mobile}")
             browser.close()
 
         with httpx.Client(base_url=base_url, timeout=5) as client:

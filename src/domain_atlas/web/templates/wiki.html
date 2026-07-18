@@ -3,7 +3,6 @@
 {% block page_class %} page-wide{% endblock %}
 
 {% block content %}
-{% set links = citation_links|default({}) %}
 <section class="intro">
   <p class="eyebrow">LLM Wiki Workspace</p>
   <h1>{{ project.name }}</h1>
@@ -53,18 +52,32 @@
           </div>
           <div>
             <dt>citations</dt>
-            <dd>
-              {% if selected_page.citations %}
-                {% for citation in selected_page.citations %}
-                  {% set href = links.get(citation) %}
-                  {% if href %}<a class="citation-link" href="{{ href }}"{% if href.startswith("https://") %} target="_blank" rel="noreferrer"{% endif %}>{{ citation }}</a>{% else %}{{ citation }}{% endif %}{% if not loop.last %}, {% endif %}
-                {% endfor %}
-              {% else %}none{% endif %}
-            </dd>
+            <dd>{{ render_citations(selected_page.citations) if selected_page.citations else "none" }}</dd>
           </div>
         </dl>
-        <p>{{ selected_page.summary }}</p>
-        <pre class="markdown-body">{{ selected_page.body_markdown }}</pre>
+        <div class="wiki-summary">{{ rendered_page.summary_html }}</div>
+        <div class="markdown-body">{{ rendered_page.body_html }}</div>
+        <section class="wiki-evidence" aria-label="引用与来源">
+          <p class="eyebrow">引用与来源</p>
+          <h3>本页证据</h3>
+          {% if rendered_page.evidence %}
+            <ul class="evidence-list">
+              {% for citation in rendered_page.evidence %}
+                <li>
+                  {% if citation.href %}
+                    <a class="citation-link" href="{{ citation.href }}"{% if citation.external %} target="_blank" rel="noreferrer"{% endif %}>{{ citation.label }}</a>
+                  {% else %}
+                    <span class="citation-link citation-unresolved">{{ citation.label }}</span>
+                  {% endif %}
+                  <span>{{ citation.title }}</span>
+                  <small>{{ citation.source_type }}</small>
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="muted">此页没有可解析的 citation。</p>
+          {% endif %}
+        </section>
       {% else %}
         <p class="muted">还没有可展示的 Wiki 页面。</p>
       {% endif %}
