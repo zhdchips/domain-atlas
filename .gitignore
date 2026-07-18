@@ -13,6 +13,7 @@ uploads/
 *.sqlite
 *.sqlite3
 reports/intake/*.json
+reports/golden-demo/
 dist/
 build/
 *.egg-info/

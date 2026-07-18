@@ -23,6 +23,7 @@
   <a class="workflow-item" href="/demo/wiki"><strong>LLM Wiki</strong><span>查看结构化页面、概念关系与 citations。</span></a>
   <a class="workflow-item" href="/demo/path"><strong>学习路线</strong><span>从核心机制进入五阶段课程与实践。</span></a>
   <a class="workflow-item" href="/demo/qa"><strong>带引用问答</strong><span>阅读预生成问题、答案和证据 provenance。</span></a>
+  <a class="workflow-item" href="/demo/evaluation"><strong>黄金评测</strong><span>{{ evaluation_summary.get("score") }} 条确定性证据与结构检查。</span></a>
 </section>
 
 <section id="sources" class="panel">
@@ -34,8 +35,10 @@
         <div>
           <strong>{{ source.title }}</strong>
           <p><a href="{{ source.url }}" target="_blank" rel="noreferrer">{{ source.publisher }}</a></p>
-          <small>类型 {{ source.source_type }} · Citations: {{ ", ".join(source.citations) }}</small>
+          <small>类型 {{ source.source_type }} · 访问日期 {{ source.accessed_on }}</small>
+          <p><a href="{{ source.evidence_locator }}" target="_blank" rel="noreferrer">定位证据：{{ ", ".join(source.citations) }}</a></p>
           <p>{{ source.coverage }}</p>
+          <p class="muted">{{ source.authority_note }}</p>
         </div>
       </article>
     {% endfor %}

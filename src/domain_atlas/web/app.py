@@ -282,6 +282,8 @@ def create_app(
                 "pages": demo.pages,
                 "modules": demo.modules,
                 "qa_records": demo.qa_records,
+                "citation_links": demo.citation_links,
+                "evaluation_summary": demo.evaluation_summary,
             },
         )
 
@@ -316,6 +318,7 @@ def create_app(
                 "project": demo.project,
                 "guide": demo.guide,
                 "modules": demo.modules,
+                "citation_links": demo.citation_links,
                 "mainline_items": _learning_mainline_items(
                     guide=demo.guide,
                     modules=demo.modules,
@@ -344,6 +347,22 @@ def create_app(
                 "nav_label": "公开 Demo",
                 "project": demo.project,
                 "records": demo.qa_records,
+                "citation_links": demo.citation_links,
+            },
+        )
+
+    @app.get("/demo/evaluation", response_class=HTMLResponse)
+    def public_demo_evaluation(request: Request) -> HTMLResponse:
+        demo = _require_public_demo(demo_catalog)
+        return templates.TemplateResponse(
+            request,
+            "demo_evaluation.html",
+            {
+                "app_name": app_settings.app_name,
+                "home_href": "/demo",
+                "nav_label": "公开 Demo",
+                "project": demo.project,
+                "evaluation_summary": demo.evaluation_summary,
             },
         )
 
@@ -845,6 +864,7 @@ def _public_demo_wiki_response(
             "pages": demo.pages,
             "groups": demo.page_groups,
             "selected_page": selected_page,
+            "citation_links": demo.citation_links,
             "page_type_order": list(PAGE_TYPE_ORDER),
             "page_type_labels": _page_type_labels(),
         },

@@ -22,20 +22,29 @@ def test_public_demo_renders_catalog_without_creating_or_reading_runtime_data(tm
     wiki = client.get("/demo/wiki")
     learning_path = client.get("/demo/path")
     qa = client.get("/demo/qa")
+    evaluation = client.get("/demo/evaluation")
 
     assert overview.status_code == 200
     assert "Agent Harness Engineering" in overview.text
     assert "Private Local Project" not in overview.text
     assert "OpenAI Agents SDK documentation" in overview.text
+    assert "Effective harnesses for long-running agents" in overview.text
+    assert 'href="/demo/evaluation"' in overview.text
     assert wiki.status_code == 200
     assert "Harness Map" in wiki.text
     assert 'href="/demo/wiki/concepts/agent-loop"' in wiki.text
+    assert 'href="https://openai.github.io/openai-agents-python/#why-use-the-agents-sdk"' in wiki.text
     assert learning_path.status_code == 200
     assert "从主干到支线逐步推进" in learning_path.text
     assert 'href="/demo/wiki/concepts/agent-loop"' in learning_path.text
+    assert 'href="https://www.anthropic.com/engineering/building-effective-agents#when-and-when-not-to-use-agents"' in learning_path.text
     assert qa.status_code == 200
     assert "为什么 Agent Harness 不等于一个更长的 prompt？" in qa.text
+    assert "所有 Agent 的工具调用超时应该统一设为多少秒？" in qa.text
+    assert 'href="/demo/wiki/concepts/agent-loop"' in qa.text
     assert "<form" not in qa.text
+    assert evaluation.status_code == 200
+    assert "25 / 25" in evaluation.text
     assert client.get("/domains/1").status_code == 404
 
 
@@ -80,7 +89,7 @@ def test_public_demo_blocks_mutation_routes_before_provider_construction(tmp_pat
 def test_public_demo_contains_no_mutable_forms_or_submit_buttons(tmp_path):
     client = TestClient(create_app(Settings(data_dir=tmp_path, public_demo_mode=True)))
 
-    for path in ("/demo", "/demo/wiki", "/demo/path", "/demo/qa"):
+    for path in ("/demo", "/demo/wiki", "/demo/path", "/demo/qa", "/demo/evaluation"):
         page = client.get(path)
         assert page.status_code == 200
         assert "<form" not in page.text

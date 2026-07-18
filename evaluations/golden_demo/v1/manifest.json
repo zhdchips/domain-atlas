@@ -1,0 +1,37 @@
+{
+  "schema_version": "golden-demo-evaluation/v1",
+  "subject": "Agent Harness Engineering public read-only catalog",
+  "pass_gate": 25,
+  "known_limitations": [
+    "This deterministic suite verifies one curated Demo catalog, not generic model, retrieval, or RAG quality.",
+    "It does not fetch source URLs, so external availability and future page changes require periodic human review.",
+    "It does not measure a live provider build; live E2E is reported separately."
+  ],
+  "cases": [
+    {"id": "SRC-01", "category": "source_authority", "assertion": "source_count", "expected": 4},
+    {"id": "SRC-02", "category": "source_authority", "assertion": "source_metadata_complete", "expected": true},
+    {"id": "SRC-03", "category": "source_authority", "assertion": "source_urls_are_https", "expected": true},
+    {"id": "SRC-04", "category": "source_authority", "assertion": "source_citations_are_unique", "expected": true},
+    {"id": "SRC-05", "category": "provenance", "assertion": "source_locators_are_https", "expected": true},
+    {"id": "WIKI-01", "category": "wiki", "assertion": "wiki_page_count", "expected": 7},
+    {"id": "WIKI-02", "category": "wiki", "assertion": "required_page_types", "expected": ["concept", "index", "log", "source", "synthesis"]},
+    {"id": "WIKI-03", "category": "wiki", "assertion": "wiki_paths_are_unique", "expected": true},
+    {"id": "WIKI-04", "category": "provenance", "assertion": "wiki_citations_resolve", "expected": true},
+    {"id": "WIKI-05", "category": "wiki", "assertion": "wiki_links_resolve", "expected": true},
+    {"id": "GUIDE-01", "category": "learning_guide", "assertion": "ten_domain_questions", "expected": 10},
+    {"id": "GUIDE-02", "category": "learning_guide", "assertion": "guide_question_citations_resolve", "expected": true},
+    {"id": "GUIDE-03", "category": "learning_guide", "assertion": "mainline_stages_are_complete", "expected": [1, 2, 3, 4, 5]},
+    {"id": "GUIDE-04", "category": "learning_guide", "assertion": "core_concept_count", "expected": 4},
+    {"id": "GUIDE-05", "category": "learning_guide", "assertion": "branches_and_details_present", "expected": true},
+    {"id": "COURSE-01", "category": "learning_modules", "assertion": "module_count", "expected": 5},
+    {"id": "COURSE-02", "category": "learning_modules", "assertion": "module_stages_are_complete", "expected": [1, 2, 3, 4, 5]},
+    {"id": "COURSE-03", "category": "learning_modules", "assertion": "modules_are_substantive", "expected": true},
+    {"id": "COURSE-04", "category": "learning_modules", "assertion": "module_citations_resolve", "expected": true},
+    {"id": "QA-01", "category": "cited_qa", "assertion": "qa_count", "expected": 5},
+    {"id": "QA-02", "category": "cited_qa", "assertion": "supported_qa_has_evidence", "expected": true},
+    {"id": "QA-03", "category": "cited_qa", "assertion": "insufficient_qa_is_honest", "expected": true},
+    {"id": "DEMO-01", "category": "demo_navigation", "assertion": "demo_routes_are_complete", "expected": ["/demo", "/demo/wiki", "/demo/path", "/demo/qa", "/demo/evaluation"]},
+    {"id": "DEMO-02", "category": "demo_navigation", "assertion": "citation_links_are_complete", "expected": true},
+    {"id": "DEMO-03", "category": "demo_navigation", "assertion": "evaluation_summary_matches_manifest", "expected": true}
+  ]
+}

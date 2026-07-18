@@ -38,6 +38,11 @@ def main() -> int:
         action="store_true",
         help="Run Playwright browser layout checks against a deterministic Wiki project.",
     )
+    group.add_argument(
+        "--golden-demo-eval",
+        action="store_true",
+        help="Run the deterministic versioned golden public-Demo evaluation.",
+    )
     args = parser.parse_args()
 
     if args.fast:
@@ -57,6 +62,8 @@ def main() -> int:
         return _run("live-e2e", [sys.executable, "scripts/live_e2e_domain_build.py"])
     if args.live_guided_e2e:
         return _run("live-guided-e2e", [sys.executable, "scripts/live_guided_e2e.py"])
+    if args.golden_demo_eval:
+        return _run("golden-demo-eval", [sys.executable, "scripts/golden_demo_eval.py"])
     return _run_many(
         "browser-e2e",
         [

@@ -49,6 +49,33 @@ learning path, and cited QA examples. It does not initialize runtime data,
 read local projects, accept writes, or call Exa, LLM, embedding, or URL-fetch
 providers. Normal project routes and POST requests return `404`.
 
+### Golden Demo and Evaluation
+
+The public Demo is a curated learning case rather than an empty UI fixture. It
+uses four public first-party sources: OpenAI Agents SDK documentation, LangGraph
+documentation, and two Anthropic engineering articles on effective agents and
+long-running harnesses. Each source card records its access date, authority
+rationale, coverage, and a clickable evidence locator.
+
+Suggested walkthrough: **Overview and sources -> LLM Wiki -> Learning path ->
+Cited QA -> Golden evaluation**. The case includes a ten-question field
+overview, seven Wiki pages, five lesson-style modules, four supported QA
+examples, and one deliberately evidence-insufficient answer.
+
+Run the versioned catalog evaluation with:
+
+```bash
+uv run python scripts/regression.py --golden-demo-eval
+```
+
+The committed `golden-demo-evaluation/v1` baseline contains 25 deterministic
+checks for source/provenance, Wiki structure, learning content, QA evidence,
+and Demo navigation. Its expected result is **25 / 25** with zero provider
+calls and zero provider cost. This is a fixed-catalog integrity check, not a
+generic model benchmark, RAG retrieval score, or production accuracy metric.
+See `evaluations/golden_demo/v1/` for the manifest, rubric, manual review, and
+baseline report.
+
 This is not an anonymous trial mode. Any future writable deployment requires a
 separate security design for SSRF protection, upload constraints, rate limits,
 quotas, concurrency controls, authentication, and tenant isolation.
@@ -81,6 +108,7 @@ uv run python scripts/regression.py --fast
 uv run python scripts/regression.py --e2e
 uv run python scripts/regression.py --browser-e2e
 uv run python scripts/regression.py --intake-eval
+uv run python scripts/regression.py --golden-demo-eval
 uv run python scripts/regression.py --live
 uv run python scripts/regression.py --live-intake-eval
 uv run python scripts/regression.py --live-e2e

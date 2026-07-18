@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="intro">
+  <p class="eyebrow">Golden Demo Evaluation</p>
+  <h1>{{ project.name }}</h1>
+  <p>这份结果证明固定公开 Demo 的内容结构与证据链完整，不是模型、RAG 或生产准确率指标。</p>
+</section>
+
+<section class="status-grid">
+  <div class="metric"><span>Manifest</span><strong>{{ evaluation_summary.get("manifest_version") }}</strong></div>
+  <div class="metric"><span>确定性检查</span><strong>{{ evaluation_summary.get("score") }}</strong></div>
+  <div class="metric"><span>Provider 调用</span><strong>{{ evaluation_summary.get("provider_calls") }}</strong></div>
+</section>
+
+<section class="panel">
+  <p class="eyebrow">评测范围</p>
+  <h2>检查什么</h2>
+  <p>{{ evaluation_summary.get("scope") }}</p>
+  <p class="muted">{{ evaluation_summary.get("limitation") }}</p>
+</section>
+
+<section class="panel">
+  <p class="eyebrow">建议演示路径</p>
+  <h2>从证据到学习与问答</h2>
+  <p><a href="/demo">概览与来源</a> → <a href="/demo/wiki">LLM Wiki</a> → <a href="/demo/path">学习路线</a> → <a href="/demo/qa">带引用问答</a></p>
+</section>
+{% endblock %}

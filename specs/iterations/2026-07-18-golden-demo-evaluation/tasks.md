@@ -9,16 +9,16 @@
 
 ## Golden Catalog
 
-- [ ] Add source metadata and citation-link mapping.
-- [ ] Enrich the Wiki, ten-question overview, learning modules, and cited QA examples.
-- [ ] Add a read-only evaluation summary route and improve evidence links in public views.
-- [ ] Document the Demo walkthrough and evaluation limitations in README.
+- [x] Add source metadata and citation-link mapping.
+- [x] Enrich the Wiki, ten-question overview, learning modules, and cited QA examples.
+- [x] Add a read-only evaluation summary route and improve evidence links in public views.
+- [x] Document the Demo walkthrough and evaluation limitations in README.
 
 ## Evaluation
 
-- [ ] Add the versioned evaluation manifest, rubric, manual review, and baseline result artifacts.
-- [ ] Implement deterministic scoring and JSON/Markdown report generation.
-- [ ] Add evaluator tests including a deliberately broken catalog case.
+- [x] Add the versioned evaluation manifest, rubric, manual review, and baseline result artifacts.
+- [x] Implement deterministic scoring and JSON/Markdown report generation.
+- [x] Add evaluator tests including a deliberately broken catalog case.
 
 ## Verification
 

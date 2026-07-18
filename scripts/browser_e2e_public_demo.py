@@ -42,6 +42,8 @@ def main() -> int:
             page.goto(f"{base_url}/demo", wait_until="networkidle")
             if "Agent Harness Engineering" not in page.locator("body").inner_text():
                 raise RuntimeError("public demo overview content is missing")
+            if "Effective harnesses for long-running agents" not in page.locator("body").inner_text():
+                raise RuntimeError("public demo source provenance is incomplete")
             if page.locator("form").count() or page.locator('button[type="submit"]').count():
                 raise RuntimeError("public demo exposed a mutable form or submit button")
             page.get_by_role("link", name="LLM Wiki").click()
@@ -54,12 +56,17 @@ def main() -> int:
             page.goto(f"{base_url}/demo/qa", wait_until="networkidle")
             if "为什么 Agent Harness 不等于一个更长的 prompt？" not in page.locator("body").inner_text():
                 raise RuntimeError("public demo cited QA examples are missing")
+            if page.locator('a[href="/demo/wiki/concepts/agent-loop"]').count() == 0:
+                raise RuntimeError("public demo Wiki citations are not clickable")
             if page.locator("form").count() or page.locator('button[type="submit"]').count():
                 raise RuntimeError("public demo QA exposed a mutable form or submit button")
+            page.goto(f"{base_url}/demo/evaluation", wait_until="networkidle")
+            if "25 / 25" not in page.locator("body").inner_text():
+                raise RuntimeError("public demo evaluation summary is missing")
             browser.close()
 
         with httpx.Client(base_url=base_url, timeout=5) as client:
-            for path in ("/domains", "/domains/1/autopilot", "/domains/1/qa", "/demo"):
+            for path in ("/domains", "/domains/1/autopilot", "/domains/1/qa", "/demo", "/demo/evaluation"):
                 response = client.post(path)
                 if response.status_code != 404:
                     raise RuntimeError(f"public demo mutation path {path} returned {response.status_code}")

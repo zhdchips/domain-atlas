@@ -1,5 +1,13 @@
 {% extends "base.html" %}
 
+{% macro citation_list(items) -%}
+  {% set links = citation_links|default({}) %}
+  {% for citation in items %}
+    {% set href = links.get(citation) %}
+    {% if href %}<a class="citation-link" href="{{ href }}"{% if href.startswith("https://") %} target="_blank" rel="noreferrer"{% endif %}>{{ citation }}</a>{% else %}{{ citation }}{% endif %}{% if not loop.last %}, {% endif %}
+  {% endfor %}
+{%- endmacro %}
+
 {% block content %}
 <section class="intro">
   <p class="eyebrow">学习导览</p>
@@ -13,7 +21,7 @@
     <h2>先建立整体心智模型</h2>
     <p>{{ guide.summary }}</p>
     {% if guide.citations %}
-      <p class="muted">Citations: {{ ", ".join(guide.citations) }}</p>
+      <p class="muted">Citations: {{ citation_list(guide.citations) }}</p>
     {% endif %}
   </section>
 
@@ -26,7 +34,7 @@
           <h3>{{ item.get("question", "问题") }}</h3>
           <p>{{ item.get("answer", "") }}</p>
           {% if item.get("citations") %}
-            <small>Citations: {{ ", ".join(item.get("citations")) }}</small>
+            <small>Citations: {{ citation_list(item.get("citations")) }}</small>
           {% endif %}
         </article>
       {% endfor %}
@@ -59,7 +67,7 @@
             {% if item.get("lesson_href") %}
               <a class="lesson-link" href="{{ item.get("lesson_href") }}">进入第 {{ item.get("module_stage") }} 阶段学习：{{ item.get("module_title") }}</a>
             {% endif %}
-            {% if item.get("citations") %}<small>{{ ", ".join(item.get("citations")) }}</small>{% endif %}
+            {% if item.get("citations") %}<small>{{ citation_list(item.get("citations")) }}</small>{% endif %}
           </li>
         {% endfor %}
       </ol>
@@ -83,7 +91,7 @@
               <small>依赖：{{ ", ".join(concept.get("depends_on")) }}</small>
             {% endif %}
             {% if concept.get("citations") %}
-              <small>Citations: {{ ", ".join(concept.get("citations")) }}</small>
+              <small>Citations: {{ citation_list(concept.get("citations")) }}</small>
             {% endif %}
           </section>
         {% endfor %}
@@ -101,7 +109,7 @@
             <h3>{{ branch.get("name", "支线") }}</h3>
             <p>{{ branch.get("description", "") }}</p>
             {% if branch.get("when_to_study") %}<small>学习时机：{{ branch.get("when_to_study") }}</small>{% endif %}
-            {% if branch.get("citations") %}<small>Citations: {{ ", ".join(branch.get("citations")) }}</small>{% endif %}
+            {% if branch.get("citations") %}<small>Citations: {{ citation_list(branch.get("citations")) }}</small>{% endif %}
           </section>
         {% endfor %}
       </div>
@@ -116,7 +124,7 @@
             <h3>{{ detail.get("title", "细节") }}</h3>
             <p>{{ detail.get("description", "") }}</p>
             {% if detail.get("practice_or_example") %}<small>实践/例子：{{ detail.get("practice_or_example") }}</small>{% endif %}
-            {% if detail.get("citations") %}<small>Citations: {{ ", ".join(detail.get("citations")) }}</small>{% endif %}
+            {% if detail.get("citations") %}<small>Citations: {{ citation_list(detail.get("citations")) }}</small>{% endif %}
           </section>
         {% endfor %}
       </div>
@@ -158,7 +166,7 @@
                 <article class="lesson-block">
                   <h4>{{ block.get("title", "知识点") }}</h4>
                   <p>{{ block.get("body", "") }}</p>
-                  {% if block.get("citations") %}<small>Citations: {{ ", ".join(block.get("citations")) }}</small>{% endif %}
+                  {% if block.get("citations") %}<small>Citations: {{ citation_list(block.get("citations")) }}</small>{% endif %}
                 </article>
               {% endfor %}
             </div>
@@ -173,7 +181,7 @@
                   <article>
                     <h4>{{ example.get("title", "例子") }}</h4>
                     <p>{{ example.get("body", "") }}</p>
-                    {% if example.get("citations") %}<small>Citations: {{ ", ".join(example.get("citations")) }}</small>{% endif %}
+                    {% if example.get("citations") %}<small>Citations: {{ citation_list(example.get("citations")) }}</small>{% endif %}
                   </article>
                 {% endfor %}
               </div>
@@ -188,7 +196,7 @@
                     <h4>{{ misconception.get("title", "误区") }}</h4>
                     {% if misconception.get("misconception") %}<p>{{ misconception.get("misconception") }}</p>{% endif %}
                     <p>{{ misconception.get("correction", "") }}</p>
-                    {% if misconception.get("citations") %}<small>Citations: {{ ", ".join(misconception.get("citations")) }}</small>{% endif %}
+                    {% if misconception.get("citations") %}<small>Citations: {{ citation_list(misconception.get("citations")) }}</small>{% endif %}
                   </article>
                 {% endfor %}
               </div>
@@ -227,7 +235,7 @@
                 <li>
                   <strong>{{ reading.get("title", "来源") }}</strong>
                   {% if reading.get("locator") %}<span>{{ reading.get("locator") }}</span>{% endif %}
-                  {% if reading.get("citations") %}<small>{{ ", ".join(reading.get("citations")) }}</small>{% endif %}
+                  {% if reading.get("citations") %}<small>{{ citation_list(reading.get("citations")) }}</small>{% endif %}
                 </li>
               {% endfor %}
             </ul>
@@ -237,7 +245,7 @@
             </ul>
           {% endif %}
           {% if module.citations %}
-            <p class="muted">Citations: {{ ", ".join(module.citations) }}</p>
+            <p class="muted">Citations: {{ citation_list(module.citations) }}</p>
           {% endif %}
         </section>
       </article>

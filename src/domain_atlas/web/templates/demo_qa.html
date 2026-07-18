@@ -17,8 +17,20 @@
       <p class="eyebrow">{{ record.evidence_status }}</p>
       <h2>{{ record.question }}</h2>
       <p>{{ record.answer }}</p>
-      <p class="muted">Wiki citations: {{ ", ".join(record.citations) }}</p>
-      <p class="muted">Source provenance: {{ ", ".join(record.source_provenance) }}</p>
+      {% if record.citations %}
+        <p class="muted">Wiki citations:
+          {% for citation in record.citations %}
+            <a class="citation-link" href="{{ citation_links.get(citation) }}">{{ citation }}</a>{% if not loop.last %}, {% endif %}
+          {% endfor %}
+        </p>
+      {% endif %}
+      {% if record.source_provenance %}
+        <p class="muted">Source provenance:
+          {% for citation in record.source_provenance %}
+            <a class="citation-link" href="{{ citation_links.get(citation) }}" target="_blank" rel="noreferrer">{{ citation }}</a>{% if not loop.last %}, {% endif %}
+          {% endfor %}
+        </p>
+      {% endif %}
     </article>
   {% endfor %}
 </section>

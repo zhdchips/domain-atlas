@@ -3,6 +3,7 @@
 {% block page_class %} page-wide{% endblock %}
 
 {% block content %}
+{% set links = citation_links|default({}) %}
 <section class="intro">
   <p class="eyebrow">LLM Wiki Workspace</p>
   <h1>{{ project.name }}</h1>
@@ -52,7 +53,14 @@
           </div>
           <div>
             <dt>citations</dt>
-            <dd>{{ ", ".join(selected_page.citations) if selected_page.citations else "none" }}</dd>
+            <dd>
+              {% if selected_page.citations %}
+                {% for citation in selected_page.citations %}
+                  {% set href = links.get(citation) %}
+                  {% if href %}<a class="citation-link" href="{{ href }}"{% if href.startswith("https://") %} target="_blank" rel="noreferrer"{% endif %}>{{ citation }}</a>{% else %}{{ citation }}{% endif %}{% if not loop.last %}, {% endif %}
+                {% endfor %}
+              {% else %}none{% endif %}
+            </dd>
           </div>
         </dl>
         <p>{{ selected_page.summary }}</p>
