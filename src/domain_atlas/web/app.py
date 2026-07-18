@@ -122,6 +122,8 @@ def create_app(
             base_url=app_settings.llm_base_url,
             model=app_settings.chat_model,
             max_tokens=app_settings.chat_max_tokens,
+            timeout_seconds=app_settings.llm_timeout_seconds,
+            max_retries=app_settings.llm_max_retries,
         )
         return KnowledgeBuildWorkflow(
             database_path=app_settings.database_path,
@@ -164,6 +166,8 @@ def create_app(
             base_url=app_settings.llm_base_url,
             model=app_settings.chat_model,
             max_tokens=app_settings.chat_max_tokens,
+            timeout_seconds=app_settings.llm_timeout_seconds,
+            max_retries=app_settings.llm_max_retries,
         )
         return RetrievalQAService(
             database_path=app_settings.database_path,

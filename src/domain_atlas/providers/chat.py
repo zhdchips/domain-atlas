@@ -112,7 +112,10 @@ class OpenAICompatibleChatProvider:
             except httpx.HTTPError as exc:
                 last_error = exc
                 if attempt + 1 >= attempts:
-                    raise ChatProviderError("Chat completion request failed.") from exc
+                    raise ChatProviderError(
+                        "Chat completion request failed "
+                        f"after {attempts} attempts: {type(exc).__name__}."
+                    ) from exc
                 _sleep_before_retry(self.retry_delay_seconds, attempt)
                 continue
 
@@ -122,7 +125,10 @@ class OpenAICompatibleChatProvider:
                 return response
             _sleep_before_retry(self.retry_delay_seconds, attempt)
 
-        raise ChatProviderError("Chat completion request failed.") from last_error
+        error_kind = type(last_error).__name__ if last_error is not None else "unknown error"
+        raise ChatProviderError(
+            f"Chat completion request failed after {attempts} attempts: {error_kind}."
+        ) from last_error
 
 
 def _parse_json_object(content: str) -> dict[str, Any]:

@@ -22,6 +22,8 @@ def test_provider_defaults_match_mvp_contract():
     assert settings.llm_provider == "deepseek"
     assert settings.chat_model == "deepseek-chat"
     assert settings.chat_max_tokens == 12_000
+    assert settings.llm_timeout_seconds == 180.0
+    assert settings.llm_max_retries == 2
     assert settings.embedding_provider == "dashscope"
     assert settings.embedding_model == "text-embedding-v4"
     assert settings.embedding_dimensions == 1024

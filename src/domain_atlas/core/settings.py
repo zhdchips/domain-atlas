@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     chat_model: str = "deepseek-chat"
     chat_max_tokens: int = 12_000
+    llm_timeout_seconds: float = 180.0
+    llm_max_retries: int = 2
     intake_llm_assessment_enabled: bool = Field(
         default=True,
         validation_alias=AliasChoices(

@@ -52,7 +52,7 @@ def main() -> int:
 
 def _run_live_e2e(workdir: Path) -> int:
     data_dir = workdir / "data"
-    settings = Settings(data_dir=data_dir, intake_llm_assessment_enabled=False)
+    settings = Settings(data_dir=data_dir, INTAKE_LLM_ASSESSMENT_ENABLED=False)
     client = TestClient(create_app(settings))
 
     create = client.post(

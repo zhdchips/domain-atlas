@@ -103,6 +103,27 @@ def test_chat_provider_retries_transient_overload():
     assert calls["count"] == 2
 
 
+def test_chat_provider_reports_request_error_kind_after_retries():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("timed out", request=request)
+
+    provider = OpenAICompatibleChatProvider(
+        api_key="not-a-real-key",
+        base_url="https://llm.example.com",
+        model="test-chat",
+        max_retries=1,
+        retry_delay_seconds=0,
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    try:
+        provider.complete_json(system_prompt="system", user_prompt="user")
+    except Exception as exc:
+        assert str(exc) == "Chat completion request failed after 2 attempts: ReadTimeout."
+    else:
+        raise AssertionError("Expected request failure to be raised.")
+
+
 def test_chat_provider_retries_invalid_json_content():
     calls = {"count": 0}
 
