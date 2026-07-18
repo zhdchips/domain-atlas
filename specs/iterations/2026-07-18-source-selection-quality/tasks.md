@@ -1,0 +1,32 @@
+# Source Selection Quality Tasks
+
+## Phase 1: Specification
+
+- [x] Audit candidate discovery, Autopilot, ingestion, templates, and current regressions.
+- [x] Define source roles, official-first policy, source-family behavior, and quality gates.
+- [ ] Commit the specification phase.
+
+## Phase 2: Candidate And Workflow Policy
+
+- [ ] Add pure candidate assessment and explainable metadata.
+- [ ] Add source-family grouping, fork/mirror handling, and official-first selection plans.
+- [ ] Require independent source families in Guided Autopilot and persist structured outcomes.
+- [ ] Preserve Expert manual confirmation with supplemental-source warnings.
+- [ ] Update candidate and workflow-status UI.
+- [ ] Commit policy implementation after targeted tests.
+
+## Phase 3: Ingestion Quality
+
+- [ ] Exclude HTML chrome from normalized text.
+- [ ] Record local URL quality signals and preserve excluded raw artifacts.
+- [ ] Reject exact/obvious near-duplicate source text before chunk/vector persistence.
+- [ ] Commit ingestion implementation after targeted tests.
+
+## Phase 4: Regression And Audit
+
+- [ ] Add deterministic source-policy, ingestion-quality, app, and E2E fixtures.
+- [ ] Extend Playwright checks for candidate explanations and evidence-insufficient state.
+- [ ] Run golden Demo, fast, E2E, browser E2E, and isolated live-guided checks.
+- [ ] Start local server and validate the default workflow surface.
+- [ ] Complete a requirement-by-requirement audit and commit verification.
+- [ ] Push deferred by user request.
