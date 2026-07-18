@@ -39,7 +39,12 @@ def main() -> int:
     try:
         data_dir = workdir / "data"
         settings = Settings(data_dir=data_dir)
-        project_id, llm_intake_project_id, mobile_intake_project_id = _create_wiki_fixture(settings)
+        (
+            project_id,
+            llm_intake_project_id,
+            mobile_intake_project_id,
+            exhaustion_project_id,
+        ) = _create_wiki_fixture(settings)
         port = _free_port()
         server = _start_server(data_dir=data_dir, port=port)
         base_url = f"http://127.0.0.1:{port}"
@@ -57,6 +62,9 @@ def main() -> int:
             _assert_learning_navigation(page, base_url=base_url, project_id=project_id)
             page.goto(f"{base_url}/domains/{project_id}", wait_until="networkidle")
             _assert_dashboard_task_feedback(page)
+            _assert_guided_autopilot_flow(page)
+            page.goto(f"{base_url}/domains/{exhaustion_project_id}", wait_until="networkidle")
+            _assert_guided_exhaustion_feedback(page)
             page.goto(f"{base_url}/domains/{llm_intake_project_id}/intake", wait_until="networkidle")
             _assert_llm_enhanced_intake(page)
             page.goto(f"{base_url}/", wait_until="networkidle")
@@ -84,7 +92,7 @@ def main() -> int:
     return 0
 
 
-def _create_wiki_fixture(settings: Settings) -> tuple[int, int, int]:
+def _create_wiki_fixture(settings: Settings) -> tuple[int, int, int, int]:
     initialize_database(settings.database_path)
     project = DomainProjectRepository(settings.database_path).create(
         CreateDomainProject(
@@ -178,7 +186,31 @@ def _create_wiki_fixture(settings: Settings) -> tuple[int, int, int]:
     workflow_repository.finish_run(run_id)
     llm_project = _create_llm_intake_fixture(settings, name="Agent")
     mobile_llm_project = _create_llm_intake_fixture(settings, name="数据治理")
-    return project.id, llm_project.id, mobile_llm_project.id
+    exhausted_project = DomainProjectRepository(settings.database_path).create(
+        CreateDomainProject(name="旅行代理", scope="旅行代理", interaction_mode="guided")
+    )
+    exhausted_run_id = workflow_repository.start_run(exhausted_project.id, "guided_autopilot")
+    recovery_message = (
+        "候选资料已尝试完毕，仅成功摄取 0/2 份。失败原因包括：访问受限。"
+        "可稍后重试，或手动添加可访问的 URL、Markdown/PDF，也可调整领域范围后重新搜索。"
+    )
+    workflow_repository.record_step(
+        exhausted_run_id,
+        step_name="ingest_sources",
+        status="failed",
+        output={
+            "completed": 0,
+            "total": 2,
+            "success_count": 0,
+            "attempted_count": 2,
+            "failed_count": 2,
+            "minimum_build_sources": 2,
+            "terminal_reason": "candidates_exhausted",
+            "recovery_message": recovery_message,
+        },
+    )
+    workflow_repository.fail_run(exhausted_run_id, recovery_message)
+    return project.id, llm_project.id, mobile_llm_project.id, exhausted_project.id
 
 
 def _create_llm_intake_fixture(settings: Settings, *, name: str):
@@ -323,7 +355,7 @@ def _start_server(*, data_dir: Path, port: int) -> subprocess.Popen[str]:
             sys.executable,
             "-m",
             "uvicorn",
-            "domain_atlas.web.app:create_app",
+            "scripts.browser_e2e_fixture_app:create_app",
             "--factory",
             "--host",
             "127.0.0.1",
@@ -534,6 +566,32 @@ def _assert_dashboard_task_feedback(page) -> None:
         raise RuntimeError("build button was not disabled after submit")
     if "正在生成 LLM Wiki、课程和引用索引" not in form.inner_text():
         raise RuntimeError("build pending status is missing")
+
+
+def _assert_guided_autopilot_flow(page) -> None:
+    form = page.locator("form[action$='/autopilot']")
+    form.locator("button").click()
+    page.wait_for_url("**/domains/*", timeout=5000)
+    page.locator(".workflow-run-active").wait_for(state="visible", timeout=5000)
+    if "任务正在执行" not in page.locator("[data-workflow-poll]").inner_text():
+        raise RuntimeError("guided workflow did not expose active state")
+    page.wait_for_function(
+        "() => document.body.innerText.includes('资料门槛已满足')",
+        timeout=8000,
+    )
+    text = page.locator("[data-workflow-poll]").inner_text()
+    if "已成功 2 / 至少 2 份资料" not in text:
+        raise RuntimeError("guided workflow did not expose the source success count")
+    print("verified guided browser success workflow")
+
+
+def _assert_guided_exhaustion_feedback(page) -> None:
+    text = page.locator("[data-workflow-poll]").inner_text()
+    if "仅成功摄取 0/2 份" not in text:
+        raise RuntimeError("guided exhaustion summary is missing")
+    if "手动添加可访问的 URL、Markdown/PDF" not in text:
+        raise RuntimeError("guided exhaustion recovery action is missing")
+    print("verified guided browser exhaustion feedback")
 
 
 def _assert_llm_enhanced_intake(page) -> None:

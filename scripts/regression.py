@@ -29,6 +29,11 @@ def main() -> int:
         help="Run a fixed live E2E domain build with configured providers.",
     )
     group.add_argument(
+        "--live-guided-e2e",
+        action="store_true",
+        help="Run an isolated live guided search, ingestion, build, and QA flow.",
+    )
+    group.add_argument(
         "--browser-e2e",
         action="store_true",
         help="Run Playwright browser layout checks against a deterministic Wiki project.",
@@ -50,6 +55,8 @@ def main() -> int:
         return _run("live-intake-eval", [sys.executable, "scripts/intake_eval.py", "--live"])
     if args.live_e2e:
         return _run("live-e2e", [sys.executable, "scripts/live_e2e_domain_build.py"])
+    if args.live_guided_e2e:
+        return _run("live-guided-e2e", [sys.executable, "scripts/live_guided_e2e.py"])
     return _run("browser-e2e", [sys.executable, "scripts/browser_e2e_wiki_layout.py"])
 
 

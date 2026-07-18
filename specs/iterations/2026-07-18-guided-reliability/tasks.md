@@ -17,11 +17,11 @@
 
 ## Phase 3: Regression Layers
 
-- [ ] Add recorded discovery/fetch fixtures and deterministic app E2E.
-- [ ] Extend Playwright flow coverage for guided success and exhaustion states.
-- [ ] Add isolated `--live-guided-e2e` and regression command wiring.
-- [ ] Document regression layer responsibilities and commands.
-- [ ] Commit Phase 3 after deterministic/browser checks pass.
+- [x] Add recorded discovery/fetch fixtures and deterministic app E2E.
+- [x] Extend Playwright flow coverage for guided success and exhaustion states.
+- [x] Add isolated `--live-guided-e2e` and regression command wiring.
+- [x] Document regression layer responsibilities and commands.
+- [x] Commit Phase 3 after deterministic/browser checks pass.
 
 ## Phase 4: Verification And Audit
 

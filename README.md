@@ -65,9 +65,10 @@ uv run python scripts/regression.py --intake-eval
 uv run python scripts/regression.py --live
 uv run python scripts/regression.py --live-intake-eval
 uv run python scripts/regression.py --live-e2e
+uv run python scripts/regression.py --live-guided-e2e
 ```
 
-Fast and E2E checks are deterministic and do not call live providers. Fast regression also replays the versioned intake evaluation set. Browser E2E uses Playwright against a deterministic local Wiki project and catches real CSS/layout regressions. `--live-intake-eval` calls the chat model once for each intake case and writes a normalized report under `reports/intake/`; it creates no project or knowledge artifacts. Live checks verify configured external provider availability, while live E2E runs the fixed Markdown-to-Wiki build through the configured LLM and embedding providers.
+Fast and E2E checks are deterministic and do not call live providers. Fast regression also replays the versioned intake evaluation set. Browser E2E uses Playwright against deterministic Wiki and guided-workflow fixtures, catching real interaction, status, and layout regressions. `--live-intake-eval` calls the chat model once for each intake case and writes a normalized report under `reports/intake/`; it creates no project or knowledge artifacts. Live checks verify configured external provider availability, `--live-e2e` runs the fixed Markdown-to-Wiki build, and `--live-guided-e2e` runs an isolated real search, URL-ingestion, build, and QA flow in a temporary data directory.
 
 Before the first browser E2E run:
 
@@ -76,7 +77,7 @@ uv sync --extra dev
 uv run python -m playwright install chromium
 ```
 
-At the end of an SDD iteration, run at least `--fast` and `--browser-e2e`; run `--live-e2e` when the iteration touches ingestion, build, embeddings, QA, or provider-facing behavior. See `specs/iterations/2026-07-15-layered-regression/` for the SDD strategy and maintenance checklist.
+At the end of an SDD iteration, run at least `--fast` and `--browser-e2e`; run `--live-e2e` for build/embedding/QA changes and `--live-guided-e2e` for discovery, URL ingestion, candidate ranking, or provider-facing guided-workflow changes. See the latest iteration spec for the SDD maintenance checklist.
 
 ## Wiki Workspace
 

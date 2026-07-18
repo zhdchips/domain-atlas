@@ -1,0 +1,57 @@
+{
+  "query": "旅行代理",
+  "candidates": [
+    {
+      "provider": "exa",
+      "provider_source_id": "wiki-travel-agency",
+      "title": "旅行社 - 维基百科",
+      "url": "https://zh.wikipedia.org/wiki/Travel_agency",
+      "snippet": "旅行代理行业的百科概览。",
+      "source_type": "encyclopedia",
+      "authority_score": 0.8,
+      "authority_reason": "百科资料"
+    },
+    {
+      "provider": "exa",
+      "provider_source_id": "baike-travel-agent",
+      "title": "旅游代理人 - 百度百科",
+      "url": "https://baike.baidu.com/item/travel-agent",
+      "snippet": "旅游代理人的定义。",
+      "source_type": "encyclopedia",
+      "authority_score": 0.8,
+      "authority_reason": "百科资料"
+    },
+    {
+      "provider": "exa",
+      "provider_source_id": "travel-association-guide",
+      "title": "旅行代理服务指南",
+      "url": "https://association.example.test/travel-agent-guide",
+      "snippet": "旅行代理的服务边界与消费者保障。",
+      "source_type": "institution",
+      "authority_score": 0.72,
+      "authority_reason": "行业机构资料"
+    },
+    {
+      "provider": "exa",
+      "provider_source_id": "travel-company-practice",
+      "title": "旅行代理实务说明",
+      "url": "https://practice.example.test/travel-agent-practice",
+      "snippet": "旅行代理的咨询、预订和售后流程。",
+      "source_type": "web",
+      "authority_score": 0.5,
+      "authority_reason": "可作为补充实务资料"
+    }
+  ],
+  "responses": {
+    "https://zh.wikipedia.org/wiki/Travel_agency": {"status_code": 403, "body": "blocked"},
+    "https://baike.baidu.com/item/travel-agent": {"status_code": 403, "body": "blocked"},
+    "https://association.example.test/travel-agent-guide": {
+      "status_code": 200,
+      "body": "<html><head><title>旅行代理服务指南</title></head><body><h1>旅行代理</h1><p>旅行代理帮助旅客比较产品、完成预订并处理变更与售后服务。</p><p>可靠服务需要明确责任边界、价格信息和供应商确认。</p></body></html>"
+    },
+    "https://practice.example.test/travel-agent-practice": {
+      "status_code": 200,
+      "body": "<html><head><title>旅行代理实务说明</title></head><body><h1>旅行代理实务</h1><p>典型流程包括需求澄清、行程设计、库存确认、支付、出行支持和异常处理。</p><p>代理应保留供应商凭证并向旅客解释退改规则。</p></body></html>"
+    }
+  }
+}
