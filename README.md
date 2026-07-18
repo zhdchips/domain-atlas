@@ -1,71 +1,56 @@
 # Domain Atlas
 
-**A traceable domain-learning system that turns selected sources into an LLM
-Wiki, a structured learning path, and cited answers.**
+**一个可溯源的领域学习系统，将精选资料转化为 LLM Wiki、结构化学习路线和带引用的问答。**
 
-Domain Atlas is not a generic chat UI. It keeps evidence and learning content
-separate: source chunks preserve provenance; generated Wiki pages organize the
-domain; answers cite the Wiki first and fall back to source evidence only when
-needed.
+Domain Atlas 不是通用聊天界面。它将证据与学习内容分层管理：原始资料切片保留来源信息；生成的 Wiki 页面负责组织领域知识；回答优先引用 Wiki，并仅在必要时回退到原始资料证据。
 
 <p align="center">
-  <img src="docs/assets/demo-overview.png" alt="Domain Atlas public Demo overview" width="49%" />
-  <img src="docs/assets/demo-wiki.png" alt="Domain Atlas LLM Wiki workspace" width="49%" />
+  <img src="docs/assets/demo-overview.png" alt="Domain Atlas 公开演示概览" width="49%" />
+  <img src="docs/assets/demo-wiki.png" alt="Domain Atlas LLM Wiki 工作区" width="49%" />
 </p>
 
 <p align="center">
-  <img src="docs/assets/demo-learning-path.png" alt="Domain Atlas generated learning path" width="49%" />
-  <img src="docs/assets/demo-cited-qa.png" alt="Domain Atlas cited question answering" width="49%" />
+  <img src="docs/assets/demo-learning-path.png" alt="Domain Atlas 生成的学习路线" width="49%" />
+  <img src="docs/assets/demo-cited-qa.png" alt="Domain Atlas 带引用的问答" width="49%" />
 </p>
 
-## What It Does
+## 核心能力
 
-- **Discover and ingest evidence**: search for candidate material, or import
-  URLs, Markdown, and PDFs while retaining source provenance.
-- **Build an LLM Wiki**: generate encyclopedia-style pages, concept links,
-  source profiles, and a navigable workspace from the evidence layer.
-- **Teach, not just retrieve**: create a staged learning path with explanations,
-  knowledge blocks, examples, checks, practice tasks, and deeper reading.
-- **Answer with citations**: use Wiki sections as the primary retrieval layer,
-  with source-chunk fallback and explicit evidence-insufficient answers.
-- **Fail visibly**: expose candidate selection, authority/region reasoning,
-  ingestion progress, retries, and recovery states instead of silently building
-  from weak material.
+- **发现并摄取证据**：搜索候选资料，或导入 URL、Markdown 和 PDF，同时保留完整的来源信息。
+- **构建 LLM Wiki**：基于证据层生成百科式页面、概念链接、来源档案和可导航的知识工作区。
+- **教学，而不只是检索**：创建分阶段的学习路线，包含知识讲解、知识块、示例、检查问题、实践任务和拓展阅读。
+- **带引用回答**：以 Wiki 章节作为主要检索层，必要时回退到原始资料切片；证据不足时明确说明无法回答。
+- **让失败清晰可见**：展示候选资料选择、权威性与地区判断、摄取进度、重试和恢复状态，不使用薄弱资料静默构建知识库。
 
-## Architecture
+## 系统架构
 
 ```mermaid
 flowchart LR
-    A[Domain or learner-provided material] --> B[Discovery and candidate policy]
-    B --> C[Ingestion]
-    C --> D[Source and Chunk evidence]
-    D --> E[LLM Wiki and concept graph]
-    D --> F[Learning path]
-    E --> G[Wiki-first cited QA]
+    A[领域名称或学习者提供的资料] --> B[资料发现与候选选择策略]
+    B --> C[资料摄取]
+    C --> D[Source 与 Chunk 证据层]
+    D --> E[LLM Wiki 与概念图谱]
+    D --> F[学习路线]
+    E --> G[Wiki 优先的引用问答]
     D --> G
-    B --> H[Workflow trace and recovery]
+    B --> H[工作流追踪与故障恢复]
     C --> H
 ```
 
-`Source -> Chunk` is the evidence layer. `Wiki page -> Wiki section` is the
-learning layer. Stable citations connect both layers, so a learner can move
-from a generated explanation back to its supporting source.
+`Source -> Chunk` 构成证据层，`Wiki page -> Wiki section` 构成学习层。稳定的引用标识连接两个层次，使学习者可以从 Agent 生成的讲解回溯到支撑它的原始资料。
 
-## Interaction Modes
+## 交互模式
 
-| Mode | Intended workflow |
+| 模式 | 适用流程 |
 | --- | --- |
-| Guided | Start with a domain; Domain Atlas searches, assesses candidates, ingests usable evidence, and builds the Wiki and learning path. Branded service workflows require direct or first-party evidence. |
-| Expert | Search candidates, confirm sources, and run ingestion/build steps manually. Useful when the learner has a preferred source set or needs to override an automatic recommendation. |
+| 引导模式（Guided） | 从一个领域名称开始；Domain Atlas 自动搜索、评估候选资料、摄取可用证据，并构建 Wiki 和学习路线。涉及品牌服务流程时，必须具备直接证据或一方资料。 |
+| 专家模式（Expert） | 搜索候选资料，由用户确认来源，再手动执行摄取和构建步骤。适合学习者已有偏好的资料集合，或需要覆盖自动推荐结果的情况。 |
 
-Source access is treated as evidence quality, not as a hidden implementation
-detail. A blocked URL, cross-region official page, insufficient direct evidence,
-or inaccessible official service entry remains visible with provenance and a
-recovery path.
+资料可访问性会被视为证据质量的一部分，而不是隐藏的实现细节。遭到拦截的 URL、跨地区的官方网站、直接证据不足或无法访问的官方服务入口，都会连同来源信息和恢复路径一并展示。
 
-## Quick Start
+## 快速开始
 
-### Prerequisites
+### 环境要求
 
 - Python 3.13
 - [uv](https://docs.astral.sh/uv/)
@@ -78,34 +63,29 @@ uv sync --extra dev
 uv run uvicorn domain_atlas.web.app:create_app --factory --reload
 ```
 
-Open `http://127.0.0.1:8000`.
+打开 `http://127.0.0.1:8000`。
 
-Configure real providers in `.env` only when using search, generation, or
-embeddings. See [`.env.example`](.env.example) for the supported variables.
+只有在使用真实搜索、内容生成或向量化服务时，才需要在 `.env` 中配置 Provider。支持的环境变量请参阅 [`.env.example`](.env.example)。
 
-## Public Read-Only Demo
+## 公开只读演示
 
-The deterministic portfolio Demo is safe to expose because it does not create
-projects, accept uploads, read local data, or call Exa, LLM, embedding, or URL
-providers.
+确定性的作品集 Demo 可以安全地公开访问，因为它不会创建项目、接收文件上传、读取本地数据，也不会调用 Exa、LLM、Embedding 或 URL 抓取服务。
 
 ```bash
 PUBLIC_DEMO_MODE=true uv run uvicorn domain_atlas.web.app:create_app --factory
 ```
 
-Open `http://127.0.0.1:8000/demo`. The prebuilt `Agent Harness Engineering`
-case contains sources, a Wiki workspace, five learning modules, cited QA
-examples, and a 25-check golden evaluation catalog.
+打开 `http://127.0.0.1:8000/demo`。预构建的 `Agent Harness Engineering` 案例包含资料来源、Wiki 工作区、5 个学习模块、带引用的问答示例，以及包含 25 项检查的黄金评测集。
 
 ## Docker
 
-Build the image:
+构建镜像：
 
 ```bash
 docker build -t domain-atlas:local .
 ```
 
-Run the public Demo:
+运行公开 Demo：
 
 ```bash
 docker run --rm -p 8000:8000 \
@@ -113,8 +93,7 @@ docker run --rm -p 8000:8000 \
   domain-atlas:local
 ```
 
-For a local writable instance, mount `/app/data` and provide provider
-configuration at runtime:
+运行本地可写实例时，请挂载 `/app/data`，并在运行时提供 Provider 配置：
 
 ```bash
 docker run --rm -p 8000:8000 \
@@ -123,15 +102,11 @@ docker run --rm -p 8000:8000 \
   domain-atlas:local
 ```
 
-The writable mode is intended for a trusted local environment. It is **not** a
-ready-made anonymous SaaS deployment: authentication, tenant isolation,
-provider quotas, rate limits, SSRF protection, and upload governance require
-additional production work.
+可写模式仅适用于受信任的本地环境。它**不是**一个开箱即用的匿名 SaaS 部署方案：生产环境仍需补充身份认证、租户隔离、Provider 配额、访问限流、SSRF 防护和文件上传治理。
 
-## Verification
+## 验证与测试
 
-The default regression layers are deterministic and do not spend provider
-credits:
+默认回归测试均为确定性测试，不会消耗 Provider 额度：
 
 ```bash
 uv run python scripts/regression.py --fast
@@ -140,41 +115,35 @@ uv run python scripts/regression.py --golden-demo-eval
 uv run python scripts/regression.py --browser-e2e
 ```
 
-The browser check requires Chromium once:
+首次运行浏览器测试前，需要安装 Chromium：
 
 ```bash
 uv run python -m playwright install chromium
 ```
 
-Live provider verification is intentionally opt-in:
+真实 Provider 验证默认不执行，需要显式启用：
 
 ```bash
 uv run python scripts/regression.py --live
 uv run python scripts/regression.py --live-guided-e2e
 ```
 
-The repository CI runs only the deterministic layers. It never receives Exa,
-LLM, or embedding credentials.
+仓库的 CI 只运行确定性测试，不会接收 Exa、LLM 或 Embedding 凭证。
 
-## Project Boundaries
+## 项目边界
 
-- Domain Atlas is a controlled, evidence-oriented workflow system. It does not
-  claim fully autonomous general-purpose agent behavior.
-- A source citation indicates the evidence available to the system; it is not a
-  guarantee of factual completeness or legal ownership of a website.
-- Search rankings and website access are external dependencies. Guided mode can
-  pause for manual confirmation rather than fabricate a confident knowledge
-  base.
-- The public Demo is a fixed catalog integrity check, not a generic benchmark
-  or a production accuracy claim.
+- Domain Atlas 是一个受控的、以证据为中心的工作流系统，并不宣称具备完全自主的通用 Agent 能力。
+- 来源引用代表系统当前可获得的证据，不保证事实完备性，也不代表对目标网站内容拥有法律权利。
+- 搜索排名和网站可访问性属于外部依赖。引导模式可能暂停并请求用户手动确认，而不会基于不足的证据伪造一个看似可信的知识库。
+- 公开 Demo 是固定案例的完整性检查，不是通用基准测试，也不代表生产环境中的准确率承诺。
 
-## Development And Release
+## 开发与发布
 
-- [Contributing guide](CONTRIBUTING.md)
-- [Changelog](CHANGELOG.md)
-- [v0.1.0 release notes and remote publication checklist](docs/release-notes/v0.1.0.md)
-- [Spec-driven iteration records](specs/iterations/)
+- [贡献指南](CONTRIBUTING.md)
+- [更新日志](CHANGELOG.md)
+- [v0.1.0 发布说明与远程发布检查清单](docs/release-notes/v0.1.0.md)
+- [规格驱动的迭代记录](specs/iterations/)
 
-## License
+## 开源许可
 
 [MIT](LICENSE)
