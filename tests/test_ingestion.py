@@ -193,3 +193,43 @@ def test_url_ingestion_does_not_retry_access_error(tmp_path):
     else:
         raise AssertionError("Expected access failure.")
     assert calls["count"] == 1
+
+
+def test_url_ingestion_exhausts_retryable_server_error_safely(tmp_path):
+    calls = {"count": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["count"] += 1
+        return httpx.Response(503, text="secret provider response")
+
+    database_path = tmp_path / "domain_atlas.sqlite3"
+    initialize_database(database_path)
+    project = DomainProjectRepository(database_path).create(CreateDomainProject(name="LLM Agents"))
+    source = SourceRepository(database_path).create(
+        CreateSource(
+            project_id=project.id,
+            source_type="url",
+            title="Agent Docs",
+            locator="https://docs.example.com/agents",
+        )
+    )
+    service = IngestionService(
+        database_path=database_path,
+        data_dir=tmp_path / "data",
+        embedding_provider=FakeEmbeddingProvider(),
+        vector_index=FakeVectorIndex(),
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+        url_fetch_max_retries=1,
+        retry_base_delay_seconds=0,
+        retry_jitter_seconds=0,
+    )
+
+    try:
+        service.ingest_source(source.id)
+    except ValueError as exc:
+        assert "URL 资料抓取服务暂时不可用" in str(exc)
+        assert "2/2" in str(exc)
+        assert "secret provider response" not in str(exc)
+    else:
+        raise AssertionError("Expected retry exhaustion.")
+    assert calls["count"] == 2
