@@ -98,6 +98,20 @@ def _run_live_guided_e2e(workdir: Path) -> dict[str, int]:
         None,
     )
     if ingestion_step is None:
+        selection_step = next(
+            (
+                step
+                for step in reversed(run.steps)
+                if step.step_name == "select_candidates" and step.status == "failed"
+            ),
+            None,
+        )
+        if selection_step is not None:
+            raise RuntimeError(
+                "guided selection stopped with "
+                f"{selection_step.output.get('terminal_reason', 'unknown')}: "
+                f"{selection_step.output.get('recovery_message', run.error)}"
+            )
         raise RuntimeError("guided workflow did not persist an ingestion summary")
     summary = ingestion_step.output
     candidate_count = int(
@@ -115,7 +129,8 @@ def _run_live_guided_e2e(workdir: Path) -> dict[str, int]:
     print(
         "guided ingestion "
         f"terminal_reason={summary.get('terminal_reason', '')} attempted={attempted_count} "
-        f"successful_sources={success_count} failed={summary.get('failed_count', 0)}"
+        f"successful_sources={success_count} independent_families="
+        f"{len(summary.get('successful_families', []))} failed={summary.get('failed_count', 0)}"
     )
     if run.status != "completed":
         raise RuntimeError(
@@ -123,6 +138,8 @@ def _run_live_guided_e2e(workdir: Path) -> dict[str, int]:
         )
     if success_count < 2:
         raise RuntimeError(f"guided workflow completed below the two-source gate: {success_count}")
+    if len(summary.get("successful_families", [])) < 2:
+        raise RuntimeError("guided workflow completed below the independent-source-family gate")
 
     project_after = DomainProjectRepository(settings.database_path).get(project.id)
     if project_after is None or project_after.build_status != "completed":

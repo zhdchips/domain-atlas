@@ -39,6 +39,11 @@
                 {% endif %}
                 {% if step.output.get('terminal_reason') == 'minimum_sources_reached' %}
                   <small>已尝试 {{ step.output.get('attempted_count', 0) }} 条，{{ step.output.get('failed_count', 0) }} 条未成功；资料门槛已满足。</small>
+                {% elif step.output.get('terminal_reason') == 'minimum_independent_sources_reached' %}
+                  <small>已获得 {{ step.output.get('successful_families', [])|length }} 个独立来源族；资料门槛已满足。</small>
+                {% elif step.output.get('terminal_reason') == 'evidence_insufficient' %}
+                  <p class="workflow-error">{{ step.output.get('recovery_message') }}</p>
+                  <small>请从下方候选中手动确认资料，或补充官方帮助页、公告、服务规则。</small>
                 {% elif step.output.get('terminal_reason') == 'candidates_exhausted' %}
                   <p class="workflow-error">{{ step.output.get('recovery_message') }}</p>
                   <small>已尝试 {{ step.output.get('attempted_count', 0) }} 条，{{ step.output.get('failed_count', 0) }} 条未成功。</small>

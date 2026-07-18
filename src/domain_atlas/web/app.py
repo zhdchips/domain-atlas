@@ -48,6 +48,7 @@ from domain_atlas.wiki.presentation import (
 from domain_atlas.workflow.build import KnowledgeBuildWorkflow
 from domain_atlas.workflow.autopilot import AutopilotWorkflow
 from domain_atlas.workflow.background import BackgroundWorkflowRunner, WorkflowConflictError
+from domain_atlas.workflow.source_policy import assess_candidates
 
 templates = Jinja2Templates(directory="src/domain_atlas/web/templates")
 static_files = StaticFiles(directory="src/domain_atlas/web/static")
@@ -573,7 +574,9 @@ def create_app(
         except SourceDiscoveryError as exc:
             return _dashboard_redirect(project_id, error=f"搜索候选资料失败：{exc}")
 
-        candidate_repository().replace_discovered(project_id, drafts)
+        candidate_repository().replace_discovered(
+            project_id, assess_candidates(project.effective_scope, drafts)
+        )
         return RedirectResponse(
             url=f"/domains/{project_id}",
             status_code=status.HTTP_303_SEE_OTHER,
@@ -601,6 +604,11 @@ def create_app(
                     "provider": candidate.provider,
                     "authority_score": candidate.authority_score,
                     "authority_reason": candidate.authority_reason,
+                    "source_role": candidate.metadata.get("source_role", "unverified"),
+                    "source_family": candidate.metadata.get("source_family", candidate.url),
+                    "selection_reason": candidate.metadata.get("selection_reason", ""),
+                    "manual_warning": candidate.metadata.get("manual_warning", ""),
+                    "manual_override": True,
                 },
             )
         )

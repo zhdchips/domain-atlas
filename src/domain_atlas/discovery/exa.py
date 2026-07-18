@@ -233,17 +233,17 @@ def _guess_source_type(url: str, title: str) -> str:
 
 def _authority_score(url: str, source_type: str, publisher: str) -> tuple[float, str]:
     host = urlparse(url).netloc.lower()
-    score = 0.45
+    score = 0.4
     reasons: list[str] = []
 
     if source_type in {"official_docs", "institution"}:
-        score += 0.3
+        score += 0.35
         reasons.append("官方或机构资料")
     elif source_type == "paper":
-        score += 0.25
+        score += 0.3
         reasons.append("论文或研究资料")
     elif source_type == "repository":
-        score += 0.15
+        score += 0.08
         reasons.append("代码仓库资料")
     elif source_type == "encyclopedia":
         score += 0.15
@@ -256,7 +256,6 @@ def _authority_score(url: str, source_type: str, publisher: str) -> tuple[float,
         "docs.",
         "help.",
         "developer.",
-        "github.com",
         "wikipedia.org",
         "baike.baidu.com",
     )
@@ -265,7 +264,7 @@ def _authority_score(url: str, source_type: str, publisher: str) -> tuple[float,
         reasons.append("来源域名可信度较高")
 
     if publisher:
-        score += 0.05
+        score += 0.03
         reasons.append("包含发布者信息")
 
     bounded = min(score, 1.0)

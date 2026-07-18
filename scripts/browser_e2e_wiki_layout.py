@@ -18,6 +18,7 @@ from domain_atlas.core.db import initialize_database
 from domain_atlas.core.settings import Settings
 from domain_atlas.domain.artifacts import KnowledgeArtifactRepository
 from domain_atlas.domain.projects import CreateDomainProject, DomainProjectRepository
+from domain_atlas.domain.source_candidates import SourceCandidateDraft, SourceCandidateRepository
 from domain_atlas.domain.sources import CreateSource, SourceRepository
 from domain_atlas.domain.workflow import WorkflowRepository
 from domain_atlas.intake.assessment import IntakeAssessment
@@ -45,6 +46,7 @@ def main() -> int:
             llm_intake_project_id,
             mobile_intake_project_id,
             exhaustion_project_id,
+            evidence_insufficient_project_id,
         ) = _create_wiki_fixture(settings)
         port = _free_port()
         server = _start_server(data_dir=data_dir, port=port)
@@ -67,6 +69,8 @@ def main() -> int:
             _assert_guided_autopilot_flow(page)
             page.goto(f"{base_url}/domains/{exhaustion_project_id}", wait_until="networkidle")
             _assert_guided_exhaustion_feedback(page)
+            page.goto(f"{base_url}/domains/{evidence_insufficient_project_id}", wait_until="networkidle")
+            _assert_evidence_insufficient_feedback(page)
             page.goto(f"{base_url}/domains/{llm_intake_project_id}/intake", wait_until="networkidle")
             _assert_llm_enhanced_intake(page)
             page.goto(f"{base_url}/", wait_until="networkidle")
@@ -94,7 +98,7 @@ def main() -> int:
     return 0
 
 
-def _create_wiki_fixture(settings: Settings) -> tuple[int, int, int, int]:
+def _create_wiki_fixture(settings: Settings) -> tuple[int, int, int, int, int]:
     initialize_database(settings.database_path)
     project = DomainProjectRepository(settings.database_path).create(
         CreateDomainProject(
@@ -220,7 +224,47 @@ def _create_wiki_fixture(settings: Settings) -> tuple[int, int, int, int]:
         },
     )
     workflow_repository.fail_run(exhausted_run_id, recovery_message)
-    return project.id, llm_project.id, mobile_llm_project.id, exhausted_project.id
+    evidence_project = DomainProjectRepository(settings.database_path).create(
+        CreateDomainProject(name="寿司郎取号", scope="寿司郎在线取号流程", interaction_mode="guided")
+    )
+    SourceCandidateRepository(settings.database_path).replace_discovered(
+        evidence_project.id,
+        [
+            SourceCandidateDraft(
+                provider="fixture",
+                provider_source_id="sushiro-helper",
+                title="Sushiro queue helper",
+                url="https://github.com/example/sushiro-overdose",
+                snippet="Third-party queue helper.",
+                source_type="repository",
+                authority_score=0.51,
+                authority_reason="代码仓库资料",
+                metadata={
+                    "source_role": "repository",
+                    "source_family": "github-repository:sushiro-overdose",
+                    "selection_reason": "代码仓库是第三方技术资料；对品牌或服务流程仅作补充，不是官方流程证据。",
+                    "manual_warning": "该代码仓库不是官方服务流程证据，请优先确认官方资料。",
+                },
+            )
+        ],
+    )
+    evidence_run_id = workflow_repository.start_run(evidence_project.id, "guided_autopilot")
+    evidence_message = "该领域涉及品牌或机构服务流程，但未找到可验证的一方或直接权威资料。"
+    workflow_repository.record_step(
+        evidence_run_id,
+        step_name="select_candidates",
+        status="failed",
+        output={
+            "terminal_reason": "evidence_insufficient",
+            "policy": "official_first",
+            "requires_direct_authority": True,
+            "candidate_count": 1,
+            "recovery_message": evidence_message,
+        },
+        error=evidence_message,
+    )
+    workflow_repository.fail_run(evidence_run_id, evidence_message)
+    return project.id, llm_project.id, mobile_llm_project.id, exhausted_project.id, evidence_project.id
 
 
 def _create_llm_intake_fixture(settings: Settings, *, name: str):
@@ -651,6 +695,19 @@ def _assert_guided_exhaustion_feedback(page) -> None:
     if "手动添加可访问的 URL、Markdown/PDF" not in text:
         raise RuntimeError("guided exhaustion recovery action is missing")
     print("verified guided browser exhaustion feedback")
+
+
+def _assert_evidence_insufficient_feedback(page) -> None:
+    body = page.locator("body").inner_text()
+    if "未找到可验证的一方或直接权威资料" not in body:
+        raise RuntimeError("official-first evidence gap is missing")
+    if "来源角色 repository" not in body:
+        raise RuntimeError("candidate source role is not visible")
+    if "不是官方流程证据" not in body:
+        raise RuntimeError("supplemental source warning is not visible")
+    if page.locator("form[action*='/candidates/'][action$='/confirm']").count() != 1:
+        raise RuntimeError("manual confirmation path is missing for supplemental evidence")
+    print("verified guided evidence-insufficient feedback and manual path")
 
 
 def _assert_llm_enhanced_intake(page) -> None:

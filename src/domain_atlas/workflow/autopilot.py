@@ -16,6 +16,10 @@ from domain_atlas.domain.source_candidates import (
 )
 from domain_atlas.domain.sources import CreateSource, SourceRepository
 from domain_atlas.domain.workflow import WorkflowRepository
+from domain_atlas.workflow.source_policy import (
+    DIRECT_AUTHORITY_ROLES,
+    build_selection_plan,
+)
 
 
 PREFERRED_SOURCE_TYPES = {
@@ -61,6 +65,7 @@ class SourceAttempt:
     error_category: str = ""
     detail: str = ""
     retryable: bool = False
+    source_family: str = ""
 
     def to_output(self) -> dict[str, object]:
         return {
@@ -72,6 +77,7 @@ class SourceAttempt:
             "error_category": self.error_category,
             "detail": self.detail,
             "retryable": self.retryable,
+            "source_family": self.source_family,
         }
 
 
@@ -211,20 +217,39 @@ class AutopilotWorkflow:
                 run_id, step_name="discover_candidates", status="running"
             )
             drafts = self.discovery_provider.search(project.effective_scope, limit=self.search_limit)
-            persisted = self.candidate_repository.replace_discovered(project_id, drafts)
+            selection_plan = build_selection_plan(project.effective_scope, drafts)
+            official_search_attempted = False
+            if selection_plan.requires_direct_authority and not any(
+                candidate.metadata.get("source_role") in DIRECT_AUTHORITY_ROLES
+                for candidate in selection_plan.assessed
+            ):
+                official_search_attempted = True
+                try:
+                    focused_drafts = self.discovery_provider.search(
+                        _official_source_query(project.effective_scope), limit=self.search_limit
+                    )
+                except Exception:
+                    focused_drafts = []
+                if focused_drafts:
+                    drafts = [*drafts, *focused_drafts]
+                    selection_plan = build_selection_plan(project.effective_scope, drafts)
+            persisted = self.candidate_repository.replace_discovered(
+                project_id, selection_plan.assessed
+            )
             self.workflow_repository.record_step(
                 run_id,
                 step_name="discover_candidates",
                 status="completed",
-                output={"candidate_count": len(persisted)},
+                output={
+                    "candidate_count": len(persisted),
+                    "official_search_attempted": official_search_attempted,
+                },
             )
 
             self.workflow_repository.record_step(
                 run_id, step_name="select_candidates", status="running"
             )
-            candidate_queue = build_autopilot_candidate_queue(drafts)
-            if not candidate_queue:
-                raise ValueError("No usable candidates passed guided mode filtering.")
+            candidate_queue = selection_plan.queue
             persisted_by_provider_id = {
                 candidate.provider_source_id: candidate for candidate in persisted
             }
@@ -233,6 +258,25 @@ class AutopilotWorkflow:
                 for candidate in candidate_queue
                 if candidate.provider_source_id in persisted_by_provider_id
             ]
+            if not candidate_queue:
+                reason = (
+                    selection_plan.evidence_insufficient_reason
+                    or "没有候选资料满足当前领域的自动构建质量门。"
+                )
+                self.workflow_repository.record_step(
+                    run_id,
+                    step_name="select_candidates",
+                    status="failed",
+                    output={
+                        "terminal_reason": "evidence_insufficient",
+                        "policy": selection_plan.policy_name,
+                        "requires_direct_authority": selection_plan.requires_direct_authority,
+                        "candidate_count": len(persisted),
+                        "recovery_message": reason,
+                    },
+                    error=reason,
+                )
+                raise ValueError(reason)
             self.workflow_repository.record_step(
                 run_id,
                 step_name="select_candidates",
@@ -241,14 +285,19 @@ class AutopilotWorkflow:
                     "selected_count": len(selected),
                     "queued_count": len(selected),
                     "minimum_build_sources": self.minimum_build_sources,
+                    "minimum_independent_families": self.minimum_build_sources,
                     "candidate_ids": [candidate.id for candidate in selected],
                     "selection_mode": _selection_mode(candidate_queue),
+                    "policy": selection_plan.policy_name,
+                    "requires_direct_authority": selection_plan.requires_direct_authority,
+                    "selected_families": [_candidate_family(candidate) for candidate in selected],
                 },
             )
 
             source_ids: list[int] = []
             failed_sources: list[dict[str, object]] = []
             attempts: list[SourceAttempt] = []
+            successful_families: set[str] = set()
             self.workflow_repository.record_step(
                 run_id,
                 step_name="ingest_sources",
@@ -257,9 +306,25 @@ class AutopilotWorkflow:
                     "completed": 0,
                     "total": len(selected),
                     "minimum_build_sources": self.minimum_build_sources,
+                    "minimum_independent_families": self.minimum_build_sources,
                 },
             )
             for candidate in selected:
+                source_family = _candidate_family(candidate)
+                if source_family in successful_families:
+                    attempts.append(
+                        SourceAttempt(
+                            candidate_id=candidate.id,
+                            source_id=0,
+                            title=candidate.title,
+                            url=candidate.url,
+                            outcome="skipped_duplicate",
+                            error_category="duplicate",
+                            detail="Candidate belongs to an already accepted evidence family.",
+                            source_family=source_family,
+                        )
+                    )
+                    continue
                 accepted = self.candidate_repository.accept(project_id, candidate.id)
                 if accepted is None:
                     continue
@@ -277,6 +342,7 @@ class AutopilotWorkflow:
                         error_category=category,
                         detail=str(exc),
                         retryable=retryable,
+                        source_family=source_family,
                     )
                     attempts.append(attempt)
                     failed_sources.append(
@@ -310,6 +376,7 @@ class AutopilotWorkflow:
                         title=candidate.title,
                         url=candidate.url,
                         outcome="ingested",
+                        source_family=source_family,
                     )
                 )
                 self.workflow_repository.record_step(
@@ -325,18 +392,23 @@ class AutopilotWorkflow:
                     ),
                 )
 
-                if len(source_ids) >= self.minimum_build_sources:
+                successful_families.add(source_family)
+                if len(successful_families) >= self.minimum_build_sources:
                     break
 
             terminal_reason = (
-                "minimum_sources_reached"
-                if len(source_ids) >= self.minimum_build_sources
+                "minimum_independent_sources_reached"
+                if len(successful_families) >= self.minimum_build_sources
                 else "candidates_exhausted"
             )
             self.workflow_repository.record_step(
                 run_id,
                 step_name="ingest_sources",
-                status="completed" if terminal_reason == "minimum_sources_reached" else "failed",
+                status=(
+                    "completed"
+                    if terminal_reason == "minimum_independent_sources_reached"
+                    else "failed"
+                ),
                 output={
                     **_ingestion_progress_output(
                         source_ids=source_ids,
@@ -345,6 +417,7 @@ class AutopilotWorkflow:
                         minimum_build_sources=self.minimum_build_sources,
                     ),
                     "source_ids": source_ids,
+                    "successful_families": sorted(successful_families),
                     "failed_sources": failed_sources,
                     "terminal_reason": terminal_reason,
                     "recovery_message": _recovery_message(
@@ -402,6 +475,9 @@ class AutopilotWorkflow:
                     "provider": candidate.provider,
                     "authority_score": candidate.authority_score,
                     "authority_reason": candidate.authority_reason,
+                    "source_role": candidate.metadata.get("source_role", "unverified"),
+                    "source_family": _candidate_family(candidate),
+                    "selection_reason": candidate.metadata.get("selection_reason", ""),
                     "auto_accepted": True,
                 },
             )
@@ -411,6 +487,17 @@ class AutopilotWorkflow:
 def _domain(url: str) -> str:
     host = urlparse(url).netloc.lower()
     return host[4:] if host.startswith("www.") else host
+
+
+def _candidate_family(candidate: SourceCandidate | SourceCandidateDraft) -> str:
+    family = candidate.metadata.get("source_family")
+    if isinstance(family, str) and family:
+        return family
+    return candidate.url.rstrip("/").lower()
+
+
+def _official_source_query(scope: str) -> str:
+    return f"{scope} 官方 帮助 服务规则 公告"
 
 
 def classify_ingestion_failure(error: Exception) -> tuple[str, bool]:
@@ -423,10 +510,13 @@ def classify_ingestion_failure(error: Exception) -> tuple[str, bool]:
         return "timeout", True
     if "embedding" in text or "vector" in text:
         return "embedding", True
+    if "duplicate evidence" in text or "near-duplicate" in text:
+        return "duplicate", False
     if any(
         marker in text
         for marker in (
             "extractable text",
+            "content quality",
             "produce any chunks",
             "unsupported source",
             "pdf",
@@ -496,5 +586,6 @@ def _failure_category_label(category: str) -> str:
         "timeout": "请求超时",
         "parse": "内容解析失败",
         "embedding": "向量化失败",
+        "duplicate": "与已有资料重复",
         "unknown": "未知错误",
     }.get(category, category)

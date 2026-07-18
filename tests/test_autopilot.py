@@ -235,7 +235,8 @@ def test_autopilot_continues_when_one_source_fails_ingestion(tmp_path):
         if step.step_name == "ingest_sources" and step.status in {"completed", "failed"}
     )
     assert ingest_step.output["source_ids"] == [2, 3]
-    assert ingest_step.output["terminal_reason"] == "minimum_sources_reached"
+    assert ingest_step.output["terminal_reason"] == "minimum_independent_sources_reached"
+    assert len(ingest_step.output["successful_families"]) == 2
     assert ingest_step.output["failed_sources"][0]["source_id"] == 1
     assert ingest_step.output["failed_sources"][0]["error"] == "URL fetch failed."
 
@@ -366,6 +367,41 @@ def test_autopilot_workflow_uses_fallback_selection_for_practical_domains(tmp_pa
         if step.step_name == "select_candidates" and step.status == "completed"
     )
     assert select_step.output["selection_mode"] == "fallback_best_available"
+
+
+def test_autopilot_stops_before_ingestion_when_service_workflow_lacks_direct_evidence(tmp_path):
+    database_path = tmp_path / "domain_atlas.sqlite3"
+    initialize_database(database_path)
+    project = DomainProjectRepository(database_path).create(
+        CreateDomainProject(name="寿司郎取号", scope="寿司郎在线取号流程", interaction_mode="guided")
+    )
+    drafts = [
+        _draft("origin", "https://github.com/example/sushiro-overdose", "repository", 0.51),
+        _draft("fork", "https://github.com/other/sushiro-overdose", "repository", 0.51),
+        _draft("news", "https://news.example.com/sushiro", "web", 0.5),
+    ]
+    ingestion = FakeIngestionRunner()
+
+    try:
+        AutopilotWorkflow(
+            database_path=database_path,
+            discovery_provider=FakeDiscoveryProvider(drafts),
+            ingestion_runner=ingestion,
+            build_runner=FakeBuildRunner(),
+        ).run(project.id)
+    except ValueError as exc:
+        assert "未找到" in str(exc)
+    else:
+        raise AssertionError("Expected missing direct evidence to stop guided mode.")
+
+    assert ingestion.source_ids == []
+    assert SourceRepository(database_path).list_for_project(project.id) == []
+    candidates = SourceCandidateRepository(database_path).list_for_project(project.id)
+    assert all(candidate.status == "discovered" for candidate in candidates)
+    assert candidates[1].metadata["source_role"] == "mirror_or_fork"
+    run = WorkflowRepository(database_path).list_for_project(project.id)[0]
+    selection = next(step for step in run.steps if step.step_name == "select_candidates" and step.status == "failed")
+    assert selection.output["terminal_reason"] == "evidence_insufficient"
 
 
 def _draft(

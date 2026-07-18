@@ -10,6 +10,7 @@ from domain_atlas.discovery.exa import SourceDiscoveryError
 from domain_atlas.domain.projects import CreateDomainProject, DomainProjectRepository
 from domain_atlas.intake.assessment import IntakeAssessment
 from domain_atlas.domain.source_candidates import SourceCandidateDraft
+from domain_atlas.domain.sources import SourceRepository
 from domain_atlas.domain.workflow import WorkflowRepository
 from domain_atlas.providers.vector_index import RetrievedChunk, RetrievedWikiSection
 from domain_atlas.web.app import _workflow_retry_observer, create_app
@@ -635,6 +636,41 @@ def test_discover_sources_lists_candidates_and_confirm_accepts(tmp_path):
     assert "pending" in accepted_dashboard.text
 
 
+def test_manual_confirmation_keeps_supplemental_source_warning_for_service_scope(tmp_path):
+    class SushiDiscoveryProvider:
+        def search(self, query: str, limit: int) -> list[SourceCandidateDraft]:
+            return [
+                SourceCandidateDraft(
+                    provider="fixture",
+                    provider_source_id="helper",
+                    title="Sushiro helper",
+                    url="https://github.com/example/sushiro-overdose",
+                    snippet="Third-party helper.",
+                    source_type="repository",
+                    authority_score=0.51,
+                    authority_reason="代码仓库资料",
+                )
+            ]
+
+    settings = Settings(data_dir=tmp_path)
+    app = create_app(settings, discovery_provider=SushiDiscoveryProvider())
+    client = TestClient(app)
+    project = DomainProjectRepository(settings.database_path).create(
+        CreateDomainProject(name="寿司郎取号", scope="寿司郎在线取号流程")
+    )
+
+    client.post(f"/domains/{project.id}/discover", data={"query": ""})
+    dashboard = client.get(f"/domains/{project.id}")
+    assert "来源角色 repository" in dashboard.text
+    assert "不是官方流程证据" in dashboard.text
+
+    confirm = client.post(f"/domains/{project.id}/candidates/1/confirm", follow_redirects=False)
+    assert confirm.status_code == 303
+    source = SourceRepository(settings.database_path).list_for_project(project.id)[0]
+    assert source.metadata["manual_override"] is True
+    assert source.metadata["source_role"] == "repository"
+
+
 def test_dashboard_explains_guided_candidate_exhaustion(tmp_path):
     settings = Settings(data_dir=tmp_path)
     app = create_app(settings)
@@ -668,7 +704,7 @@ def test_dashboard_explains_guided_candidate_exhaustion(tmp_path):
     dashboard = client.get(f"/domains/{project.id}")
 
     assert dashboard.status_code == 200
-    assert "获得至少 2 份可用资料后再构建" in dashboard.text
+    assert "获得至少 2 个独立来源族后再构建" in dashboard.text
     assert recovery_message in dashboard.text
     assert "已尝试 2 条，2 条未成功" in dashboard.text
     assert 'value="旅行代理"' in dashboard.text

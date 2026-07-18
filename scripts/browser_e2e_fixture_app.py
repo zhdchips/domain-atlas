@@ -71,7 +71,8 @@ class BrowserAutopilotRunner:
                 "attempted_count": 4,
                 "failed_count": 2,
                 "minimum_build_sources": 2,
-                "terminal_reason": "minimum_sources_reached",
+                "terminal_reason": "minimum_independent_sources_reached",
+                "successful_families": ["fixture:official", "fixture:institution"],
             },
         )
         repository.record_step(

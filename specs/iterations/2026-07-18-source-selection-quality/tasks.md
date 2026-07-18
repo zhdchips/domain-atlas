@@ -4,16 +4,16 @@
 
 - [x] Audit candidate discovery, Autopilot, ingestion, templates, and current regressions.
 - [x] Define source roles, official-first policy, source-family behavior, and quality gates.
-- [ ] Commit the specification phase.
+- [x] Commit the specification phase.
 
 ## Phase 2: Candidate And Workflow Policy
 
-- [ ] Add pure candidate assessment and explainable metadata.
-- [ ] Add source-family grouping, fork/mirror handling, and official-first selection plans.
-- [ ] Require independent source families in Guided Autopilot and persist structured outcomes.
-- [ ] Preserve Expert manual confirmation with supplemental-source warnings.
-- [ ] Update candidate and workflow-status UI.
-- [ ] Commit policy implementation after targeted tests.
+- [x] Add pure candidate assessment and explainable metadata.
+- [x] Add source-family grouping, fork/mirror handling, and official-first selection plans.
+- [x] Require independent source families in Guided Autopilot and persist structured outcomes.
+- [x] Preserve Expert manual confirmation with supplemental-source warnings.
+- [x] Update candidate and workflow-status UI.
+- [x] Commit policy implementation after targeted tests.
 
 ## Phase 3: Ingestion Quality
 

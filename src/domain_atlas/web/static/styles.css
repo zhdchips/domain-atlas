@@ -715,6 +715,11 @@ button:disabled {
   color: #334155;
 }
 
+.candidate-item .candidate-warning {
+  color: #8a4b00;
+  font-size: 0.88rem;
+}
+
 .candidate-item small,
 .source-item small {
   color: #64748b;

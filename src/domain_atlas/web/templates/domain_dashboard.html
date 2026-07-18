@@ -85,7 +85,7 @@
 <section class="panel">
   <h2>简易模式</h2>
   <form action="/domains/{{ project.id }}/autopilot" method="post" class="form-grid" data-pending-form data-pending-text="正在搜索、筛选、摄取资料并构建领域地图，可能需要数分钟…">
-    <p class="muted">自动搜索候选资料并优先摄取权威来源；会持续尝试后备资料，获得至少 2 份可用资料后再构建 LLM Wiki 和学习路线。</p>
+    <p class="muted">自动搜索候选资料并优先摄取直接权威来源；会获得至少 2 个独立来源族后再构建。品牌或机构服务流程缺少一方资料时会暂停并提示你确认。</p>
     <button type="submit" {% if active_workflow %}disabled aria-disabled="true"{% endif %}>一键构建领域地图</button>
   </form>
 </section>
@@ -142,6 +142,13 @@
               {% if candidate.published_at %} · 发布 {{ candidate.published_at }}{% endif %}
             </small>
             <small>权威性 {{ "%.2f"|format(candidate.authority_score) }} · {{ candidate.authority_reason }}</small>
+            <small>来源角色 {{ candidate.metadata.get("source_role", "unverified") }} · 来源族 {{ candidate.metadata.get("source_family", "未识别") }}</small>
+            {% if candidate.metadata.get("selection_reason") %}
+              <small>{{ candidate.metadata.get("selection_reason") }}</small>
+            {% endif %}
+            {% if candidate.metadata.get("manual_warning") %}
+              <p class="candidate-warning">{{ candidate.metadata.get("manual_warning") }}</p>
+            {% endif %}
           </div>
           {% if candidate.status != "accepted" %}
             <form action="/domains/{{ project.id }}/candidates/{{ candidate.id }}/confirm" method="post" data-pending-form data-pending-text="正在确认候选资料…">
