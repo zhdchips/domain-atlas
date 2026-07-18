@@ -29,12 +29,12 @@ class FakeIngestionRunner:
 
 
 class PartiallyFailingIngestionRunner:
-    def __init__(self, failing_source_id: int) -> None:
-        self.failing_source_id = failing_source_id
+    def __init__(self, failing_source_ids: set[int]) -> None:
+        self.failing_source_ids = failing_source_ids
         self.source_ids: list[int] = []
 
     def ingest_source(self, source_id: int):
-        if source_id == self.failing_source_id:
+        if source_id in self.failing_source_ids:
             raise ValueError("URL fetch failed.")
         self.source_ids.append(source_id)
 
@@ -63,6 +63,26 @@ def test_autopilot_candidate_selection_prefers_authoritative_sources():
         "official-1",
         "official-2",
         "paper",
+        "weak",
+        "blog",
+    ]
+
+
+def test_autopilot_candidate_selection_adds_fallbacks_when_strict_set_is_small():
+    drafts = [
+        _draft("encyclopedia", "https://encyclopedia.example.com/agent", "encyclopedia", 0.8),
+        _draft("official", "https://docs.example.com/agent", "official_docs", 0.75),
+        _draft("practical-a", "https://practical.example.com/a", "web", 0.5),
+        _draft("practical-b", "https://practical.example.com/b", "web", 0.5),
+    ]
+
+    selected = select_autopilot_candidates(drafts, max_sources=5)
+
+    assert [candidate.provider_source_id for candidate in selected] == [
+        "encyclopedia",
+        "official",
+        "practical-a",
+        "practical-b",
     ]
 
 
@@ -93,7 +113,7 @@ def test_autopilot_workflow_creates_sources_ingests_and_builds(tmp_path):
     drafts = [
         _draft("official", "https://docs.example.com/agents", "official_docs", 0.91),
         _draft("paper", "https://arxiv.org/abs/2501.12345", "paper", 0.86),
-        _draft("blog", "https://blog.example.com/agents", "web", 0.98),
+        _draft("blog", "https://blog.example.com/agents", "web", 0.49),
     ]
     discovery = FakeDiscoveryProvider(drafts)
     ingestion = FakeIngestionRunner()
@@ -176,7 +196,7 @@ def test_autopilot_continues_when_one_source_fails_ingestion(tmp_path):
     result = AutopilotWorkflow(
         database_path=database_path,
         discovery_provider=FakeDiscoveryProvider(drafts),
-        ingestion_runner=PartiallyFailingIngestionRunner(failing_source_id=1),
+        ingestion_runner=PartiallyFailingIngestionRunner(failing_source_ids={1}),
         build_runner=build,
         search_limit=12,
     ).run(project.id)
@@ -193,6 +213,40 @@ def test_autopilot_continues_when_one_source_fails_ingestion(tmp_path):
     assert ingest_step.output["source_ids"] == [2]
     assert ingest_step.output["failed_sources"][0]["source_id"] == 1
     assert ingest_step.output["failed_sources"][0]["error"] == "URL fetch failed."
+
+
+def test_autopilot_uses_fallback_sources_when_all_strict_sources_fail(tmp_path):
+    database_path = tmp_path / "domain_atlas.sqlite3"
+    initialize_database(database_path)
+    project = DomainProjectRepository(database_path).create(
+        CreateDomainProject(name="旅行代理", interaction_mode="guided")
+    )
+    drafts = [
+        _draft("encyclopedia", "https://encyclopedia.example.com/travel", "encyclopedia", 0.8),
+        _draft("official", "https://docs.example.com/travel", "official_docs", 0.75),
+        _draft("practical-a", "https://travel.example.com/a", "web", 0.5),
+        _draft("practical-b", "https://travel.example.com/b", "web", 0.5),
+    ]
+    build = FakeBuildRunner()
+
+    result = AutopilotWorkflow(
+        database_path=database_path,
+        discovery_provider=FakeDiscoveryProvider(drafts),
+        ingestion_runner=PartiallyFailingIngestionRunner(failing_source_ids={1, 2}),
+        build_runner=build,
+        search_limit=12,
+    ).run(project.id)
+
+    assert result.selected_count == 4
+    assert result.source_ids == [3, 4]
+    assert build.project_ids == [project.id]
+    runs = WorkflowRepository(database_path).list_for_project(project.id)
+    select_step = next(
+        step
+        for step in reversed(runs[0].steps)
+        if step.step_name == "select_candidates" and step.status == "completed"
+    )
+    assert select_step.output["selection_mode"] == "strict_with_fallback"
 
 
 def test_autopilot_workflow_uses_fallback_selection_for_practical_domains(tmp_path):

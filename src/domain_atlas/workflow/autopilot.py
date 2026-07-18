@@ -64,20 +64,16 @@ def select_autopilot_candidates(
         if candidate.authority_score >= min_authority_score
         and candidate.source_type in PREFERRED_SOURCE_TYPES
     ]
-    if strict_eligible:
-        return _select_ranked_candidates(
-            strict_eligible,
-            max_sources=max_sources,
-            max_per_domain=max_per_domain,
-        )
-
     fallback_eligible = [
         candidate
         for candidate in candidates
         if candidate.authority_score >= fallback_min_authority_score
     ]
+    # A small fallback set keeps guided mode productive when the top authoritative
+    # pages are blocked by anti-bot controls or are otherwise not ingestible.
+    eligible = _unique_candidates([*strict_eligible, *fallback_eligible])
     return _select_ranked_candidates(
-        fallback_eligible,
+        eligible,
         max_sources=max_sources,
         max_per_domain=max_per_domain,
     )
@@ -89,7 +85,23 @@ def _selection_mode(selected: list[SourceCandidateDraft]) -> str:
         for candidate in selected
     ):
         return "strict_authoritative"
+    if any(
+        candidate.authority_score >= 0.65 and candidate.source_type in PREFERRED_SOURCE_TYPES
+        for candidate in selected
+    ):
+        return "strict_with_fallback"
     return "fallback_best_available"
+
+
+def _unique_candidates(candidates: list[SourceCandidateDraft]) -> list[SourceCandidateDraft]:
+    seen: set[str] = set()
+    unique: list[SourceCandidateDraft] = []
+    for candidate in candidates:
+        if candidate.provider_source_id in seen:
+            continue
+        seen.add(candidate.provider_source_id)
+        unique.append(candidate)
+    return unique
 
 
 def _select_ranked_candidates(
