@@ -1,142 +1,180 @@
 # Domain Atlas
 
-Domain Atlas is a local-first agentic domain learning system. It ingests trusted sources, builds an encyclopedia-style LLM Wiki, generates concept dependencies and learning paths, and answers questions with citations.
+**A traceable domain-learning system that turns selected sources into an LLM
+Wiki, a structured learning path, and cited answers.**
 
-This repository is built with Spec-Driven Development. See `specs/mvp/` for the active MVP specification, plan, and tasks.
+Domain Atlas is not a generic chat UI. It keeps evidence and learning content
+separate: source chunks preserve provenance; generated Wiki pages organize the
+domain; answers cite the Wiki first and fall back to source evidence only when
+needed.
+
+<p align="center">
+  <img src="docs/assets/demo-overview.png" alt="Domain Atlas public Demo overview" width="49%" />
+  <img src="docs/assets/demo-wiki.png" alt="Domain Atlas LLM Wiki workspace" width="49%" />
+</p>
+
+<p align="center">
+  <img src="docs/assets/demo-learning-path.png" alt="Domain Atlas generated learning path" width="49%" />
+  <img src="docs/assets/demo-cited-qa.png" alt="Domain Atlas cited question answering" width="49%" />
+</p>
+
+## What It Does
+
+- **Discover and ingest evidence**: search for candidate material, or import
+  URLs, Markdown, and PDFs while retaining source provenance.
+- **Build an LLM Wiki**: generate encyclopedia-style pages, concept links,
+  source profiles, and a navigable workspace from the evidence layer.
+- **Teach, not just retrieve**: create a staged learning path with explanations,
+  knowledge blocks, examples, checks, practice tasks, and deeper reading.
+- **Answer with citations**: use Wiki sections as the primary retrieval layer,
+  with source-chunk fallback and explicit evidence-insufficient answers.
+- **Fail visibly**: expose candidate selection, authority/region reasoning,
+  ingestion progress, retries, and recovery states instead of silently building
+  from weak material.
 
 ## Architecture
 
-Domain Atlas treats the generated Wiki as the primary knowledge layer:
+```mermaid
+flowchart LR
+    A[Domain or learner-provided material] --> B[Discovery and candidate policy]
+    B --> C[Ingestion]
+    C --> D[Source and Chunk evidence]
+    D --> E[LLM Wiki and concept graph]
+    D --> F[Learning path]
+    E --> G[Wiki-first cited QA]
+    D --> G
+    B --> H[Workflow trace and recovery]
+    C --> H
+```
 
-- Sources and chunks are the evidence layer. They preserve raw provenance, citation labels, and embeddings for source-level fallback.
-- Wiki pages and Wiki sections are the learning layer. They keep stable slugs, topic paths, section citations, source chunk provenance, and Wiki links.
-- Wiki workspace pages add Karpathy-style organization with typed paths such as `wiki/index`, `wiki/log`, `wiki/sources/...`, `wiki/concepts/...`, `wiki/synthesis/...`, and `wiki/templates/...`.
-- QA searches Wiki sections first, then falls back to source chunks only when Wiki evidence is missing.
-- Wiki lint checks missing section citations, duplicate slugs/topic paths, and orphaned pages.
+`Source -> Chunk` is the evidence layer. `Wiki page -> Wiki section` is the
+learning layer. Stable citations connect both layers, so a learner can move
+from a generated explanation back to its supporting source.
 
-The MVP supports two interaction modes:
+## Interaction Modes
 
-- Guided mode: start from a domain name, automatically search Exa, select authoritative sources, ingest them, and build the LLM Wiki and learning path.
-- Expert mode: keep manual control over search, candidate confirmation, source ingestion, and knowledge build.
+| Mode | Intended workflow |
+| --- | --- |
+| Guided | Start with a domain; Domain Atlas searches, assesses candidates, ingests usable evidence, and builds the Wiki and learning path. Branded service workflows require direct or first-party evidence. |
+| Expert | Search candidates, confirm sources, and run ingestion/build steps manually. Useful when the learner has a preferred source set or needs to override an automatic recommendation. |
 
-## Quickstart
+Source access is treated as evidence quality, not as a hidden implementation
+detail. A blocked URL, cross-region official page, insufficient direct evidence,
+or inaccessible official service entry remains visible with provenance and a
+recovery path.
+
+## Quick Start
+
+### Prerequisites
+
+- Python 3.13
+- [uv](https://docs.astral.sh/uv/)
 
 ```bash
+git clone https://github.com/zhdchips/domain-atlas.git
+cd domain-atlas
+cp .env.example .env
 uv sync --extra dev
-uv run pytest
 uv run uvicorn domain_atlas.web.app:create_app --factory --reload
 ```
 
-If PyPI is slow from the current network, use:
+Open `http://127.0.0.1:8000`.
 
-```bash
-uv sync --extra dev --index-url https://pypi.tuna.tsinghua.edu.cn/simple
-```
-
-Then open `http://127.0.0.1:8000`.
+Configure real providers in `.env` only when using search, generation, or
+embeddings. See [`.env.example`](.env.example) for the supported variables.
 
 ## Public Read-Only Demo
 
-For a portfolio deployment that must not access local project data or call external providers, run:
+The deterministic portfolio Demo is safe to expose because it does not create
+projects, accept uploads, read local data, or call Exa, LLM, embedding, or URL
+providers.
 
 ```bash
 PUBLIC_DEMO_MODE=true uv run uvicorn domain_atlas.web.app:create_app --factory
 ```
 
-Open `http://127.0.0.1:8000/demo`. This mode serves a version-controlled,
-prebuilt `Agent Harness Engineering` catalog with source provenance, Wiki,
-learning path, and cited QA examples. It does not initialize runtime data,
-read local projects, accept writes, or call Exa, LLM, embedding, or URL-fetch
-providers. Normal project routes and POST requests return `404`.
+Open `http://127.0.0.1:8000/demo`. The prebuilt `Agent Harness Engineering`
+case contains sources, a Wiki workspace, five learning modules, cited QA
+examples, and a 25-check golden evaluation catalog.
 
-### Golden Demo and Evaluation
+## Docker
 
-The public Demo is a curated learning case rather than an empty UI fixture. It
-uses four public first-party sources: OpenAI Agents SDK documentation, LangGraph
-documentation, and two Anthropic engineering articles on effective agents and
-long-running harnesses. Each source card records its access date, authority
-rationale, coverage, and a clickable evidence locator.
-
-Suggested walkthrough: **Overview and sources -> LLM Wiki -> Learning path ->
-Cited QA -> Golden evaluation**. The case includes a ten-question field
-overview, seven Wiki pages, five lesson-style modules, four supported QA
-examples, and one deliberately evidence-insufficient answer.
-
-Run the versioned catalog evaluation with:
+Build the image:
 
 ```bash
-uv run python scripts/regression.py --golden-demo-eval
+docker build -t domain-atlas:local .
 ```
 
-The committed `golden-demo-evaluation/v1` baseline contains 25 deterministic
-checks for source/provenance, Wiki structure, learning content, QA evidence,
-and Demo navigation. Its expected result is **25 / 25** with zero provider
-calls and zero provider cost. This is a fixed-catalog integrity check, not a
-generic model benchmark, RAG retrieval score, or production accuracy metric.
-See `evaluations/golden_demo/v1/` for the manifest, rubric, manual review, and
-baseline report.
-
-This is not an anonymous trial mode. Any future writable deployment requires a
-separate security design for SSRF protection, upload constraints, rate limits,
-quotas, concurrency controls, authentication, and tenant isolation.
-
-## Configuration
-
-Copy `.env.example` to `.env` and fill local secrets:
-
-- `EXA_API_KEY` for Exa search.
-- `LLM_BASE_URL`, `LLM_API_KEY`, and `CHAT_MODEL` for the OpenAI-compatible chat provider.
-- `EMBEDDING_BASE_URL`, `EMBEDDING_API_KEY`, `EMBEDDING_MODEL`, and `EMBEDDING_DIMENSIONS` for the OpenAI-compatible embedding provider.
-- `PUBLIC_DEMO_MODE=true` for the zero-provider, in-memory public portfolio Demo.
-
-Secrets belong in an ignored `.env` file. Runtime data belongs under `data/`.
-
-## Provider Smoke Test
+Run the public Demo:
 
 ```bash
-uv run python scripts/smoke_providers.py
+docker run --rm -p 8000:8000 \
+  -e PUBLIC_DEMO_MODE=true \
+  domain-atlas:local
 ```
 
-The smoke test verifies Exa search, chat completion, and embedding generation without printing secrets.
+For a local writable instance, mount `/app/data` and provide provider
+configuration at runtime:
 
-## Layered Regression
+```bash
+docker run --rm -p 8000:8000 \
+  -v "$(pwd)/data:/app/data" \
+  --env-file .env \
+  domain-atlas:local
+```
 
-Domain Atlas uses layered regression checks:
+The writable mode is intended for a trusted local environment. It is **not** a
+ready-made anonymous SaaS deployment: authentication, tenant isolation,
+provider quotas, rate limits, SSRF protection, and upload governance require
+additional production work.
+
+## Verification
+
+The default regression layers are deterministic and do not spend provider
+credits:
 
 ```bash
 uv run python scripts/regression.py --fast
 uv run python scripts/regression.py --e2e
-uv run python scripts/regression.py --browser-e2e
-uv run python scripts/regression.py --intake-eval
 uv run python scripts/regression.py --golden-demo-eval
-uv run python scripts/regression.py --live
-uv run python scripts/regression.py --live-intake-eval
-uv run python scripts/regression.py --live-e2e
-uv run python scripts/regression.py --live-guided-e2e
+uv run python scripts/regression.py --browser-e2e
 ```
 
-Fast and E2E checks are deterministic and do not call live providers. Fast regression also replays the versioned intake evaluation set. Browser E2E uses Playwright against deterministic Wiki and guided-workflow fixtures, catching real interaction, status, and layout regressions. `--live-intake-eval` calls the chat model once for each intake case and writes a normalized report under `reports/intake/`; it creates no project or knowledge artifacts. Live checks verify configured external provider availability, `--live-e2e` runs the fixed Markdown-to-Wiki build, and `--live-guided-e2e` runs an isolated real search, URL-ingestion, build, and QA flow in a temporary data directory.
-
-Before the first browser E2E run:
+The browser check requires Chromium once:
 
 ```bash
-uv sync --extra dev
 uv run python -m playwright install chromium
 ```
 
-At the end of an SDD iteration, run at least `--fast` and `--browser-e2e`; run `--live-e2e` for build/embedding/QA changes and `--live-guided-e2e` for discovery, URL ingestion, candidate ranking, or provider-facing guided-workflow changes. See the latest iteration spec for the SDD maintenance checklist.
+Live provider verification is intentionally opt-in:
 
-## Wiki Workspace
+```bash
+uv run python scripts/regression.py --live
+uv run python scripts/regression.py --live-guided-e2e
+```
 
-The Wiki UI follows the Karpathy-style LLM Wiki pattern as a Web workspace over SQLite. It groups pages by type, shows `index` first, keeps a build `log`, and exposes source, concept, synthesis, and template pages with stable `wiki/...` paths. Markdown vault export is intentionally deferred; see `specs/iterations/2026-07-15-wiki-workspace/`.
+The repository CI runs only the deterministic layers. It never receives Exa,
+LLM, or embedding credentials.
 
-## MVP Flow
+## Project Boundaries
 
-1. Create a domain project.
-2. Choose guided mode for one-click setup or expert mode for manual control.
-3. In guided mode, run autopilot to search, filter, ingest, and build.
-4. In expert mode, search Exa candidates or add URL/Markdown/PDF sources manually.
-5. Read the generated Wiki and learning path.
-6. Ask Wiki-first, citation-grounded questions.
+- Domain Atlas is a controlled, evidence-oriented workflow system. It does not
+  claim fully autonomous general-purpose agent behavior.
+- A source citation indicates the evidence available to the system; it is not a
+  guarantee of factual completeness or legal ownership of a website.
+- Search rankings and website access are external dependencies. Guided mode can
+  pause for manual confirmation rather than fabricate a confident knowledge
+  base.
+- The public Demo is a fixed catalog integrity check, not a generic benchmark
+  or a production accuracy claim.
 
-Autopilot keeps the process transparent by saving discovered candidates, marking auto-accepted candidates, creating URL sources, recording workflow steps, and showing recent workflow logs on the project dashboard.
+## Development And Release
+
+- [Contributing guide](CONTRIBUTING.md)
+- [Changelog](CHANGELOG.md)
+- [v0.1.0 release notes and remote publication checklist](docs/release-notes/v0.1.0.md)
+- [Spec-driven iteration records](specs/iterations/)
+
+## License
+
+[MIT](LICENSE)

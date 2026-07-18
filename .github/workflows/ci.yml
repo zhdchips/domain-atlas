@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  deterministic:
+    name: Deterministic regression
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --extra dev --frozen
+      - run: uv run python scripts/regression.py --fast
+      - run: uv run python scripts/regression.py --e2e
+      - run: uv run python scripts/regression.py --golden-demo-eval
+      - name: Upload deterministic reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deterministic-reports
+          path: reports/
+          if-no-files-found: ignore
+
+  browser:
+    name: Browser regression
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --extra dev --frozen
+      - run: uv run python -m playwright install --with-deps chromium
+      - run: uv run python scripts/regression.py --browser-e2e
+      - name: Upload browser reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-reports
+          path: reports/
+          if-no-files-found: ignore
