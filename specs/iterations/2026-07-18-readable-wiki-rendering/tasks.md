@@ -19,10 +19,10 @@
 
 - [x] Add deterministic parser/security/scoping/application tests.
 - [x] Extend Playwright rendering, navigation, citation, and responsive-layout checks.
-- [ ] Run `uv run python scripts/regression.py --golden-demo-eval`.
-- [ ] Run `uv run python scripts/regression.py --fast`.
-- [ ] Run `uv run python scripts/regression.py --e2e`.
-- [ ] Run `uv run python scripts/regression.py --browser-e2e`.
-- [ ] Verify default local mode and public Demo routes at runtime without providers.
-- [ ] Commit implementation and verification stages.
+- [x] Run `uv run python scripts/regression.py --golden-demo-eval`.
+- [x] Run `uv run python scripts/regression.py --fast`.
+- [x] Run `uv run python scripts/regression.py --e2e`.
+- [x] Run `uv run python scripts/regression.py --browser-e2e`.
+- [x] Verify default local mode and public Demo routes at runtime without providers.
+- [x] Commit implementation and verification stages.
 - [ ] Push deferred by user request.
