@@ -64,7 +64,8 @@ def test_guided_flow_replays_blocked_candidates_then_builds_and_answers(tmp_path
         if step.step_name == "ingest_sources" and step.status == "completed"
     )
     assert run.status == "completed"
-    assert ingestion_step.output["terminal_reason"] == "minimum_sources_reached"
+    assert ingestion_step.output["terminal_reason"] == "minimum_independent_sources_reached"
+    assert len(ingestion_step.output["successful_families"]) == 2
     assert ingestion_step.output["success_count"] == 2
     assert ingestion_step.output["attempted_count"] == 4
     assert [item["outcome"] for item in ingestion_step.output["attempted_sources"]] == [

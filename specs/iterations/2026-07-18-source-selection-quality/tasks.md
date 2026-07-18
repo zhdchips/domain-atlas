@@ -24,9 +24,17 @@
 
 ## Phase 4: Regression And Audit
 
-- [ ] Add deterministic source-policy, ingestion-quality, app, and E2E fixtures.
-- [ ] Extend Playwright checks for candidate explanations and evidence-insufficient state.
-- [ ] Run golden Demo, fast, E2E, browser E2E, and isolated live-guided checks.
+- [x] Add deterministic source-policy, ingestion-quality, app, and E2E fixtures.
+- [x] Extend Playwright checks for candidate explanations and evidence-insufficient state.
+- [x] Run golden Demo, fast, E2E, browser E2E, and isolated live-guided checks.
 - [ ] Start local server and validate the default workflow surface.
 - [ ] Complete a requirement-by-requirement audit and commit verification.
 - [ ] Push deferred by user request.
+
+## Verification Record
+
+- `uv run python scripts/regression.py --golden-demo-eval`: passed, 25/25.
+- `uv run python scripts/regression.py --fast`: passed, 128 pytest cases plus the 13-case offline intake evaluation.
+- `uv run python scripts/regression.py --e2e`: passed, 2 deterministic Guided-flow cases.
+- `uv run python scripts/regression.py --browser-e2e`: passed, including source-role, official-first evidence-gap, manual-confirmation, Wiki, learning-route, and public-Demo checks.
+- `uv run python scripts/regression.py --live-guided-e2e`: completed in an isolated temporary data directory with exit status 0. The desktop runner did not relay the child process's final stdout; the script removed its temporary directory, which occurs only on its success path. No normal `data/` project was used.

@@ -135,7 +135,7 @@ def build_selection_plan(scope: str, candidates: list[SourceCandidateDraft]) -> 
         )
 
     eligible = [candidate for candidate in representatives if _is_guided_eligible(scope, candidate)]
-    ranked = sorted(eligible, key=_rank_key)
+    ranked = sorted(eligible, key=lambda candidate: _guided_rank_key(scope, candidate))
     queue = _apply_domain_cap(ranked)
     return SelectionPlan(
         assessed=assessed,
@@ -239,10 +239,13 @@ def _is_guided_eligible(scope: str, candidate: SourceCandidateDraft) -> bool:
     return candidate.authority_score >= 0.5 or role in DIRECT_AUTHORITY_ROLES
 
 
-def _rank_key(candidate: SourceCandidateDraft) -> tuple[int, float, str]:
+def _guided_rank_key(scope: str, candidate: SourceCandidateDraft) -> tuple[int, float, int, str]:
+    role = _metadata_str(candidate, "source_role")
+    direct_priority = 0 if scope_requires_direct_authority(scope) and role in DIRECT_AUTHORITY_ROLES else 1
     return (
-        ROLE_ORDER.get(_metadata_str(candidate, "source_role"), len(ROLE_ORDER)),
+        direct_priority,
         -candidate.authority_score,
+        ROLE_ORDER.get(role, len(ROLE_ORDER)),
         candidate.title.lower(),
     )
 
