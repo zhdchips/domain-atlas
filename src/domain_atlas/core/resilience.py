@@ -252,7 +252,7 @@ def _http_failure(
 ) -> ProviderFailure:
     if status_code == 429:
         category, retryable = "rate_limited", True
-    elif status_code in {500, 502, 503, 504}:
+    elif status_code in RETRYABLE_STATUS_CODES:
         category, retryable = "server_error", True
     elif status_code in {401, 403}:
         category, retryable = "configuration", False

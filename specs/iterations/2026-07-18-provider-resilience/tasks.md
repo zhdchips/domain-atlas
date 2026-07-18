@@ -21,7 +21,7 @@
 - [x] Run `uv run python scripts/regression.py --fast`.
 - [x] Run `uv run python scripts/regression.py --e2e`.
 - [x] Run `uv run python scripts/regression.py --browser-e2e`.
-- [ ] Run a narrow live provider check and document cost/result.
-- [ ] Start the service and verify `/health`.
+- [x] Run a narrow live provider check and document cost/result.
+- [x] Start the service and verify `/health`.
 - [ ] Commit implementation and verification stages.
 - [ ] Push deferred by user request.
