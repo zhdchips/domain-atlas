@@ -6,7 +6,7 @@ import hashlib
 import hmac
 from collections.abc import Iterator
 from contextlib import nullcontext
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.parse import urlencode
 
@@ -215,6 +215,9 @@ def create_app(
         return session
 
     private_router = APIRouter(dependencies=[Depends(require_owner)])
+    private_write_router = APIRouter(
+        dependencies=[Depends(verify_csrf), Depends(guard_data_write)]
+    )
 
     def project_repository() -> DomainProjectRepository:
         return DomainProjectRepository(app_settings.database_path)
@@ -634,9 +637,7 @@ def create_app(
             },
         )
 
-    @private_router.post(
-        "/domains", dependencies=[Depends(verify_csrf), Depends(guard_data_write)]
-    )
+    @private_write_router.post("/domains")
     def create_domain(
         name: str = Form(...),
         goal: str = Form(""),
@@ -714,10 +715,7 @@ def create_app(
             },
         )
 
-    @private_router.post(
-        "/domains/{project_id}/intake",
-        dependencies=[Depends(verify_csrf), Depends(guard_data_write)],
-    )
+    @private_write_router.post("/domains/{project_id}/intake")
     def confirm_project_intake(
         project_id: int,
         selection: str = Form("default"),
@@ -819,10 +817,7 @@ def create_app(
             },
         )
 
-    @private_router.post(
-        "/domains/{project_id}/discover",
-        dependencies=[Depends(verify_csrf), Depends(guard_data_write)],
-    )
+    @private_write_router.post("/domains/{project_id}/discover")
     def discover_sources(
         project_id: int,
         query: str = Form(""),
@@ -848,10 +843,7 @@ def create_app(
             status_code=status.HTTP_303_SEE_OTHER,
         )
 
-    @private_router.post(
-        "/domains/{project_id}/candidates/{candidate_id}/confirm",
-        dependencies=[Depends(verify_csrf), Depends(guard_data_write)],
-    )
+    @private_write_router.post("/domains/{project_id}/candidates/{candidate_id}/confirm")
     def confirm_source_candidate(
         project_id: int,
         candidate_id: int,
@@ -898,10 +890,7 @@ def create_app(
             status_code=status.HTTP_303_SEE_OTHER,
         )
 
-    @private_router.post(
-        "/domains/{project_id}/sources/url",
-        dependencies=[Depends(verify_csrf), Depends(guard_data_write)],
-    )
+    @private_write_router.post("/domains/{project_id}/sources/url")
     def add_url_source(
         project_id: int,
         url: str = Form(...),
@@ -923,15 +912,12 @@ def create_app(
             status_code=status.HTTP_303_SEE_OTHER,
         )
 
-    @private_router.post(
-        "/domains/{project_id}/sources/file",
-        dependencies=[Depends(verify_csrf), Depends(guard_data_write)],
-    )
+    @private_write_router.post("/domains/{project_id}/sources/file")
     async def add_file_source(project_id: int, file: UploadFile) -> RedirectResponse:
         project = project_repository().get(project_id)
         if project is None:
             raise HTTPException(status_code=404, detail="Domain project not found.")
-        filename = file.filename or "source"
+        filename = _safe_upload_filename(file.filename)
         suffix = Path(filename).suffix.lower()
         source_type = _source_type_from_suffix(suffix)
         if source_type is None:
@@ -949,7 +935,7 @@ def create_app(
         )
         upload_dir = app_settings.uploads_path / str(project_id) / str(source.id)
         upload_dir.mkdir(parents=True, exist_ok=True)
-        raw_path = upload_dir / filename
+        raw_path = upload_dir / f"source{suffix}"
         raw_path.write_bytes(content)
         source_repository().update_raw_path(source.id, str(raw_path))
         return RedirectResponse(
@@ -957,10 +943,7 @@ def create_app(
             status_code=status.HTTP_303_SEE_OTHER,
         )
 
-    @private_router.post(
-        "/domains/{project_id}/sources/{source_id}/ingest",
-        dependencies=[Depends(verify_csrf), Depends(guard_data_write)],
-    )
+    @private_write_router.post("/domains/{project_id}/sources/{source_id}/ingest")
     def ingest_source(project_id: int, source_id: int) -> RedirectResponse:
         project = project_repository().get(project_id)
         if project is None:
@@ -986,10 +969,7 @@ def create_app(
             return _dashboard_redirect(project_id, error=str(exc))
         return _dashboard_redirect(project_id, notice="已开始摄取资料，可在当前任务中查看进度。")
 
-    @private_router.post(
-        "/domains/{project_id}/build",
-        dependencies=[Depends(verify_csrf), Depends(guard_data_write)],
-    )
+    @private_write_router.post("/domains/{project_id}/build")
     def build_knowledge(project_id: int) -> RedirectResponse:
         project = project_repository().get(project_id)
         if project is None:
@@ -1007,10 +987,7 @@ def create_app(
             return _dashboard_redirect(project_id, error=str(exc))
         return _dashboard_redirect(project_id, notice="已开始构建知识库，可在当前任务中查看进度。")
 
-    @private_router.post(
-        "/domains/{project_id}/autopilot",
-        dependencies=[Depends(verify_csrf), Depends(guard_data_write)],
-    )
+    @private_write_router.post("/domains/{project_id}/autopilot")
     def run_autopilot(project_id: int) -> RedirectResponse:
         project = project_repository().get(project_id)
         if project is None:
@@ -1032,10 +1009,7 @@ def create_app(
             return _dashboard_redirect(project_id, error=str(exc))
         return _dashboard_redirect(project_id, notice="已开始一键构建领域地图，可在当前任务中查看进度。")
 
-    @private_router.post(
-        "/domains/{project_id}/workflows/{run_id}/retry",
-        dependencies=[Depends(verify_csrf), Depends(guard_data_write)],
-    )
+    @private_write_router.post("/domains/{project_id}/workflows/{run_id}/retry")
     def retry_workflow(project_id: int, run_id: int) -> RedirectResponse:
         project = project_repository().get(project_id)
         if project is None:
@@ -1242,10 +1216,7 @@ def create_app(
             },
         )
 
-    @private_router.post(
-        "/domains/{project_id}/qa",
-        dependencies=[Depends(verify_csrf), Depends(guard_data_write)],
-    )
+    @private_write_router.post("/domains/{project_id}/qa")
     def ask_question(project_id: int, question: str = Form(...)) -> RedirectResponse:
         project = project_repository().get(project_id)
         if project is None:
@@ -1263,6 +1234,7 @@ def create_app(
         )
 
     app.include_router(private_router)
+    app.include_router(private_write_router)
     return app
 
 
@@ -1280,6 +1252,18 @@ def _safe_return_path(value: str, *, fallback: str = "/") -> str:
     if candidate.startswith("/auth/"):
         return fallback
     return candidate
+
+
+def _safe_upload_filename(value: str | None) -> str:
+    """Keep a readable client filename without ever using it as a storage path."""
+    leaf = PurePosixPath((value or "").replace("\\", "/")).name
+    cleaned = "".join(character for character in leaf if character.isprintable()).strip()
+    if not cleaned:
+        return "source"
+    if len(cleaned) <= 180:
+        return cleaned
+    suffix = Path(cleaned).suffix
+    return f"{cleaned[: 180 - len(suffix)]}{suffix}"
 
 
 def _auth_error_response(

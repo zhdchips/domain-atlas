@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 import time
 
 from fastapi.testclient import TestClient
@@ -849,6 +850,40 @@ def test_upload_markdown_and_ingest_from_dashboard(tmp_path):
     assert "已摄取" in after.text
     assert "Chunks" in after.text
     assert vector_index.calls == [(1, 1, 1)]
+
+
+def test_upload_filename_cannot_escape_persistent_data_root(tmp_path):
+    app = create_app(Settings(data_dir=tmp_path))
+    client = TestClient(app)
+    client.post("/domains", data={"name": "Private Notes"})
+
+    filenames = ["../../outside.md", r"..\..\windows.md", "/tmp/absolute.md"]
+    for index, filename in enumerate(filenames):
+        response = client.post(
+            "/domains/1/sources/file",
+            files={
+                "file": (
+                    filename,
+                    f"# Safe upload {index}".encode(),
+                    "text/markdown",
+                )
+            },
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+    sources = SourceRepository(tmp_path / "domain_atlas.sqlite3").list_for_project(1)
+    assert len(sources) == 3
+    assert {source.metadata["filename"] for source in sources} == {
+        "outside.md",
+        "windows.md",
+        "absolute.md",
+    }
+    for source in sources:
+        raw_path = Path(source.raw_path).resolve()
+        assert raw_path.is_relative_to(tmp_path.resolve())
+        assert raw_path.name == "source.md"
+        assert raw_path.read_bytes().startswith(b"# Safe upload")
 
 
 def test_build_knowledge_route_renders_wiki_and_learning_path(tmp_path):

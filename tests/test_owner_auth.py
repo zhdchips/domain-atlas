@@ -197,6 +197,32 @@ def test_private_writes_require_session_bound_csrf_and_logout_revokes_session(tm
     assert client.get("/", follow_redirects=False).status_code == 303
 
 
+def test_all_domain_write_routes_use_central_owner_csrf_and_data_lock(tmp_path):
+    app = create_app(
+        _private_settings(tmp_path),
+        oauth_provider=FakeGitHubOAuthProvider(),
+    )
+
+    application_routes = list(app.routes)
+    for route in app.routes:
+        included_router = getattr(route, "original_router", None)
+        if included_router is not None:
+            application_routes.extend(included_router.routes)
+    write_routes = [
+        route
+        for route in application_routes
+        if "POST" in getattr(route, "methods", set())
+        and str(getattr(route, "path", "")).startswith("/domains")
+    ]
+
+    assert write_routes
+    for route in write_routes:
+        dependency_names = {
+            dependency.call.__name__ for dependency in route.dependant.dependencies
+        }
+        assert {"verify_csrf", "guard_data_write"} <= dependency_names, route.path
+
+
 def test_oauth_state_is_single_use_and_external_return_url_is_rejected(tmp_path):
     provider = FakeGitHubOAuthProvider()
     client = TestClient(

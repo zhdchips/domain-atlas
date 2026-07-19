@@ -67,6 +67,8 @@ Session 摘要使用 `HMAC-SHA256(SESSION_SECRET, token)`；CSRF Token 使用不
 
 Web 写请求与后台任务持有数据目录共享锁，备份获取独占锁，使 SQLite 快照和文件复制不会与摄取、上传或构建并发。应用内 `BackupScheduler` 只在显式启用时启动 daemon thread，按间隔调用相同备份服务，并按创建时间保留最近 N 个。调度器不负责外部对象存储；Render 磁盘自己的每日快照提供独立的基础设施恢复层。
 
+完成性审计进一步约束上传路径：客户端文件名只作为归一后的显示元数据，不参与磁盘路径拼接；实际文件使用 Source ID 目录和服务端固定文件名，因此绝对路径、`..` 和 Windows 反斜杠都不能逃逸 `DATA_DIR`。所有 `/domains` 写路由统一挂载到同时包含 owner、CSRF 和数据锁依赖的 Router，新增写路由时由结构测试约束该边界。
+
 ## Workflow Retry
 
 `workflow_runs` 增加可空 `retry_of_run_id` 外键。Repository 提供按 ID 获取和校验 retry eligibility 的原子方法。Web 重试端点只接受原 Run ID，并从服务端 Run/Step 输出恢复必要参数，禁止客户端提交任意 workflow name 或 source ID。

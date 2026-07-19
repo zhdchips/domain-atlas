@@ -57,6 +57,14 @@
 - [x] 编写 iteration-summary.md，记录证据和真实部署待办。
 - [x] 提交最终阶段，不 push、不修改线上服务。
 
+## Phase 7: Completion Audit Hardening
+
+- [x] 逐条审计 Goal 完成标准及对应运行时证据。
+- [x] 阻止上传文件名逃逸持久化数据根目录。
+- [x] 将所有领域写路由集中到 owner、CSRF 和数据锁 Router。
+- [x] 增加上传路径穿越与写路由结构回归。
+- [x] 运行分层回归并提交审计修复。
+
 ## External Deployment Gate
 
 - [ ] 用户创建并配置 GitHub OAuth App。
