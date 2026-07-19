@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: domain-atlas-demo
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeployTrigger: checksPass
+    renderSubdomainPolicy: enabled
+    envVars:
+      - key: PUBLIC_DEMO_MODE
+        value: "true"

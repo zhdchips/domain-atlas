@@ -19,7 +19,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     VIRTUAL_ENV=/app/.venv \
     PATH="/app/.venv/bin:$PATH" \
-    DATA_DIR=/app/data
+    DATA_DIR=/app/data \
+    PORT=8000
 
 RUN groupadd --system domainatlas && useradd --system --gid domainatlas --home-dir /app domainatlas
 
@@ -32,4 +33,4 @@ USER domainatlas
 VOLUME ["/app/data"]
 EXPOSE 8000
 
-CMD ["uvicorn", "domain_atlas.web.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "exec uvicorn domain_atlas.web.app:create_app --factory --host 0.0.0.0 --port \"$PORT\""]

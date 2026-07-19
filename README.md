@@ -77,6 +77,8 @@ PUBLIC_DEMO_MODE=true uv run uvicorn domain_atlas.web.app:create_app --factory
 
 打开 `http://127.0.0.1:8000/demo`。预构建的 `Agent Harness Engineering` 案例包含资料来源、Wiki 工作区、5 个学习模块、带引用的问答示例，以及包含 25 项检查的黄金评测集。
 
+**在线状态：尚未完成首次 Render 公网部署。** 仓库已经包含可重复的部署配置；获得公开发布确认后，这里将替换为真实 HTTPS 地址。
+
 ## Docker
 
 构建镜像：
@@ -103,6 +105,21 @@ docker run --rm -p 8000:8000 \
 ```
 
 可写模式仅适用于受信任的本地环境。它**不是**一个开箱即用的匿名 SaaS 部署方案：生产环境仍需补充身份认证、租户隔离、Provider 配额、访问限流、SSRF 防护和文件上传治理。
+
+## Render 部署
+
+根目录的 [`render.yaml`](render.yaml) 将只读 Demo 声明为 Singapore 区域的 Docker Web Service。首次发布时，在 Render Dashboard 中选择 **New → Blueprint** 并连接本仓库；Blueprint 不需要数据库、磁盘或任何 Provider Key，只会设置 `PUBLIC_DEMO_MODE=true`。
+
+Render 会通过 `/health` 判断新版本是否可用，并在 GitHub CI 检查通过后自动部署当前默认分支。Free 实例空闲后可能休眠，首次访问可能需要约一分钟恢复；正式用于简历投递时，建议使用不会休眠的实例。
+
+部署完成后设置实际地址并执行远程只读验证：
+
+```bash
+export DOMAIN_ATLAS_DEMO_URL="实际的 HTTPS 服务地址"
+uv run python scripts/smoke_public_demo_remote.py --base-url "$DOMAIN_ATLAS_DEMO_URL"
+```
+
+该探针只访问 Demo 自身，不访问 citation 外站，也不会提交可触发搜索、摄取、LLM 或 Embedding 的有效载荷。发布异常时，在 Render 的 Events 中回滚到最近一次健康部署，然后重新运行同一探针。
 
 ## 验证与测试
 

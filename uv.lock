@@ -403,6 +403,7 @@ dependencies = [
 dev = [
     { name = "playwright" },
     { name = "pytest" },
+    { name = "pyyaml" },
 ]
 
 [package.metadata]
@@ -418,6 +419,7 @@ requires-dist = [
     { name = "pypdf", specifier = ">=6,<7" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8,<9" },
     { name = "python-multipart", specifier = ">=0.0.20,<1" },
+    { name = "pyyaml", marker = "extra == 'dev'", specifier = ">=6,<7" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.35,<1" },
 ]
 provides-extras = ["dev"]
