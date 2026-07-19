@@ -83,6 +83,12 @@ PUBLIC_DEMO_MODE=true uv run uvicorn domain_atlas.web.app:create_app --factory
 
 **在线 Demo：[https://domain-atlas-demo.onrender.com](https://domain-atlas-demo.onrender.com)**
 
+## 私有单用户版本
+
+供个人长期使用的可写实例采用 `private_owner` 模式：GitHub OAuth 只允许配置的唯一 numeric user ID，项目、SQLite、Chroma、上传资料和备份位于独立持久化磁盘。它与公开只读 Demo 分开部署，不共享数据或 Provider 凭证。
+
+私有实例不能使用 Render Free 的临时文件系统。仓库提供独立的 [`render.private.yaml`](render.private.yaml)、数据目录启动校验、Session/CSRF 防护、中断任务重试，以及带 manifest/checksum 的备份恢复命令。完整步骤见[私有单用户部署指南](docs/private-deployment.md)。
+
 ## Docker
 
 构建镜像：
@@ -136,6 +142,8 @@ uv run python scripts/regression.py --golden-demo-eval
 uv run python scripts/regression.py --browser-e2e
 ```
 
+浏览器层同时覆盖本地完整版本、公开只读 Demo，以及使用 Fake GitHub OAuth 的私有 owner 桌面/手机流程。
+
 首次运行浏览器测试前，需要安装 Chromium：
 
 ```bash
@@ -163,6 +171,7 @@ uv run python scripts/regression.py --live-guided-e2e
 - [贡献指南](CONTRIBUTING.md)
 - [更新日志](CHANGELOG.md)
 - [v0.1.0 发布说明与远程发布检查清单](docs/release-notes/v0.1.0.md)
+- [私有单用户部署与备份恢复](docs/private-deployment.md)
 - [规格驱动的迭代记录](specs/iterations/)
 
 ## 开源许可

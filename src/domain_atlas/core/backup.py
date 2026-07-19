@@ -202,8 +202,11 @@ def restore_backup(archive_path: Path, target_dir: Path) -> Path:
                     raise BackupError(f"Backup checksum verification failed: {relative}")
             _rebase_restored_database(staging / "domain_atlas.sqlite3", target_dir)
             if target_dir.exists():
-                target_dir.rmdir()
-            os.replace(staging, target_dir)
+                for child in staging.iterdir():
+                    os.replace(child, target_dir / child.name)
+                staging.rmdir()
+            else:
+                os.replace(staging, target_dir)
         except Exception:
             shutil.rmtree(staging, ignore_errors=True)
             raise

@@ -111,6 +111,7 @@ def test_backup_restore_round_trip_recovers_database_wiki_and_files(tmp_path):
     assert all(len(entry["sha256"]) == 64 for entry in manifest["files"])
 
     restored_dir = tmp_path / "restored"
+    restored_dir.mkdir()
     restore_backup(result.archive_path, restored_dir)
 
     restored_project = DomainProjectRepository(

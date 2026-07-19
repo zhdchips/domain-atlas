@@ -69,6 +69,7 @@ def main() -> int:
         [
             [sys.executable, "scripts/browser_e2e_wiki_layout.py"],
             [sys.executable, "scripts/browser_e2e_public_demo.py"],
+            [sys.executable, "scripts/browser_e2e_private_owner.py"],
         ],
     )
 

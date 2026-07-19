@@ -11,6 +11,8 @@ __pycache__/
 data/
 uploads/
 reports/
+backups/
+domain-atlas-*.tar.gz
 specs/
 tests/
 evals/

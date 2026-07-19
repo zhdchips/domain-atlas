@@ -5,6 +5,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlparse
 
 from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -115,6 +116,12 @@ class Settings(BaseSettings):
             raise ValueError("Private owner authentication is not configured: " + ", ".join(missing))
         if self.session_ttl_hours <= 0 or self.oauth_state_ttl_minutes <= 0:
             raise ValueError("Private owner authentication TTL values must be positive.")
+        callback = urlparse(self.github_oauth_callback_url)
+        local_callback = callback.hostname in {"localhost", "127.0.0.1"}
+        if not callback.hostname or (callback.scheme != "https" and not local_callback):
+            raise ValueError("GITHUB_OAUTH_CALLBACK_URL must use HTTPS outside localhost.")
+        if not self.session_cookie_secure:
+            raise ValueError("private_owner requires SESSION_COOKIE_SECURE=true.")
 
     @property
     def database_path(self) -> Path:

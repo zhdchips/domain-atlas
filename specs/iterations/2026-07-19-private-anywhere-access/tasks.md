@@ -39,11 +39,11 @@
 
 ## Phase 5: Private Deployment And Mobile UX
 
-- [ ] 增加不含 Secret 的私有 Render Blueprint 示例。
-- [ ] 更新 `.env.example`、README 和私有部署操作文档。
-- [ ] 增加部署配置与持久化契约测试。
-- [ ] 增加 Fake OAuth 桌面/手机 Playwright 回归。
-- [ ] 修复发现的移动端溢出、交互和导航问题。
+- [x] 增加不含 Secret 的私有 Render Blueprint 示例。
+- [x] 更新 `.env.example`、README 和私有部署操作文档。
+- [x] 增加部署配置与持久化契约测试。
+- [x] 增加 Fake OAuth 桌面/手机 Playwright 回归。
+- [x] 修复发现的移动端溢出、交互和导航问题。
 - [ ] 运行阶段测试并提交。
 
 ## Phase 6: Final Verification

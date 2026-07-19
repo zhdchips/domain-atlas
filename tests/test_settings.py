@@ -67,6 +67,31 @@ def test_private_owner_auth_configuration_fails_closed(tmp_path):
         settings.validate_private_auth()
 
 
+def test_private_owner_requires_https_callback_and_secure_cookie(tmp_path):
+    base = {
+        "data_dir": tmp_path,
+        "deployment_mode": "private_owner",
+        "github_oauth_client_id": "client",
+        "github_oauth_client_secret": "secret",
+        "owner_github_user_id": 42,
+        "session_secret": "s" * 40,
+    }
+    insecure_callback = Settings(
+        **base,
+        github_oauth_callback_url="http://atlas.example/auth/callback",
+    )
+    with pytest.raises(ValueError, match="must use HTTPS"):
+        insecure_callback.validate_private_auth()
+
+    insecure_cookie = Settings(
+        **base,
+        github_oauth_callback_url="https://atlas.example/auth/callback",
+        session_cookie_secure=False,
+    )
+    with pytest.raises(ValueError, match="SESSION_COOKIE_SECURE"):
+        insecure_cookie.validate_private_auth()
+
+
 def test_intake_assessment_is_enabled_by_default_when_not_explicitly_disabled(monkeypatch):
     monkeypatch.delenv("INTAKE_LLM_ASSESSMENT_ENABLED", raising=False)
     monkeypatch.delenv("INTAKE_LLM_SUGGESTIONS_ENABLED", raising=False)

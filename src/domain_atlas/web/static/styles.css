@@ -944,6 +944,24 @@ button:disabled {
 }
 
 @media (max-width: 720px) {
+  .topbar {
+    padding: 0 16px;
+  }
+
+  .page {
+    padding: 32px 16px;
+  }
+
+  .intro h1,
+  .auth-shell h1 {
+    font-size: 32px;
+    overflow-wrap: anywhere;
+  }
+
+  .inline-links {
+    flex-wrap: wrap;
+  }
+
   .form-row,
   .project-boundary,
   .status-grid,
