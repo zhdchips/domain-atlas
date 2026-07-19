@@ -92,4 +92,4 @@
 - [x] 用户创建并配置 GitHub OAuth App。
 - [x] 用户确认付费 Render Web Service 与持久化磁盘。
 - [x] 获得明确授权后 push 并创建 private owner 服务。
-- [ ] 验证真实 OAuth、重启后持久化、移动端访问和备份恢复。
+- [x] 验证真实 OAuth、重启后持久化、移动端访问和备份恢复。
