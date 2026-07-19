@@ -10,6 +10,13 @@
           <p class="muted">任务已排队，正在准备执行。</p>
         {% elif run.status == 'running' %}
           <p class="muted">任务正在执行，页面会自动更新进度。</p>
+        {% elif run.status == 'interrupted' %}
+          <p class="workflow-error">服务重启时该任务尚未完成，已安全标记为中断。</p>
+        {% elif run.status == 'failed' %}
+          <p class="workflow-error">任务未完成，请查看下方失败步骤和恢复提示。</p>
+        {% endif %}
+        {% if run.retry_of_run_id %}
+          <small class="muted">本任务是对任务 #{{ run.retry_of_run_id }} 的重新执行。</small>
         {% endif %}
         {% if run.error and not run.steps %}
           <p class="workflow-error">{{ run.error }}</p>
@@ -60,6 +67,14 @@
               </li>
             {% endfor %}
           </ol>
+        {% endif %}
+        {% if run.can_retry %}
+          <form action="/domains/{{ run.project_id }}/workflows/{{ run.id }}/retry" method="post" data-pending-form data-pending-text="正在重新发起任务…">
+            <input type="hidden" name="_csrf" value="{{ csrf_token(request) }}">
+            <button type="submit" class="secondary-button">重新执行</button>
+          </form>
+        {% elif run.status in ['interrupted', 'failed'] and run.workflow_name == 'source_ingestion' %}
+          <small class="muted">该历史摄取任务没有保存资料参数，请在资料列表中重新点击“摄取”。</small>
         {% endif %}
       </article>
     {% endfor %}

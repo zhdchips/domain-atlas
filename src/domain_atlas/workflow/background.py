@@ -5,6 +5,7 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable
 from contextlib import AbstractContextManager, nullcontext
+from typing import Any
 
 from domain_atlas.domain.workflow import WorkflowRepository
 
@@ -32,11 +33,19 @@ class BackgroundWorkflowRunner:
         project_id: int,
         workflow_name: str,
         work: Callable[[int], object],
+        input_payload: dict[str, Any] | None = None,
+        retry_of_run_id: int | None = None,
     ) -> int:
         with self._lock:
             if self.repository.has_active_run(project_id):
                 raise WorkflowConflictError("已有任务正在执行，请等待当前任务完成后再试。")
-            run_id = self.repository.start_run(project_id, workflow_name, status="queued")
+            run_id = self.repository.start_run(
+                project_id,
+                workflow_name,
+                status="queued",
+                input_payload=input_payload,
+                retry_of_run_id=retry_of_run_id,
+            )
 
         thread = threading.Thread(
             target=self._run,

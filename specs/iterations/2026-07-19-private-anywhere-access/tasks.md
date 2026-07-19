@@ -30,12 +30,12 @@
 
 ## Phase 4: Interrupted Workflow Retry
 
-- [ ] 为 Run 持久化最小可重放输入和 retry 关联。
-- [ ] 增加 Repository 的原子 retry eligibility 检查。
-- [ ] 为摄取、知识构建和 Guided Autopilot 增加安全重试端点。
-- [ ] 更新中断状态中文提示和可用/不可用重试 UI。
-- [ ] 增加中断、冲突、关联和幂等回归测试。
-- [ ] 运行阶段测试并提交。
+- [x] 为 Run 持久化最小可重放输入和 retry 关联。
+- [x] 增加 Repository/Runner 的 retry eligibility 与活动任务检查。
+- [x] 为摄取、知识构建和 Guided Autopilot 增加安全重试端点。
+- [x] 更新中断状态中文提示和可用/不可用重试 UI。
+- [x] 增加中断、冲突、关联和幂等回归测试。
+- [x] 运行阶段测试并提交。
 
 ## Phase 5: Private Deployment And Mobile UX
 

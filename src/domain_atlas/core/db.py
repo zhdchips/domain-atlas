@@ -94,6 +94,8 @@ CREATE TABLE IF NOT EXISTS workflow_runs (
     project_id INTEGER NOT NULL REFERENCES domain_projects(id) ON DELETE CASCADE,
     workflow_name TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'running',
+    input_json TEXT NOT NULL DEFAULT '{}',
+    retry_of_run_id INTEGER REFERENCES workflow_runs(id),
     error TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -347,6 +349,24 @@ def initialize_database(database_path: Path) -> None:
             "qa_records",
             "source_provenance_json",
             "TEXT NOT NULL DEFAULT '[]'",
+        )
+        _ensure_column(
+            connection,
+            "workflow_runs",
+            "input_json",
+            "TEXT NOT NULL DEFAULT '{}'",
+        )
+        _ensure_column(
+            connection,
+            "workflow_runs",
+            "retry_of_run_id",
+            "INTEGER REFERENCES workflow_runs(id)",
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_workflow_runs_retry_of
+            ON workflow_runs(retry_of_run_id)
+            """
         )
         _ensure_column(connection, "learning_modules", "stage_overview", "TEXT NOT NULL DEFAULT ''")
         _ensure_column(connection, "learning_modules", "core_explanation", "TEXT NOT NULL DEFAULT ''")

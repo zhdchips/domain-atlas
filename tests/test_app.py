@@ -4,6 +4,7 @@ import time
 
 from fastapi.testclient import TestClient
 
+from domain_atlas.core.db import initialize_database
 from domain_atlas.core.settings import Settings
 from domain_atlas.core.resilience import ProviderFailure, RetryEvent
 from domain_atlas.discovery.exa import SourceDiscoveryError
@@ -777,6 +778,46 @@ def test_workflow_status_renders_provider_retry_recovery_and_safe_terminal_failu
     assert "Embedding向量化最终失败" in status.text
     assert "Provider 配置或访问权限" in status.text
     assert "api_key" not in status.text
+
+
+def test_interrupted_workflow_can_be_retried_with_preserved_lineage(tmp_path):
+    settings = Settings(data_dir=tmp_path)
+    initialize_database(settings.database_path)
+    project = DomainProjectRepository(settings.database_path).create(
+        CreateDomainProject(name="Interrupted Atlas")
+    )
+    repository = WorkflowRepository(settings.database_path)
+    original_id = repository.start_run(
+        project.id,
+        "knowledge_build",
+        status="running",
+        input_payload={},
+    )
+    app = create_app(settings)
+    client = TestClient(app)
+
+    dashboard = client.get(f"/domains/{project.id}")
+
+    assert dashboard.status_code == 200
+    assert "已安全标记为中断" in dashboard.text
+    assert "重新执行" in dashboard.text
+
+    retried = client.post(
+        f"/domains/{project.id}/workflows/{original_id}/retry",
+        follow_redirects=False,
+    )
+    assert retried.status_code == 303
+    assert "notice=" in retried.headers["location"]
+    _wait_for_workflow(settings.database_path, project_id=project.id)
+
+    runs = repository.list_for_project(project.id, limit=5)
+    retry = next(run for run in runs if run.retry_of_run_id == original_id)
+    original = repository.get(original_id)
+    assert retry.workflow_name == "knowledge_build"
+    assert retry.input == {}
+    assert original is not None
+    assert original.status == "interrupted"
+    assert "服务重启前任务未完成" in original.error
 
 
 def test_upload_markdown_and_ingest_from_dashboard(tmp_path):

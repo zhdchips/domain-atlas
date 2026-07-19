@@ -28,24 +28,49 @@ class WorkflowRun:
     project_id: int
     workflow_name: str
     status: str
+    input: dict[str, Any]
+    retry_of_run_id: int | None
     error: str
     created_at: str
     updated_at: str
     steps: list[WorkflowStep]
+
+    @property
+    def can_retry(self) -> bool:
+        if self.status not in {"failed", "interrupted"}:
+            return False
+        if self.workflow_name == "source_ingestion":
+            return isinstance(self.input.get("source_id"), int)
+        return self.workflow_name in {"knowledge_build", "guided_autopilot"}
 
 
 class WorkflowRepository:
     def __init__(self, database_path: Path) -> None:
         self.database_path = database_path
 
-    def start_run(self, project_id: int, workflow_name: str, *, status: str = "running") -> int:
+    def start_run(
+        self,
+        project_id: int,
+        workflow_name: str,
+        *,
+        status: str = "running",
+        input_payload: dict[str, Any] | None = None,
+        retry_of_run_id: int | None = None,
+    ) -> int:
         with connect(self.database_path) as connection:
             cursor = connection.execute(
                 """
-                INSERT INTO workflow_runs (project_id, workflow_name, status)
-                VALUES (?, ?, ?)
+                INSERT INTO workflow_runs (
+                    project_id, workflow_name, status, input_json, retry_of_run_id
+                ) VALUES (?, ?, ?, ?, ?)
                 """,
-                (project_id, workflow_name, status),
+                (
+                    project_id,
+                    workflow_name,
+                    status,
+                    json.dumps(input_payload or {}, ensure_ascii=False),
+                    retry_of_run_id,
+                ),
             )
         return int(cursor.lastrowid)
 
@@ -125,6 +150,19 @@ class WorkflowRepository:
             ).fetchone()
         return str(row["status"]) if row else None
 
+    def get(self, run_id: int) -> WorkflowRun | None:
+        with connect(self.database_path) as connection:
+            row = connection.execute(
+                "SELECT * FROM workflow_runs WHERE id = ?", (run_id,)
+            ).fetchone()
+            if row is None:
+                return None
+            step_rows = connection.execute(
+                "SELECT * FROM workflow_steps WHERE run_id = ? ORDER BY id ASC",
+                (run_id,),
+            ).fetchall()
+        return _row_to_run(row, [_row_to_step(step) for step in step_rows])
+
     def interrupt_active_runs(self) -> int:
         """Close tasks from a previous process that cannot resume locally."""
         message = "服务重启前任务未完成，已标记为中断；请重新发起。"
@@ -190,6 +228,10 @@ def _row_to_run(row, steps: list[WorkflowStep]) -> WorkflowRun:
         project_id=int(row["project_id"]),
         workflow_name=str(row["workflow_name"]),
         status=str(row["status"]),
+        input=json.loads(str(row["input_json"] or "{}")),
+        retry_of_run_id=(
+            int(row["retry_of_run_id"]) if row["retry_of_run_id"] is not None else None
+        ),
         error=str(row["error"]),
         created_at=str(row["created_at"]),
         updated_at=str(row["updated_at"]),

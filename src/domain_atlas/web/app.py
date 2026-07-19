@@ -972,6 +972,7 @@ def create_app(
             task_runner.submit(
                 project_id=project_id,
                 workflow_name="source_ingestion",
+                input_payload={"source_id": source_id},
                 work=lambda run_id: _run_source_ingestion(
                     source_ingestion_service(
                         retry_observer=_workflow_retry_observer(workflow_repository(), run_id)
@@ -997,6 +998,7 @@ def create_app(
             task_runner.submit(
                 project_id=project_id,
                 workflow_name="knowledge_build",
+                input_payload={},
                 work=lambda run_id: knowledge_build_workflow(
                     retry_observer=_workflow_retry_observer(workflow_repository(), run_id)
                 ).run(project_id, run_id=run_id),
@@ -1017,6 +1019,7 @@ def create_app(
             task_runner.submit(
                 project_id=project_id,
                 workflow_name="guided_autopilot",
+                input_payload={},
                 work=lambda run_id: _run_autopilot(
                     autopilot_workflow(
                         retry_observer=_workflow_retry_observer(workflow_repository(), run_id)
@@ -1028,6 +1031,84 @@ def create_app(
         except WorkflowConflictError as exc:
             return _dashboard_redirect(project_id, error=str(exc))
         return _dashboard_redirect(project_id, notice="已开始一键构建领域地图，可在当前任务中查看进度。")
+
+    @private_router.post(
+        "/domains/{project_id}/workflows/{run_id}/retry",
+        dependencies=[Depends(verify_csrf), Depends(guard_data_write)],
+    )
+    def retry_workflow(project_id: int, run_id: int) -> RedirectResponse:
+        project = project_repository().get(project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Domain project not found.")
+        repository = workflow_repository()
+        original = repository.get(run_id)
+        if original is None or original.project_id != project_id:
+            raise HTTPException(status_code=404, detail="Workflow run not found.")
+        if not original.can_retry:
+            return _dashboard_redirect(
+                project_id,
+                error="该任务缺少安全重试所需的参数，或当前状态不允许重试。",
+            )
+
+        try:
+            if original.workflow_name == "source_ingestion":
+                source_id = int(original.input["source_id"])
+                source = source_repository().get(source_id)
+                if source is None or source.project_id != project_id:
+                    return _dashboard_redirect(
+                        project_id,
+                        error="原摄取任务对应的资料不存在，无法安全重试。",
+                    )
+                task_runner.submit(
+                    project_id=project_id,
+                    workflow_name=original.workflow_name,
+                    input_payload={"source_id": source_id},
+                    retry_of_run_id=original.id,
+                    work=lambda new_run_id: _run_source_ingestion(
+                        source_ingestion_service(
+                            retry_observer=_workflow_retry_observer(
+                                workflow_repository(), new_run_id
+                            )
+                        ),
+                        workflow_repository(),
+                        source_id,
+                        new_run_id,
+                    ),
+                )
+            elif original.workflow_name == "knowledge_build":
+                task_runner.submit(
+                    project_id=project_id,
+                    workflow_name=original.workflow_name,
+                    input_payload={},
+                    retry_of_run_id=original.id,
+                    work=lambda new_run_id: knowledge_build_workflow(
+                        retry_observer=_workflow_retry_observer(
+                            workflow_repository(), new_run_id
+                        )
+                    ).run(project_id, run_id=new_run_id),
+                )
+            else:
+                task_runner.submit(
+                    project_id=project_id,
+                    workflow_name=original.workflow_name,
+                    input_payload={},
+                    retry_of_run_id=original.id,
+                    work=lambda new_run_id: _run_autopilot(
+                        autopilot_workflow(
+                            retry_observer=_workflow_retry_observer(
+                                workflow_repository(), new_run_id
+                            )
+                        ),
+                        project_id,
+                        new_run_id,
+                    ),
+                )
+        except WorkflowConflictError as exc:
+            return _dashboard_redirect(project_id, error=str(exc))
+        return _dashboard_redirect(
+            project_id,
+            notice="已重新发起任务；原任务记录和失败原因会继续保留。",
+        )
 
     @private_router.get("/domains/{project_id}/wiki", response_class=HTMLResponse)
     def wiki_pages(request: Request, project_id: int) -> HTMLResponse:
