@@ -44,18 +44,18 @@
 - [x] 增加部署配置与持久化契约测试。
 - [x] 增加 Fake OAuth 桌面/手机 Playwright 回归。
 - [x] 修复发现的移动端溢出、交互和导航问题。
-- [ ] 运行阶段测试并提交。
+- [x] 运行阶段测试并提交。
 
 ## Phase 6: Final Verification
 
-- [ ] 运行 fast 回归。
-- [ ] 运行 deterministic E2E。
-- [ ] 运行 golden Demo evaluation。
-- [ ] 运行全部 browser E2E。
-- [ ] 运行一次现有真实 live E2E。
-- [ ] 检查 Git 中无 Secret、私人数据、Session 和备份包。
-- [ ] 编写 iteration-summary.md，记录证据和真实部署待办。
-- [ ] 提交最终阶段，不 push、不修改线上服务。
+- [x] 运行 fast 回归。
+- [x] 运行 deterministic E2E。
+- [x] 运行 golden Demo evaluation。
+- [x] 运行全部 browser E2E。
+- [x] 运行一次现有真实 live E2E。
+- [x] 检查 Git 中无 Secret、私人数据、Session 和备份包。
+- [x] 编写 iteration-summary.md，记录证据和真实部署待办。
+- [x] 提交最终阶段，不 push、不修改线上服务。
 
 ## External Deployment Gate
 
