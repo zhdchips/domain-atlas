@@ -21,12 +21,12 @@
 
 ## Phase 3: Persistence And Backup
 
-- [ ] 增加 private owner 数据目录启动校验。
-- [ ] 实现一致性备份、manifest 和 checksum。
-- [ ] 实现安全恢复到空目录。
-- [ ] 增加可配置备份调度与保留策略。
-- [ ] 增加 CLI 命令和备份恢复 round-trip/安全测试。
-- [ ] 运行阶段测试并提交。
+- [x] 增加 private owner 数据目录启动校验。
+- [x] 实现一致性备份、manifest 和 checksum。
+- [x] 实现安全恢复到空目录。
+- [x] 增加可配置备份调度与保留策略。
+- [x] 增加 CLI 命令和备份恢复 round-trip/安全测试。
+- [x] 运行阶段测试并提交。
 
 ## Phase 4: Interrupted Workflow Retry
 

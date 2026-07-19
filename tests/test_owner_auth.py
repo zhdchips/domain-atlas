@@ -66,6 +66,7 @@ def _private_settings(tmp_path, **overrides) -> Settings:
         "owner_github_user_id": 4242,
         "session_secret": "s" * 48,
         "session_cookie_secure": True,
+        "persistent_data_acknowledged": True,
     }
     values.update(overrides)
     return Settings(**values)

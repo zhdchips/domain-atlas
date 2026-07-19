@@ -51,7 +51,7 @@ Session 摘要使用 `HMAC-SHA256(SESSION_SECRET, token)`；CSRF Token 使用不
 
 ### Startup Validation
 
-`private_owner` 要求绝对 `DATA_DIR`，拒绝 `/tmp`、系统临时目录及其子目录。应用创建目录并执行原子 probe write/rename/delete。配置缺失、目录不可写、OAuth/Session Secret 缺失都使用安全、可操作的启动错误。
+`private_owner` 要求绝对 `DATA_DIR` 和显式 `PERSISTENT_DATA_ACKNOWLEDGED=true`，拒绝把系统临时根目录本身作为数据目录。应用创建目录并执行原子 probe write/rename/delete。配置缺失、目录不可写、OAuth/Session Secret 缺失都使用安全、可操作的启动错误。
 
 ### Backup Format
 
@@ -60,11 +60,12 @@ Session 摘要使用 `HMAC-SHA256(SESSION_SECRET, token)`；CSRF Token 使用不
 1. 通过 SQLite backup API 生成一致的数据库快照；
 2. 在单进程维护锁下复制 Chroma、uploads 与其他 `DATA_DIR` 文件；
 3. 生成 `manifest.json`，记录 schema version、创建时间、应用版本、相对路径、大小和 SHA-256；
-4. archive 只包含 `manifest.json` 和 `payload/` 下的文件。
+4. 将数据库内的 Source 文件路径转换为 `@data/` 可移植标记；恢复时重写到新数据根目录；
+5. archive 只包含 `manifest.json` 和 `payload/` 下的文件。
 
 恢复先在临时目录中完成安全解包和 checksum 校验，再原子移动到必须为空的目标目录。拒绝绝对路径、`..`、symlink、重复 member、未知顶层路径和校验不符。
 
-应用内 `BackupScheduler` 只在显式启用时启动 daemon thread，按间隔调用相同备份服务，并按创建时间保留最近 N 个。调度器不负责外部对象存储；Render 磁盘自己的每日快照提供独立的基础设施恢复层。
+Web 写请求与后台任务持有数据目录共享锁，备份获取独占锁，使 SQLite 快照和文件复制不会与摄取、上传或构建并发。应用内 `BackupScheduler` 只在显式启用时启动 daemon thread，按间隔调用相同备份服务，并按创建时间保留最近 N 个。调度器不负责外部对象存储；Render 磁盘自己的每日快照提供独立的基础设施恢复层。
 
 ## Workflow Retry
 

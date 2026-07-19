@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Callable
+from contextlib import AbstractContextManager, nullcontext
 
 from domain_atlas.domain.workflow import WorkflowRepository
 
@@ -15,9 +16,15 @@ class WorkflowConflictError(RuntimeError):
 class BackgroundWorkflowRunner:
     """Launch local threads while keeping SQLite as the observable task record."""
 
-    def __init__(self, repository: WorkflowRepository) -> None:
+    def __init__(
+        self,
+        repository: WorkflowRepository,
+        *,
+        work_guard: Callable[[], AbstractContextManager[None]] | None = None,
+    ) -> None:
         self.repository = repository
         self._lock = threading.Lock()
+        self.work_guard = work_guard or nullcontext
 
     def submit(
         self,
@@ -43,7 +50,8 @@ class BackgroundWorkflowRunner:
     def _run(self, run_id: int, work: Callable[[int], object]) -> None:
         self.repository.mark_running(run_id)
         try:
-            work(run_id)
+            with self.work_guard():
+                work(run_id)
         except Exception as exc:
             if self.repository.get_status(run_id) in {"queued", "running"}:
                 self.repository.record_step(

@@ -10,6 +10,8 @@ __pycache__/
 .mypy_cache/
 data/
 uploads/
+backups/
+domain-atlas-*.tar.gz
 *.sqlite
 *.sqlite3
 reports/intake/*.json

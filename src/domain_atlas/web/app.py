@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+from collections.abc import Iterator
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
@@ -23,6 +25,8 @@ from domain_atlas.auth import (
 )
 from domain_atlas.auth.sessions import local_owner_session
 from domain_atlas.core.db import initialize_database
+from domain_atlas.core.backup import BackupScheduler, BackupService
+from domain_atlas.core.persistence import DataDirectoryLock, validate_private_data_directory
 from domain_atlas.core.resilience import RetryEvent, RetryObserver
 from domain_atlas.core.settings import Settings, get_settings
 from domain_atlas.demo.catalog import PublicDemoCatalog, public_demo_catalog
@@ -90,6 +94,11 @@ def create_app(
     """Create the Domain Atlas web app."""
     app_settings = settings or get_settings()
     app_settings.validate_private_auth()
+    if app_settings.private_owner_mode:
+        app_settings.data_dir = validate_private_data_directory(
+            app_settings.data_dir,
+            acknowledged=app_settings.persistent_data_acknowledged,
+        )
     if not app_settings.public_demo_mode:
         initialize_database(app_settings.database_path)
 
@@ -107,6 +116,14 @@ def create_app(
     )
     if not app_settings.public_demo_mode:
         WorkflowRepository(app_settings.database_path).interrupt_active_runs()
+    data_lock = (
+        DataDirectoryLock(app_settings.data_dir) if not app_settings.public_demo_mode else None
+    )
+
+    def guard_data_write() -> Iterator[None]:
+        guard = data_lock.shared() if data_lock is not None else nullcontext()
+        with guard:
+            yield
 
     oauth_states = (
         OAuthStateRepository(
@@ -220,7 +237,24 @@ def create_app(
     def workflow_repository() -> WorkflowRepository:
         return WorkflowRepository(app_settings.database_path)
 
-    task_runner = background_runner or BackgroundWorkflowRunner(workflow_repository())
+    task_runner = background_runner or BackgroundWorkflowRunner(
+        workflow_repository(),
+        work_guard=data_lock.shared if data_lock is not None else None,
+    )
+    backup_scheduler = None
+    if app_settings.backup_enabled and not app_settings.public_demo_mode:
+        backup_scheduler = BackupScheduler(
+            BackupService(
+                data_dir=app_settings.data_dir,
+                backup_dir=app_settings.backups_path,
+                lock=data_lock,
+            ),
+            interval_seconds=app_settings.backup_interval_hours * 3600,
+            retention_count=app_settings.backup_retention_count,
+        )
+        app.add_event_handler("startup", backup_scheduler.start)
+        app.add_event_handler("shutdown", backup_scheduler.stop)
+    app.state.backup_scheduler = backup_scheduler
 
     def source_discovery_provider(
         *, retry_observer: RetryObserver | None = None
@@ -375,7 +409,7 @@ def create_app(
             },
         )
 
-    @app.get("/auth/login")
+    @app.get("/auth/login", dependencies=[Depends(guard_data_write)])
     def auth_login(next: str = "/") -> RedirectResponse:
         if not app_settings.private_owner_mode:
             raise HTTPException(status_code=404, detail="Private owner mode is not enabled.")
@@ -391,7 +425,11 @@ def create_app(
             status_code=status.HTTP_303_SEE_OTHER,
         )
 
-    @app.get("/auth/callback", response_class=HTMLResponse)
+    @app.get(
+        "/auth/callback",
+        response_class=HTMLResponse,
+        dependencies=[Depends(guard_data_write)],
+    )
     def auth_callback(
         request: Request,
         code: str = "",
@@ -458,7 +496,10 @@ def create_app(
         )
         return response
 
-    @app.post("/auth/logout", dependencies=[Depends(verify_csrf)])
+    @app.post(
+        "/auth/logout",
+        dependencies=[Depends(verify_csrf), Depends(guard_data_write)],
+    )
     def auth_logout(request: Request) -> RedirectResponse:
         if not app_settings.private_owner_mode:
             raise HTTPException(status_code=404, detail="Private owner mode is not enabled.")
@@ -593,7 +634,9 @@ def create_app(
             },
         )
 
-    @private_router.post("/domains", dependencies=[Depends(verify_csrf)])
+    @private_router.post(
+        "/domains", dependencies=[Depends(verify_csrf), Depends(guard_data_write)]
+    )
     def create_domain(
         name: str = Form(...),
         goal: str = Form(""),
@@ -672,7 +715,8 @@ def create_app(
         )
 
     @private_router.post(
-        "/domains/{project_id}/intake", dependencies=[Depends(verify_csrf)]
+        "/domains/{project_id}/intake",
+        dependencies=[Depends(verify_csrf), Depends(guard_data_write)],
     )
     def confirm_project_intake(
         project_id: int,
@@ -776,7 +820,8 @@ def create_app(
         )
 
     @private_router.post(
-        "/domains/{project_id}/discover", dependencies=[Depends(verify_csrf)]
+        "/domains/{project_id}/discover",
+        dependencies=[Depends(verify_csrf), Depends(guard_data_write)],
     )
     def discover_sources(
         project_id: int,
@@ -805,7 +850,7 @@ def create_app(
 
     @private_router.post(
         "/domains/{project_id}/candidates/{candidate_id}/confirm",
-        dependencies=[Depends(verify_csrf)],
+        dependencies=[Depends(verify_csrf), Depends(guard_data_write)],
     )
     def confirm_source_candidate(
         project_id: int,
@@ -854,7 +899,8 @@ def create_app(
         )
 
     @private_router.post(
-        "/domains/{project_id}/sources/url", dependencies=[Depends(verify_csrf)]
+        "/domains/{project_id}/sources/url",
+        dependencies=[Depends(verify_csrf), Depends(guard_data_write)],
     )
     def add_url_source(
         project_id: int,
@@ -878,7 +924,8 @@ def create_app(
         )
 
     @private_router.post(
-        "/domains/{project_id}/sources/file", dependencies=[Depends(verify_csrf)]
+        "/domains/{project_id}/sources/file",
+        dependencies=[Depends(verify_csrf), Depends(guard_data_write)],
     )
     async def add_file_source(project_id: int, file: UploadFile) -> RedirectResponse:
         project = project_repository().get(project_id)
@@ -912,7 +959,7 @@ def create_app(
 
     @private_router.post(
         "/domains/{project_id}/sources/{source_id}/ingest",
-        dependencies=[Depends(verify_csrf)],
+        dependencies=[Depends(verify_csrf), Depends(guard_data_write)],
     )
     def ingest_source(project_id: int, source_id: int) -> RedirectResponse:
         project = project_repository().get(project_id)
@@ -939,7 +986,8 @@ def create_app(
         return _dashboard_redirect(project_id, notice="已开始摄取资料，可在当前任务中查看进度。")
 
     @private_router.post(
-        "/domains/{project_id}/build", dependencies=[Depends(verify_csrf)]
+        "/domains/{project_id}/build",
+        dependencies=[Depends(verify_csrf), Depends(guard_data_write)],
     )
     def build_knowledge(project_id: int) -> RedirectResponse:
         project = project_repository().get(project_id)
@@ -958,7 +1006,8 @@ def create_app(
         return _dashboard_redirect(project_id, notice="已开始构建知识库，可在当前任务中查看进度。")
 
     @private_router.post(
-        "/domains/{project_id}/autopilot", dependencies=[Depends(verify_csrf)]
+        "/domains/{project_id}/autopilot",
+        dependencies=[Depends(verify_csrf), Depends(guard_data_write)],
     )
     def run_autopilot(project_id: int) -> RedirectResponse:
         project = project_repository().get(project_id)
@@ -1113,7 +1162,8 @@ def create_app(
         )
 
     @private_router.post(
-        "/domains/{project_id}/qa", dependencies=[Depends(verify_csrf)]
+        "/domains/{project_id}/qa",
+        dependencies=[Depends(verify_csrf), Depends(guard_data_write)],
     )
     def ask_question(project_id: int, question: str = Form(...)) -> RedirectResponse:
         project = project_repository().get(project_id)

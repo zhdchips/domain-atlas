@@ -14,6 +14,7 @@ def test_settings_paths_are_under_data_dir(tmp_path):
     assert settings.database_path == tmp_path / "domain_atlas.sqlite3"
     assert settings.chroma_path == tmp_path / "chroma"
     assert settings.uploads_path == tmp_path / "uploads"
+    assert settings.backups_path == tmp_path / "backups"
 
 
 def test_provider_defaults_match_mvp_contract():

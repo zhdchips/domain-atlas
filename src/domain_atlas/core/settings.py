@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     session_cookie_secure: bool = True
     session_ttl_hours: int = 24 * 30
     oauth_state_ttl_minutes: int = 10
+    persistent_data_acknowledged: bool = False
+    backup_enabled: bool = False
+    backup_interval_hours: float = 24.0
+    backup_retention_count: int = 7
+    backup_dir: Path = Path("backups")
 
     search_provider: str = "exa"
     exa_api_key: str = ""
@@ -125,6 +130,13 @@ class Settings(BaseSettings):
     def uploads_path(self) -> Path:
         """Uploaded source file storage directory."""
         return self.data_dir / "uploads"
+
+    @property
+    def backups_path(self) -> Path:
+        """Resolve relative backup directories below the persistent data root."""
+        if self.backup_dir.is_absolute():
+            return self.backup_dir
+        return self.data_dir / self.backup_dir
 
 
 @lru_cache(maxsize=1)
