@@ -4,8 +4,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ app_name }}</title>
-    <link rel="stylesheet" href="{{ url_for('static', path='styles.css') }}?v={{ static_version() }}">
-    <script src="{{ url_for('static', path='app.js') }}?v={{ static_version() }}" defer></script>
+    <link rel="stylesheet" href="/static/styles.css?v={{ static_version() }}">
+    <script src="/static/app.js?v={{ static_version() }}" defer></script>
   </head>
   <body>
     <header class="topbar">

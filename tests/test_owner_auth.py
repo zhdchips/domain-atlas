@@ -123,6 +123,21 @@ def test_private_mode_redirects_to_sign_in_and_hides_api_docs(tmp_path):
     assert client.get("/openapi.json").status_code == 404
 
 
+def test_private_sign_in_uses_same_origin_static_asset_paths(tmp_path):
+    app = create_app(
+        _private_settings(tmp_path),
+        oauth_provider=FakeGitHubOAuthProvider(),
+    )
+    client = TestClient(app, base_url="http://internal-render-proxy")
+
+    response = client.get("/auth/sign-in")
+
+    assert response.status_code == 200
+    assert 'href="/static/styles.css?v=' in response.text
+    assert 'src="/static/app.js?v=' in response.text
+    assert "http://internal-render-proxy/static/" not in response.text
+
+
 def test_private_backup_scheduler_uses_application_lifespan(tmp_path, monkeypatch):
     events: list[str] = []
     monkeypatch.setattr(BackupScheduler, "start", lambda self: events.append("start"))

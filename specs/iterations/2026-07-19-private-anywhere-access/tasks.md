@@ -79,6 +79,14 @@
 - [x] 增加 `BACKUP_ENABLED=true` 的生产配置启动/关闭回归。
 - [x] 运行回归并提交修复；自动部署恢复在外部验证阶段确认。
 
+## Phase 10: Reverse Proxy Static Assets
+
+- [x] 用真实手机视口截图定位 HTTPS 页面静态资源未加载。
+- [x] 确认反向代理内部 HTTP scheme 导致绝对静态 URL 被 mixed-content 拦截。
+- [x] 将 CSS 与 JavaScript 改为同源相对路径。
+- [x] 增加内部 HTTP proxy 场景的静态资源 URL 回归。
+- [x] 运行回归并提交；部署和手机页面复验在外部验证阶段确认。
+
 ## External Deployment Gate
 
 - [x] 用户创建并配置 GitHub OAuth App。
