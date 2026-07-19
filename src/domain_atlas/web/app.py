@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-from collections.abc import Iterator
-from contextlib import nullcontext
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager, nullcontext
 from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.parse import urlencode
@@ -102,12 +102,25 @@ def create_app(
     if not app_settings.public_demo_mode:
         initialize_database(app_settings.database_path)
 
+    backup_scheduler: BackupScheduler | None = None
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        if backup_scheduler is not None:
+            backup_scheduler.start()
+        try:
+            yield
+        finally:
+            if backup_scheduler is not None:
+                backup_scheduler.stop()
+
     expose_api_docs = app_settings.deployment_mode == "local"
     app = FastAPI(
         title=app_settings.app_name,
         docs_url="/docs" if expose_api_docs else None,
         redoc_url="/redoc" if expose_api_docs else None,
         openapi_url="/openapi.json" if expose_api_docs else None,
+        lifespan=lifespan,
     )
     app.state.settings = app_settings
     app.mount("/static", static_files, name="static")
@@ -244,7 +257,6 @@ def create_app(
         workflow_repository(),
         work_guard=data_lock.shared if data_lock is not None else None,
     )
-    backup_scheduler = None
     if app_settings.backup_enabled and not app_settings.public_demo_mode:
         backup_scheduler = BackupScheduler(
             BackupService(
@@ -255,8 +267,6 @@ def create_app(
             interval_seconds=app_settings.backup_interval_hours * 3600,
             retention_count=app_settings.backup_retention_count,
         )
-        app.add_event_handler("startup", backup_scheduler.start)
-        app.add_event_handler("shutdown", backup_scheduler.stop)
     app.state.backup_scheduler = backup_scheduler
 
     def source_discovery_provider(

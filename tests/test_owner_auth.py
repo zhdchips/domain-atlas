@@ -12,6 +12,7 @@ from domain_atlas.auth import (
     OAuthStateRepository,
     OwnerSessionRepository,
 )
+from domain_atlas.core.backup import BackupScheduler
 from domain_atlas.core.db import connect, initialize_database
 from domain_atlas.core.settings import Settings
 from domain_atlas.web.app import create_app
@@ -120,6 +121,22 @@ def test_private_mode_redirects_to_sign_in_and_hides_api_docs(tmp_path):
     assert client.get("/health").status_code == 200
     assert client.get("/docs").status_code == 404
     assert client.get("/openapi.json").status_code == 404
+
+
+def test_private_backup_scheduler_uses_application_lifespan(tmp_path, monkeypatch):
+    events: list[str] = []
+    monkeypatch.setattr(BackupScheduler, "start", lambda self: events.append("start"))
+    monkeypatch.setattr(BackupScheduler, "stop", lambda self: events.append("stop"))
+    app = create_app(
+        _private_settings(tmp_path, backup_enabled=True),
+        oauth_provider=FakeGitHubOAuthProvider(),
+    )
+
+    with TestClient(app, base_url="https://atlas.test") as client:
+        assert client.get("/health").status_code == 200
+        assert events == ["start"]
+
+    assert events == ["start", "stop"]
 
 
 def test_owner_oauth_login_uses_pkce_and_creates_hashed_secure_session(tmp_path):

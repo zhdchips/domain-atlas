@@ -71,9 +71,17 @@
 - [x] 验证新建项目与 Owner Session 在进程重启后仍可读取。
 - [x] 运行私有与完整浏览器回归并提交。
 
+## Phase 9: Production Lifespan Repair
+
+- [x] 用真实私有 Blueprint 创建 Starter 服务与 1 GB 持久化磁盘。
+- [x] 从首次部署日志定位自动备份生命周期启动失败。
+- [x] 将备份调度器迁移到 FastAPI lifespan。
+- [x] 增加 `BACKUP_ENABLED=true` 的生产配置启动/关闭回归。
+- [x] 运行回归并提交修复；自动部署恢复在外部验证阶段确认。
+
 ## External Deployment Gate
 
-- [ ] 用户创建并配置 GitHub OAuth App。
-- [ ] 用户确认付费 Render Web Service 与持久化磁盘。
-- [ ] 获得明确授权后 push 并创建 private owner 服务。
+- [x] 用户创建并配置 GitHub OAuth App。
+- [x] 用户确认付费 Render Web Service 与持久化磁盘。
+- [x] 获得明确授权后 push 并创建 private owner 服务。
 - [ ] 验证真实 OAuth、重启后持久化、移动端访问和备份恢复。
