@@ -77,7 +77,7 @@ PUBLIC_DEMO_MODE=true uv run uvicorn domain_atlas.web.app:create_app --factory
 
 打开 `http://127.0.0.1:8000/demo`。预构建的 `Agent Harness Engineering` 案例包含资料来源、Wiki 工作区、5 个学习模块、带引用的问答示例，以及包含 25 项检查的黄金评测集。
 
-**在线状态：尚未完成首次 Render 公网部署。** 仓库已经包含可重复的部署配置；获得公开发布确认后，这里将替换为真实 HTTPS 地址。
+**在线 Demo：[https://domain-atlas-demo.onrender.com](https://domain-atlas-demo.onrender.com)**
 
 ## Docker
 
@@ -112,10 +112,10 @@ docker run --rm -p 8000:8000 \
 
 Render 会通过 `/health` 判断新版本是否可用，并在 GitHub CI 检查通过后自动部署当前默认分支。Free 实例空闲后可能休眠，首次访问可能需要约一分钟恢复；正式用于简历投递时，建议使用不会休眠的实例。
 
-部署完成后设置实际地址并执行远程只读验证：
+执行远程只读验证：
 
 ```bash
-export DOMAIN_ATLAS_DEMO_URL="实际的 HTTPS 服务地址"
+export DOMAIN_ATLAS_DEMO_URL="https://domain-atlas-demo.onrender.com"
 uv run python scripts/smoke_public_demo_remote.py --base-url "$DOMAIN_ATLAS_DEMO_URL"
 ```
 

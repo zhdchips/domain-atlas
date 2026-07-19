@@ -30,5 +30,5 @@
 
 - [x] 编写 iteration-summary.md，记录测试证据、Render CLI 验证限制和剩余发布步骤。
 - [x] 提交当前分支，不 push。
-- [ ] 获得用户明确确认后，push 并创建 Render 公共服务。
-- [ ] 对真实 HTTPS URL 执行远程只读冒烟测试并更新 README。
+- [x] 获得用户明确确认后，push 并创建 Render 公共服务。
+- [x] 对真实 HTTPS URL 执行远程只读冒烟测试并更新 README。
