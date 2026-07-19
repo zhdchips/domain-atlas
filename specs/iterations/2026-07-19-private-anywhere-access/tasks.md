@@ -65,6 +65,12 @@
 - [x] 增加上传路径穿越与写路由结构回归。
 - [x] 运行分层回归并提交审计修复。
 
+## Phase 8: Restart Persistence Evidence
+
+- [x] 在私有浏览器 E2E 中使用同一持久化目录重启 Uvicorn。
+- [x] 验证新建项目与 Owner Session 在进程重启后仍可读取。
+- [x] 运行私有与完整浏览器回归并提交。
+
 ## External Deployment Gate
 
 - [ ] 用户创建并配置 GitHub OAuth App。

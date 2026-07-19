@@ -53,6 +53,16 @@ def main() -> int:
             if "Mobile Learning Atlas" not in page.locator("h1").inner_text():
                 raise RuntimeError("private project creation did not reach its dashboard")
 
+            _stop_server(server)
+            server = None
+            server = _start_server(data_dir=data_dir, port=port)
+            _wait_for_health(base_url)
+            page.goto(f"{base_url}/domains/7", wait_until="networkidle")
+            if "Mobile Learning Atlas" not in page.locator("h1").inner_text():
+                raise RuntimeError("private project did not survive an application restart")
+            if page.url.endswith("/auth/sign-in?next=%2Fdomains%2F7"):
+                raise RuntimeError("owner session did not survive an application restart")
+
             page.goto(f"{base_url}/domains/1", wait_until="networkidle")
             page.get_by_role("button", name="一键构建领域地图").click()
             page.locator(".workflow-run-active").wait_for(state="visible", timeout=3000)
@@ -106,7 +116,7 @@ def main() -> int:
             _stop_server(server)
 
     shutil.rmtree(workdir, ignore_errors=True)
-    print("PASS browser-e2e private owner desktop and mobile workflows")
+    print("PASS browser-e2e private owner restart, desktop, and mobile workflows")
     return 0
 
 
