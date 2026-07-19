@@ -4,6 +4,10 @@
 
 Domain Atlas 不是通用聊天界面。它将证据与学习内容分层管理：原始资料切片保留来源信息；生成的 Wiki 页面负责组织领域知识；回答优先引用 Wiki，并仅在必要时回退到原始资料证据。
 
+**[在线体验](https://domain-atlas-demo.onrender.com)** · [快速开始](#快速开始) · [系统架构](#系统架构)
+
+> 在线演示部署于 Render Free，首次打开可能需要约 1 分钟唤醒。
+
 <p align="center">
   <img src="docs/assets/demo-overview.png" alt="Domain Atlas 公开演示概览" width="49%" />
   <img src="docs/assets/demo-wiki.png" alt="Domain Atlas LLM Wiki 工作区" width="49%" />
