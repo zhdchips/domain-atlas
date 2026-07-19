@@ -10,14 +10,14 @@
 
 ## Phase 2: Private Owner Authentication
 
-- [ ] 增加三种显式运行模式及旧环境变量兼容校验。
-- [ ] 增加 GitHub OAuth Provider 协议、生产适配器和可注入 Fake。
-- [ ] 增加 OAuth state、owner Session 和 HMAC digest 持久化。
-- [ ] 使用 FastAPI Depends 集中实现 owner 认证与 CSRF。
-- [ ] 增加登录、回调、拒绝、登出页面和导航状态。
-- [ ] 为所有现有写表单注入 CSRF Token。
-- [ ] 增加认证、Cookie、模式边界和公开 Demo 回归测试。
-- [ ] 运行阶段测试并提交。
+- [x] 增加三种显式运行模式及旧环境变量兼容校验。
+- [x] 增加 GitHub OAuth Provider 协议、生产适配器和可注入 Fake。
+- [x] 增加 OAuth state、owner Session 和 HMAC digest 持久化。
+- [x] 使用 FastAPI Depends 集中实现 owner 认证与 CSRF。
+- [x] 增加登录、回调、拒绝、登出页面和导航状态。
+- [x] 为所有现有写表单注入 CSRF Token。
+- [x] 增加认证、Cookie、模式边界和公开 Demo 回归测试。
+- [x] 运行阶段测试并提交。
 
 ## Phase 3: Persistence And Backup
 

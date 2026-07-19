@@ -247,6 +247,30 @@ CREATE TABLE IF NOT EXISTS qa_records (
 
 CREATE INDEX IF NOT EXISTS idx_qa_records_project
 ON qa_records(project_id, id DESC);
+
+CREATE TABLE IF NOT EXISTS oauth_states (
+    state_digest TEXT PRIMARY KEY,
+    code_verifier TEXT NOT NULL,
+    return_path TEXT NOT NULL DEFAULT '/',
+    expires_at INTEGER NOT NULL,
+    consumed_at INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_oauth_states_expiry
+ON oauth_states(expires_at);
+
+CREATE TABLE IF NOT EXISTS owner_sessions (
+    token_digest TEXT PRIMARY KEY,
+    github_user_id INTEGER NOT NULL,
+    github_login TEXT NOT NULL,
+    expires_at INTEGER NOT NULL,
+    revoked_at INTEGER,
+    created_at INTEGER NOT NULL,
+    last_seen_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_owner_sessions_expiry
+ON owner_sessions(expires_at);
 """
 
 

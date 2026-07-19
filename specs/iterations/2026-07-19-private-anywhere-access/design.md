@@ -32,9 +32,9 @@
 新增两张无用户体系的本地表：
 
 - `oauth_states`：短期一次性 OAuth transaction；
-- `owner_sessions`：token digest、GitHub numeric ID/login、CSRF token digest/secret、过期与撤销时间。
+- `owner_sessions`：token digest、GitHub numeric ID/login、过期与撤销时间。
 
-Session 和 CSRF 摘要使用 `HMAC-SHA256(SESSION_SECRET, token)`，从而使 Secret 轮换自然使旧记录失效。Cookie 只保存原始高熵 Session Token；数据库泄露时无法直接重放。
+Session 摘要使用 `HMAC-SHA256(SESSION_SECRET, token)`；CSRF Token 使用不同 purpose 从当前 Session Token 派生，不额外落库。Secret 轮换会同时使旧 Session 和 CSRF 失效。Cookie 只保存原始高熵 Session Token；数据库泄露时无法直接重放。
 
 ### FastAPI Dependencies
 

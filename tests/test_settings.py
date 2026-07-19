@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+from pydantic import ValidationError
+
 from domain_atlas.core.settings import Settings
 
 
@@ -36,6 +39,31 @@ def test_provider_defaults_match_mvp_contract():
     assert settings.url_fetch_max_retries == 2
     assert settings.provider_retry_base_delay_seconds == 1.0
     assert settings.provider_retry_jitter_seconds == 0.2
+    assert settings.deployment_mode == "local"
+    assert settings.private_owner_mode is False
+
+
+def test_legacy_public_demo_flag_resolves_to_explicit_mode(tmp_path):
+    settings = Settings(data_dir=tmp_path, public_demo_mode=True)
+
+    assert settings.deployment_mode == "public_demo"
+    assert settings.public_demo_mode is True
+
+
+def test_explicit_deployment_mode_rejects_conflicting_legacy_flag(tmp_path):
+    with pytest.raises(ValidationError, match="conflicts with PUBLIC_DEMO_MODE"):
+        Settings(
+            data_dir=tmp_path,
+            deployment_mode="private_owner",
+            public_demo_mode=True,
+        )
+
+
+def test_private_owner_auth_configuration_fails_closed(tmp_path):
+    settings = Settings(data_dir=tmp_path, deployment_mode="private_owner")
+
+    with pytest.raises(ValueError, match="GITHUB_OAUTH_CLIENT_ID"):
+        settings.validate_private_auth()
 
 
 def test_intake_assessment_is_enabled_by_default_when_not_explicitly_disabled(monkeypatch):

@@ -3,15 +3,25 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
 
-from fastapi import FastAPI, Form, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, FastAPI, Form, HTTPException, Request, UploadFile, status
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from domain_atlas.auth import (
+    GitHubOAuthClient,
+    GitHubOAuthError,
+    GitHubOAuthProvider,
+    OAuthStateRepository,
+    OwnerSession,
+    OwnerSessionRepository,
+)
+from domain_atlas.auth.sessions import local_owner_session
 from domain_atlas.core.db import initialize_database
 from domain_atlas.core.resilience import RetryEvent, RetryObserver
 from domain_atlas.core.settings import Settings, get_settings
@@ -58,6 +68,12 @@ templates.env.globals["static_version"] = lambda: str(
         int(Path("src/domain_atlas/web/static/app.js").stat().st_mtime),
     )
 )
+templates.env.globals["csrf_token"] = lambda request: getattr(
+    getattr(request, "state", object()), "owner_session", local_owner_session()
+).csrf_token
+templates.env.globals["private_owner_authenticated"] = lambda request: bool(
+    getattr(getattr(request, "state", object()), "private_owner_authenticated", False)
+)
 
 
 def create_app(
@@ -69,13 +85,21 @@ def create_app(
     autopilot_runner: object | None = None,
     background_runner: object | None = None,
     intake_assessment_provider: IntakeAssessmentProvider | None = None,
+    oauth_provider: GitHubOAuthProvider | None = None,
 ) -> FastAPI:
     """Create the Domain Atlas web app."""
     app_settings = settings or get_settings()
+    app_settings.validate_private_auth()
     if not app_settings.public_demo_mode:
         initialize_database(app_settings.database_path)
 
-    app = FastAPI(title=app_settings.app_name)
+    expose_api_docs = app_settings.deployment_mode == "local"
+    app = FastAPI(
+        title=app_settings.app_name,
+        docs_url="/docs" if expose_api_docs else None,
+        redoc_url="/redoc" if expose_api_docs else None,
+        openapi_url="/openapi.json" if expose_api_docs else None,
+    )
     app.state.settings = app_settings
     app.mount("/static", static_files, name="static")
     demo_catalog: PublicDemoCatalog | None = (
@@ -83,6 +107,36 @@ def create_app(
     )
     if not app_settings.public_demo_mode:
         WorkflowRepository(app_settings.database_path).interrupt_active_runs()
+
+    oauth_states = (
+        OAuthStateRepository(
+            app_settings.database_path,
+            secret=app_settings.session_secret,
+            ttl_seconds=app_settings.oauth_state_ttl_minutes * 60,
+        )
+        if app_settings.private_owner_mode
+        else None
+    )
+    owner_sessions = (
+        OwnerSessionRepository(
+            app_settings.database_path,
+            secret=app_settings.session_secret,
+            ttl_seconds=app_settings.session_ttl_hours * 3600,
+        )
+        if app_settings.private_owner_mode
+        else None
+    )
+    configured_oauth_provider = (
+        oauth_provider
+        or (
+            GitHubOAuthClient(
+                client_id=app_settings.github_oauth_client_id,
+                client_secret=app_settings.github_oauth_client_secret,
+            )
+            if app_settings.private_owner_mode
+            else None
+        )
+    )
 
     @app.middleware("http")
     async def public_demo_allowlist(request: Request, call_next):
@@ -97,6 +151,53 @@ def create_app(
         ):
             return await call_next(request)
         return PlainTextResponse("Not found.", status_code=status.HTTP_404_NOT_FOUND)
+
+    def get_owner_session(request: Request) -> OwnerSession | None:
+        if not app_settings.private_owner_mode:
+            session = local_owner_session()
+            request.state.owner_session = session
+            request.state.private_owner_authenticated = False
+            return session
+        assert owner_sessions is not None
+        assert app_settings.owner_github_user_id is not None
+        token = request.cookies.get(app_settings.session_cookie_name, "")
+        session = owner_sessions.resolve(
+            token,
+            expected_owner_id=app_settings.owner_github_user_id,
+        )
+        request.state.owner_session = session
+        request.state.private_owner_authenticated = session is not None
+        return session
+
+    def require_owner(
+        request: Request,
+        session: OwnerSession | None = Depends(get_owner_session),
+    ) -> OwnerSession:
+        if session is not None:
+            return session
+        next_path = _safe_return_path(request.url.path, fallback="/")
+        location = f"/auth/sign-in?{urlencode({'next': next_path})}"
+        raise HTTPException(
+            status_code=status.HTTP_303_SEE_OTHER,
+            detail="Owner authentication required.",
+            headers={"Location": location},
+        )
+
+    async def verify_csrf(
+        request: Request,
+        session: OwnerSession = Depends(require_owner),
+    ) -> OwnerSession:
+        if session.local:
+            return session
+        submitted = request.headers.get("X-CSRF-Token", "")
+        if not submitted:
+            form = await request.form()
+            submitted = str(form.get("_csrf") or "")
+        if not submitted or not hmac.compare_digest(submitted, session.csrf_token):
+            raise HTTPException(status_code=403, detail="CSRF validation failed.")
+        return session
+
+    private_router = APIRouter(dependencies=[Depends(require_owner)])
 
     def project_repository() -> DomainProjectRepository:
         return DomainProjectRepository(app_settings.database_path)
@@ -260,7 +361,123 @@ def create_app(
     def health() -> dict[str, str]:
         return {"status": "ok", "app": app_settings.app_name}
 
-    @app.get("/", response_class=HTMLResponse)
+    @app.get("/auth/sign-in", response_class=HTMLResponse)
+    def auth_sign_in(request: Request, next: str = "/", error: str = "") -> HTMLResponse:
+        if not app_settings.private_owner_mode:
+            raise HTTPException(status_code=404, detail="Private owner mode is not enabled.")
+        return templates.TemplateResponse(
+            request,
+            "sign_in.html",
+            {
+                "app_name": app_settings.app_name,
+                "login_href": f"/auth/login?{urlencode({'next': _safe_return_path(next)})}",
+                "error": error,
+            },
+        )
+
+    @app.get("/auth/login")
+    def auth_login(next: str = "/") -> RedirectResponse:
+        if not app_settings.private_owner_mode:
+            raise HTTPException(status_code=404, detail="Private owner mode is not enabled.")
+        assert oauth_states is not None
+        assert configured_oauth_provider is not None
+        transaction = oauth_states.create(return_path=_safe_return_path(next))
+        return RedirectResponse(
+            configured_oauth_provider.authorization_url(
+                state=transaction.state,
+                code_challenge=transaction.code_challenge,
+                redirect_uri=app_settings.github_oauth_callback_url,
+            ),
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    @app.get("/auth/callback", response_class=HTMLResponse)
+    def auth_callback(
+        request: Request,
+        code: str = "",
+        state: str = "",
+        error: str = "",
+    ) -> HTMLResponse:
+        if not app_settings.private_owner_mode:
+            raise HTTPException(status_code=404, detail="Private owner mode is not enabled.")
+        assert oauth_states is not None
+        assert owner_sessions is not None
+        assert configured_oauth_provider is not None
+        assert app_settings.owner_github_user_id is not None
+        if error or not code or not state:
+            return _auth_error_response(
+                request,
+                app_name=app_settings.app_name,
+                message="GitHub 登录已取消或缺少必要参数，请重新尝试。",
+                status_code=400,
+            )
+        transaction = oauth_states.consume(state)
+        if transaction is None:
+            return _auth_error_response(
+                request,
+                app_name=app_settings.app_name,
+                message="登录请求已过期或已使用，请重新发起登录。",
+                status_code=400,
+            )
+        try:
+            identity = configured_oauth_provider.fetch_identity(
+                code=code,
+                code_verifier=transaction.code_verifier,
+                redirect_uri=app_settings.github_oauth_callback_url,
+            )
+        except GitHubOAuthError as exc:
+            return _auth_error_response(
+                request,
+                app_name=app_settings.app_name,
+                message=str(exc),
+                status_code=502,
+            )
+        if identity.user_id != app_settings.owner_github_user_id:
+            return _auth_error_response(
+                request,
+                app_name=app_settings.app_name,
+                message="当前 GitHub 账号不是该私有知识库的所有者。",
+                status_code=403,
+            )
+        created = owner_sessions.create(
+            github_user_id=identity.user_id,
+            github_login=identity.login,
+        )
+        response = RedirectResponse(
+            url=transaction.return_path,
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+        response.set_cookie(
+            app_settings.session_cookie_name,
+            created.token,
+            max_age=app_settings.session_ttl_hours * 3600,
+            httponly=True,
+            secure=app_settings.session_cookie_secure,
+            samesite="lax",
+            path="/",
+        )
+        return response
+
+    @app.post("/auth/logout", dependencies=[Depends(verify_csrf)])
+    def auth_logout(request: Request) -> RedirectResponse:
+        if not app_settings.private_owner_mode:
+            raise HTTPException(status_code=404, detail="Private owner mode is not enabled.")
+        assert owner_sessions is not None
+        owner_sessions.revoke(request.cookies.get(app_settings.session_cookie_name, ""))
+        response = RedirectResponse(
+            url="/auth/sign-in",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+        response.delete_cookie(
+            app_settings.session_cookie_name,
+            path="/",
+            secure=app_settings.session_cookie_secure,
+            httponly=True,
+            samesite="lax",
+        )
+        return response
+
+    @private_router.get("/", response_class=HTMLResponse)
     def home(request: Request) -> HTMLResponse:
         if app_settings.public_demo_mode:
             return RedirectResponse(url="/demo", status_code=status.HTTP_307_TEMPORARY_REDIRECT)
@@ -376,7 +593,7 @@ def create_app(
             },
         )
 
-    @app.post("/domains")
+    @private_router.post("/domains", dependencies=[Depends(verify_csrf)])
     def create_domain(
         name: str = Form(...),
         goal: str = Form(""),
@@ -431,7 +648,7 @@ def create_app(
             status_code=status.HTTP_303_SEE_OTHER,
         )
 
-    @app.get("/domains/{project_id}/intake", response_class=HTMLResponse)
+    @private_router.get("/domains/{project_id}/intake", response_class=HTMLResponse)
     def clarify_project_intake(
         request: Request,
         project_id: int,
@@ -454,7 +671,9 @@ def create_app(
             },
         )
 
-    @app.post("/domains/{project_id}/intake")
+    @private_router.post(
+        "/domains/{project_id}/intake", dependencies=[Depends(verify_csrf)]
+    )
     def confirm_project_intake(
         project_id: int,
         selection: str = Form("default"),
@@ -500,7 +719,7 @@ def create_app(
         )
         return _dashboard_redirect(project_id, notice="领域范围已确认，可开始搜索资料或构建知识库。")
 
-    @app.get("/domains/{project_id}", response_class=HTMLResponse)
+    @private_router.get("/domains/{project_id}", response_class=HTMLResponse)
     def domain_dashboard(
         request: Request,
         project_id: int,
@@ -540,7 +759,7 @@ def create_app(
             },
         )
 
-    @app.get("/domains/{project_id}/workflow-status", response_class=HTMLResponse)
+    @private_router.get("/domains/{project_id}/workflow-status", response_class=HTMLResponse)
     def workflow_status(request: Request, project_id: int) -> HTMLResponse:
         project = project_repository().get(project_id)
         if project is None:
@@ -556,7 +775,9 @@ def create_app(
             },
         )
 
-    @app.post("/domains/{project_id}/discover")
+    @private_router.post(
+        "/domains/{project_id}/discover", dependencies=[Depends(verify_csrf)]
+    )
     def discover_sources(
         project_id: int,
         query: str = Form(""),
@@ -582,7 +803,10 @@ def create_app(
             status_code=status.HTTP_303_SEE_OTHER,
         )
 
-    @app.post("/domains/{project_id}/candidates/{candidate_id}/confirm")
+    @private_router.post(
+        "/domains/{project_id}/candidates/{candidate_id}/confirm",
+        dependencies=[Depends(verify_csrf)],
+    )
     def confirm_source_candidate(
         project_id: int,
         candidate_id: int,
@@ -629,7 +853,9 @@ def create_app(
             status_code=status.HTTP_303_SEE_OTHER,
         )
 
-    @app.post("/domains/{project_id}/sources/url")
+    @private_router.post(
+        "/domains/{project_id}/sources/url", dependencies=[Depends(verify_csrf)]
+    )
     def add_url_source(
         project_id: int,
         url: str = Form(...),
@@ -651,7 +877,9 @@ def create_app(
             status_code=status.HTTP_303_SEE_OTHER,
         )
 
-    @app.post("/domains/{project_id}/sources/file")
+    @private_router.post(
+        "/domains/{project_id}/sources/file", dependencies=[Depends(verify_csrf)]
+    )
     async def add_file_source(project_id: int, file: UploadFile) -> RedirectResponse:
         project = project_repository().get(project_id)
         if project is None:
@@ -682,7 +910,10 @@ def create_app(
             status_code=status.HTTP_303_SEE_OTHER,
         )
 
-    @app.post("/domains/{project_id}/sources/{source_id}/ingest")
+    @private_router.post(
+        "/domains/{project_id}/sources/{source_id}/ingest",
+        dependencies=[Depends(verify_csrf)],
+    )
     def ingest_source(project_id: int, source_id: int) -> RedirectResponse:
         project = project_repository().get(project_id)
         if project is None:
@@ -707,7 +938,9 @@ def create_app(
             return _dashboard_redirect(project_id, error=str(exc))
         return _dashboard_redirect(project_id, notice="已开始摄取资料，可在当前任务中查看进度。")
 
-    @app.post("/domains/{project_id}/build")
+    @private_router.post(
+        "/domains/{project_id}/build", dependencies=[Depends(verify_csrf)]
+    )
     def build_knowledge(project_id: int) -> RedirectResponse:
         project = project_repository().get(project_id)
         if project is None:
@@ -724,7 +957,9 @@ def create_app(
             return _dashboard_redirect(project_id, error=str(exc))
         return _dashboard_redirect(project_id, notice="已开始构建知识库，可在当前任务中查看进度。")
 
-    @app.post("/domains/{project_id}/autopilot")
+    @private_router.post(
+        "/domains/{project_id}/autopilot", dependencies=[Depends(verify_csrf)]
+    )
     def run_autopilot(project_id: int) -> RedirectResponse:
         project = project_repository().get(project_id)
         if project is None:
@@ -745,7 +980,7 @@ def create_app(
             return _dashboard_redirect(project_id, error=str(exc))
         return _dashboard_redirect(project_id, notice="已开始一键构建领域地图，可在当前任务中查看进度。")
 
-    @app.get("/domains/{project_id}/wiki", response_class=HTMLResponse)
+    @private_router.get("/domains/{project_id}/wiki", response_class=HTMLResponse)
     def wiki_pages(request: Request, project_id: int) -> HTMLResponse:
         project = project_repository().get(project_id)
         if project is None:
@@ -778,7 +1013,9 @@ def create_app(
             },
         )
 
-    @app.get("/domains/{project_id}/wiki/{page_path:path}", response_class=HTMLResponse)
+    @private_router.get(
+        "/domains/{project_id}/wiki/{page_path:path}", response_class=HTMLResponse
+    )
     def wiki_page_detail(request: Request, project_id: int, page_path: str) -> HTMLResponse:
         project = project_repository().get(project_id)
         if project is None:
@@ -811,7 +1048,7 @@ def create_app(
             },
         )
 
-    @app.get("/domains/{project_id}/path", response_class=HTMLResponse)
+    @private_router.get("/domains/{project_id}/path", response_class=HTMLResponse)
     def learning_path(request: Request, project_id: int) -> HTMLResponse:
         project = project_repository().get(project_id)
         if project is None:
@@ -849,7 +1086,7 @@ def create_app(
             },
         )
 
-    @app.get("/domains/{project_id}/qa", response_class=HTMLResponse)
+    @private_router.get("/domains/{project_id}/qa", response_class=HTMLResponse)
     def qa_page(request: Request, project_id: int, error: str = "") -> HTMLResponse:
         project = project_repository().get(project_id)
         if project is None:
@@ -875,7 +1112,9 @@ def create_app(
             },
         )
 
-    @app.post("/domains/{project_id}/qa")
+    @private_router.post(
+        "/domains/{project_id}/qa", dependencies=[Depends(verify_csrf)]
+    )
     def ask_question(project_id: int, question: str = Form(...)) -> RedirectResponse:
         project = project_repository().get(project_id)
         if project is None:
@@ -892,6 +1131,7 @@ def create_app(
             status_code=status.HTTP_303_SEE_OTHER,
         )
 
+    app.include_router(private_router)
     return app
 
 
@@ -899,6 +1139,35 @@ def _require_public_demo(catalog: PublicDemoCatalog | None) -> PublicDemoCatalog
     if catalog is None:
         raise HTTPException(status_code=404, detail="Public demo is not enabled.")
     return catalog
+
+
+def _safe_return_path(value: str, *, fallback: str = "/") -> str:
+    """Keep OAuth redirects on this origin and outside the auth callback flow."""
+    candidate = (value or "").strip()
+    if not candidate.startswith("/") or candidate.startswith("//"):
+        return fallback
+    if candidate.startswith("/auth/"):
+        return fallback
+    return candidate
+
+
+def _auth_error_response(
+    request: Request,
+    *,
+    app_name: str,
+    message: str,
+    status_code: int,
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "sign_in.html",
+        {
+            "app_name": app_name,
+            "login_href": "/auth/login",
+            "error": message,
+        },
+        status_code=status_code,
+    )
 
 
 def _local_presentation_context(

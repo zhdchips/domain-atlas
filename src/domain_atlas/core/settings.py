@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,7 +16,18 @@ class Settings(BaseSettings):
     app_name: str = "Domain Atlas"
     default_language: str = "zh"
     data_dir: Path = Path("data")
+    deployment_mode: Literal["local", "public_demo", "private_owner"] = "local"
     public_demo_mode: bool = False
+
+    github_oauth_client_id: str = ""
+    github_oauth_client_secret: str = ""
+    github_oauth_callback_url: str = ""
+    owner_github_user_id: int | None = None
+    session_secret: str = ""
+    session_cookie_name: str = "domain_atlas_session"
+    session_cookie_secure: bool = True
+    session_ttl_hours: int = 24 * 30
+    oauth_state_ttl_minutes: int = 10
 
     search_provider: str = "exa"
     exa_api_key: str = ""
@@ -59,6 +71,45 @@ class Settings(BaseSettings):
         case_sensitive=False,
         extra="ignore",
     )
+
+    @model_validator(mode="after")
+    def resolve_deployment_mode(self) -> Settings:
+        """Keep the original public flag compatible without weakening explicit modes."""
+        explicit_mode = "deployment_mode" in self.model_fields_set
+        explicit_legacy = "public_demo_mode" in self.model_fields_set
+        if explicit_mode and explicit_legacy:
+            expected_public = self.deployment_mode == "public_demo"
+            if self.public_demo_mode != expected_public:
+                raise ValueError("DEPLOYMENT_MODE conflicts with PUBLIC_DEMO_MODE.")
+        elif not explicit_mode and self.public_demo_mode:
+            self.deployment_mode = "public_demo"
+        self.public_demo_mode = self.deployment_mode == "public_demo"
+        return self
+
+    @property
+    def private_owner_mode(self) -> bool:
+        """Whether the app requires its configured single owner."""
+        return self.deployment_mode == "private_owner"
+
+    def validate_private_auth(self) -> None:
+        """Fail early when a private deployment cannot authenticate its owner."""
+        if not self.private_owner_mode:
+            return
+        missing: list[str] = []
+        if not self.github_oauth_client_id.strip():
+            missing.append("GITHUB_OAUTH_CLIENT_ID")
+        if not self.github_oauth_client_secret.strip():
+            missing.append("GITHUB_OAUTH_CLIENT_SECRET")
+        if not self.github_oauth_callback_url.strip():
+            missing.append("GITHUB_OAUTH_CALLBACK_URL")
+        if self.owner_github_user_id is None:
+            missing.append("OWNER_GITHUB_USER_ID")
+        if len(self.session_secret) < 32:
+            missing.append("SESSION_SECRET (at least 32 characters)")
+        if missing:
+            raise ValueError("Private owner authentication is not configured: " + ", ".join(missing))
+        if self.session_ttl_hours <= 0 or self.oauth_state_ttl_minutes <= 0:
+            raise ValueError("Private owner authentication TTL values must be positive.")
 
     @property
     def database_path(self) -> Path:

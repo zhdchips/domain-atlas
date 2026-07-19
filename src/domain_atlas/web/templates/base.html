@@ -12,6 +12,12 @@
       <a href="{{ home_href|default('/') }}" class="brand">Domain Atlas</a>
       <nav class="nav">
         <a href="{{ home_href|default('/') }}">{{ nav_label|default("项目") }}</a>
+        {% if private_owner_authenticated(request) %}
+          <form action="/auth/logout" method="post" class="nav-form">
+            <input type="hidden" name="_csrf" value="{{ csrf_token(request) }}">
+            <button type="submit" class="nav-button">退出</button>
+          </form>
+        {% endif %}
       </nav>
     </header>
     <main class="page{% block page_class %}{% endblock %}">

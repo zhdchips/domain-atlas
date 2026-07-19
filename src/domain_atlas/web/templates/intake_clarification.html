@@ -24,6 +24,7 @@
   <p class="intake-understanding">{{ assessment.understanding }}</p>
   <h2>{{ assessment.question }}</h2>
   <form action="/domains/{{ project.id }}/intake" method="post" class="form-grid" data-pending-form data-pending-text="正在保存领域边界…">
+    <input type="hidden" name="_csrf" value="{{ csrf_token(request) }}">
     <fieldset class="intake-options">
       <legend>推荐切入面</legend>
       {% for option in assessment.options %}

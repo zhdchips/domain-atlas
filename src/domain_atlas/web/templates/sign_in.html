@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="auth-shell">
+  <p class="eyebrow">私有学习空间</p>
+  <h1>登录 Domain Atlas</h1>
+  <p>仅配置的 GitHub 所有者账号可以访问项目、资料和学习记录。</p>
+  {% if error %}
+    <div class="notice notice-error" role="alert">{{ error }}</div>
+  {% endif %}
+  <a class="primary-link" href="{{ login_href }}">使用 GitHub 登录</a>
+</section>
+{% endblock %}
