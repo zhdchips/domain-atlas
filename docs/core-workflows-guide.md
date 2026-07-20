@@ -28,6 +28,94 @@ SourceCandidate -> Source -> Chunk
                        Wiki-first QA
 ```
 
+## 仓库地图
+
+先把仓库分成四个区域：产品源码、测试与工具、设计文档、运行产物。阅读三个主流程时，主要停留在 `src/domain_atlas/`，遇到行为不确定时再去 `tests/` 找对应例子。
+
+```text
+domain-atlas/
+├── src/domain_atlas/       产品源码
+├── tests/                  单元、集成和确定性 E2E
+├── scripts/                回归、真实 E2E、评测与截图脚本
+├── specs/                  历次 SDD 的需求、设计和任务
+├── docs/                   使用、部署和源码阅读文档
+├── evals/                  版本化评测用例
+├── reports/                评测结果
+├── data/                   本地运行数据
+├── .github/                GitHub Actions CI
+├── pyproject.toml          Python 依赖、入口和测试配置
+├── Dockerfile              容器镜像
+├── render.yaml             公开只读 Demo 部署
+└── render.private.yaml     私有 Owner 实例部署
+```
+
+### 产品源码
+
+```text
+src/domain_atlas/
+├── web/          HTTP 路由、认证依赖、Jinja 模板和静态资源
+├── workflow/     Autopilot、知识构建和后台任务编排
+├── intake/       项目输入评估、歧义判断和范围澄清
+├── discovery/    Exa 搜索与候选资料发现
+├── ingestion/    URL/PDF/Markdown 加载、质量检查、切片和向量化
+├── qa/           Wiki-first 与原始 Chunk 兜底问答
+├── domain/       领域模型和 SQLite Repository
+├── providers/    LLM、Embedding 和 Chroma 适配器
+├── wiki/         Wiki Markdown 渲染、内部链接和结构检查
+├── auth/         GitHub OAuth、Session 与 CSRF 所需状态
+├── core/         配置、数据库、持久化、备份和 Provider 重试
+├── demo/         公开只读黄金 Demo 数据
+├── evaluation/   黄金 Demo 评测逻辑
+└── cli.py        启动、备份、恢复和 Session 撤销命令入口
+```
+
+可以用一条简单规则判断应该去哪个目录：
+
+| 想找什么 | 先看哪里 |
+| --- | --- |
+| 请求从哪里进入 | `web/` |
+| 多步骤业务如何编排 | `workflow/` 或 `qa/` |
+| 数据如何读写 SQLite | `domain/` |
+| 外部 API 或向量库如何调用 | `providers/`、`discovery/` |
+| 文件如何变成可引用证据 | `ingestion/` |
+| 配置、备份和可靠性机制 | `core/` |
+
+三个主流程在目录间的移动路径是：
+
+```text
+创建项目：web -> intake -> domain
+
+一键构建：web -> workflow -> discovery -> ingestion
+                   |                         |
+                   +------ providers -------+
+                   |
+                   +-> domain
+
+引用问答：web -> qa -> providers/vector_index -> domain
+```
+
+### 测试、脚本和 SDD
+
+- `tests/` 描述模块的输入、输出和失败边界，通常是理解陌生函数最快的入口。
+- `scripts/` 负责运行分层回归、真实 Provider E2E 和浏览器检查，不承载线上业务逻辑。
+- `specs/` 保存每轮 SDD 的决策背景。需要理解“为什么这样设计”时看这里，不必在第一次读代码时逐份阅读。
+- `evals/` 保存固定评测题，`reports/` 保存评测结果；它们不参与普通请求处理。
+
+### 运行目录与编辑器目录
+
+以下目录不是产品源码，第一次阅读时可以折叠：
+
+```text
+.venv/          本地 Python 虚拟环境
+.pytest_cache/  Pytest 缓存
+__pycache__/    Python 字节码缓存
+.idea/          JetBrains 编辑器配置
+.vscode/        VS Code 调试和工作区配置
+data/           本地 SQLite、Chroma、资料文件和锁文件
+```
+
+其中 `data/` 很重要，但它是运行结果而不是实现。调试数据问题时再展开；阅读控制流时先从 `src/domain_atlas/` 开始。仓库中的空 `evaluations/` 目录当前也不参与系统运行。
+
 系统有三类存储，各自职责不同：
 
 | 存储 | 主要内容 | 角色 |
