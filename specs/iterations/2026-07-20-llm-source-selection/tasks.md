@@ -23,7 +23,22 @@
 
 ## Phase 4: Regression And Audit
 
-- [ ] Add recorded self-media, travel-agent, and service-workflow cases.
-- [ ] Extend deterministic E2E and Playwright coverage.
-- [ ] Run fast, E2E, browser, and isolated live checks.
-- [ ] Complete the requirement-by-requirement audit and commit verification.
+- [x] Add recorded self-media, travel-agent, and service-workflow cases.
+- [x] Extend deterministic E2E and Playwright coverage.
+- [x] Run fast, E2E, browser, golden Demo, and isolated live checks.
+- [x] Complete the requirement-by-requirement audit and commit verification.
+
+## Verification Record
+
+- `uv run python scripts/regression.py --fast`: passed, 184 pytest cases and the
+  13-case offline Intake evaluation.
+- `uv run python scripts/regression.py --e2e`: passed, 3 deterministic guided
+  workflow cases.
+- `uv run python scripts/regression.py --browser-e2e`: passed, including the
+  LLM-ranked candidate and one-round supplemental-search workflow states.
+- `uv run python scripts/regression.py --golden-demo-eval`: passed, 25 / 25.
+- `uv run python scripts/regression.py --live-guided-e2e`: isolated live search
+  and ingestion reached 2 / 2 independent sources. Candidate assessment safely
+  fell back after a strict-schema invalid response. The later Wiki build failed
+  because the configured chat model returned invalid JSON; the temporary workdir
+  was preserved and no normal project or Demo data was written.

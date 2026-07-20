@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from domain_atlas.core.db import connect, initialize_database
 from domain_atlas.domain.projects import CreateDomainProject, DomainProjectRepository
@@ -14,6 +15,9 @@ from domain_atlas.workflow.autopilot import (
     select_autopilot_candidates,
 )
 from domain_atlas.workflow.candidate_assessment import CandidateAssessment, CandidateAssessmentResult
+
+
+SOURCE_SELECTION_FIXTURE = Path(__file__).parent / "fixtures" / "llm_source_selection_cases.json"
 
 
 class FakeDiscoveryProvider:
@@ -471,21 +475,16 @@ def test_autopilot_reports_low_quality_discovery_after_valid_llm_assessment(tmp_
 def test_autopilot_uses_one_llm_supplemental_round_for_low_scored_learning_candidates(tmp_path):
     database_path = tmp_path / "domain_atlas.sqlite3"
     initialize_database(database_path)
+    fixture = json.loads(SOURCE_SELECTION_FIXTURE.read_text(encoding="utf-8"))["self_media"]
     project = DomainProjectRepository(database_path).create(
-        CreateDomainProject(name="如何做自媒体", scope="短视频自媒体入门与运营", interaction_mode="guided")
+        CreateDomainProject(name="如何做自媒体", scope=fixture["scope"], interaction_mode="guided")
     )
-    initial = [
-        _draft("course", "https://course.example.com/short-video", "web", 0.43),
-        _draft("blog", "https://blog.example.com/short-video", "web", 0.43),
-    ]
-    supplemental = [
-        _draft("creator-docs", "https://creator.example.com/rules", "official_docs", 0.43),
-        _draft("industry-report", "https://research.example.org/report", "institution", 0.43),
-    ]
+    initial = [_draft_from_case(item) for item in fixture["initial_candidates"]]
+    supplemental = [_draft_from_case(item) for item in fixture["supplemental_candidates"]]
     discovery = QueryDiscoveryProvider(
         {
-            "短视频自媒体入门与运营": initial,
-            "短视频 创作者 官方规则": supplemental,
+            fixture["scope"]: initial,
+            fixture["supplemental_query"]: supplemental,
         }
     )
     result = AutopilotWorkflow(
@@ -498,8 +497,8 @@ def test_autopilot_uses_one_llm_supplemental_round_for_low_scored_learning_candi
 
     assert result.selected_count == 2
     assert discovery.calls == [
-        ("短视频自媒体入门与运营", 12),
-        ("短视频 创作者 官方规则", 12),
+        (fixture["scope"], 12),
+        (fixture["supplemental_query"], 12),
     ]
     run = WorkflowRepository(database_path).list_for_project(project.id)[0]
     assessment = next(
@@ -576,4 +575,13 @@ def _draft(
         source_type=source_type,
         authority_score=authority_score,
         authority_reason="test score",
+    )
+
+
+def _draft_from_case(item: dict[str, object]) -> SourceCandidateDraft:
+    return _draft(
+        str(item["provider_source_id"]),
+        str(item["url"]),
+        str(item["source_type"]),
+        float(item["authority_score"]),
     )

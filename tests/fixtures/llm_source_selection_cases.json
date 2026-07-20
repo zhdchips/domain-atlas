@@ -1,0 +1,43 @@
+{
+  "self_media": {
+    "scope": "短视频自媒体入门与运营",
+    "supplemental_query": "短视频 创作者 官方规则",
+    "initial_candidates": [
+      {
+        "provider_source_id": "course",
+        "url": "https://course.example.com/short-video",
+        "source_type": "web",
+        "authority_score": 0.43
+      },
+      {
+        "provider_source_id": "blog",
+        "url": "https://blog.example.com/short-video",
+        "source_type": "web",
+        "authority_score": 0.43
+      }
+    ],
+    "supplemental_candidates": [
+      {
+        "provider_source_id": "creator-docs",
+        "url": "https://creator.example.com/rules",
+        "source_type": "official_docs",
+        "authority_score": 0.43
+      },
+      {
+        "provider_source_id": "industry-report",
+        "url": "https://research.example.org/report",
+        "source_type": "institution",
+        "authority_score": 0.43
+      }
+    ]
+  },
+  "travel_agent": {
+    "scope": "旅行代理",
+    "recorded_fixture": "guided_reliability_travel_agent.json",
+    "expected_behavior": "blocked encyclopedia candidates yield to later accessible independent sources"
+  },
+  "service_workflow": {
+    "scope": "寿司郎在线取号流程",
+    "expected_behavior": "third-party and cross-region material cannot satisfy the direct-authority gate"
+  }
+}
