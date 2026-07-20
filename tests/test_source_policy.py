@@ -70,6 +70,16 @@ def test_repeated_discovery_result_does_not_create_a_second_evidence_family():
     assert plan.assessed[1].metadata["source_role"] == "mirror_or_fork"
 
 
+def test_broad_learning_scope_keeps_low_heuristic_score_web_candidates_for_semantic_assessment():
+    tutorial = _draft("tutorial", "https://course.example.com/short-video", "web", 0.43)
+    report = _draft("report", "https://media.example.com/industry", "web", 0.43)
+
+    plan = build_selection_plan("短视频自媒体入门与运营", [tutorial, report])
+
+    assert plan.requires_direct_authority is False
+    assert [candidate.provider_source_id for candidate in plan.queue] == ["report", "tutorial"]
+
+
 def _draft(
     provider_source_id: str,
     url: str,

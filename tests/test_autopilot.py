@@ -13,6 +13,7 @@ from domain_atlas.workflow.autopilot import (
     classify_ingestion_failure,
     select_autopilot_candidates,
 )
+from domain_atlas.workflow.candidate_assessment import CandidateAssessment, CandidateAssessmentResult
 
 
 class FakeDiscoveryProvider:
@@ -50,6 +51,68 @@ class FakeBuildRunner:
 
     def run(self, project_id: int):
         self.project_ids.append(project_id)
+
+
+class QueryDiscoveryProvider(FakeDiscoveryProvider):
+    def __init__(self, responses: dict[str, list[SourceCandidateDraft]]) -> None:
+        super().__init__([])
+        self.responses = responses
+
+    def search(self, query: str, limit: int) -> list[SourceCandidateDraft]:
+        self.calls.append((query, limit))
+        return self.responses[query]
+
+
+class SupplementingAssessmentProvider:
+    def assess(self, *, candidates: list[SourceCandidateDraft], **kwargs):
+        assessments = {}
+        for candidate in candidates:
+            strong = candidate.provider_source_id in {"creator-docs", "industry-report"}
+            assessments[candidate.provider_source_id] = CandidateAssessment(
+                candidate_id=candidate.provider_source_id,
+                relevance=0.82 if strong else 0.20,
+                authority=0.78 if strong else 0.20,
+                coverage_topics=["平台规则"] if strong else [],
+                risk_flags=[],
+                priority=1 if candidate.provider_source_id == "creator-docs" else 2,
+                selection_reason="覆盖可学习的领域知识。",
+            )
+        return CandidateAssessmentResult(
+            confidence=0.90,
+            assessments=assessments,
+            missing_coverage=["平台规则"] if len(candidates) == 2 else [],
+            supplemental_queries=["短视频 创作者 官方规则"] if len(candidates) == 2 else [],
+        )
+
+
+class LowQualityAssessmentProvider:
+    def assess(self, *, candidates: list[SourceCandidateDraft], **kwargs):
+        return CandidateAssessmentResult(
+            confidence=0.90,
+            assessments={
+                candidate.provider_source_id: CandidateAssessment(
+                    candidate_id=candidate.provider_source_id,
+                    relevance=0.20,
+                    authority=0.20,
+                    coverage_topics=[],
+                    risk_flags=["marketing_heavy"],
+                    priority=1,
+                    selection_reason="内容以课程推广和零散经验为主。",
+                )
+                for candidate in candidates
+            },
+            missing_coverage=["平台规则", "行业数据"],
+            supplemental_queries=[],
+        )
+
+
+class MustNotBeCalledAssessmentProvider:
+    def __init__(self) -> None:
+        self.called = False
+
+    def assess(self, **kwargs):
+        self.called = True
+        raise AssertionError("direct-authority gate must run before LLM assessment")
 
 
 def test_autopilot_candidate_selection_prefers_authoritative_sources():
@@ -151,7 +214,7 @@ def test_autopilot_workflow_creates_sources_ingests_and_builds(tmp_path):
     ).run(project.id)
 
     assert discovery.calls == [("旅行代理", 12)]
-    assert result.selected_count == 2
+    assert result.selected_count == 3
     assert ingestion.source_ids == result.source_ids
     assert build.project_ids == [project.id]
 
@@ -176,6 +239,8 @@ def test_autopilot_workflow_creates_sources_ingests_and_builds(tmp_path):
     assert [step["step_name"] for step in steps] == [
         "discover_candidates",
         "discover_candidates",
+        "assess_candidates",
+        "assess_candidates",
         "select_candidates",
         "select_candidates",
         "ingest_sources",
@@ -185,14 +250,16 @@ def test_autopilot_workflow_creates_sources_ingests_and_builds(tmp_path):
         "build_knowledge",
         "build_knowledge",
     ]
-    assert json.loads(steps[3]["output_json"])["selected_count"] == 2
-    assert json.loads(steps[3]["output_json"])["selection_mode"] == "strict_authoritative"
+    assert json.loads(steps[5]["output_json"])["selected_count"] == 3
+    assert json.loads(steps[5]["output_json"])["assessment_status"] == "unconfigured"
 
     listed_runs = WorkflowRepository(database_path).list_for_project(project.id)
     assert listed_runs[0].workflow_name == "guided_autopilot"
     assert [step.step_name for step in listed_runs[0].steps] == [
         "discover_candidates",
         "discover_candidates",
+        "assess_candidates",
+        "assess_candidates",
         "select_candidates",
         "select_candidates",
         "ingest_sources",
@@ -341,9 +408,9 @@ def test_autopilot_workflow_uses_fallback_selection_for_practical_domains(tmp_pa
         CreateDomainProject(name="如何做自媒体", interaction_mode="guided")
     )
     drafts = [
-        _draft("creator-a", "https://creator.example.com/a", "web", 0.5),
-        _draft("creator-b", "https://creator.example.com/b", "web", 0.5),
-        _draft("media", "https://media.example.com/start", "web", 0.5),
+        _draft("creator-a", "https://creator.example.com/a", "web", 0.43),
+        _draft("creator-b", "https://creator.example.com/b", "web", 0.43),
+        _draft("media", "https://media.example.com/start", "web", 0.43),
     ]
     ingestion = FakeIngestionRunner()
     build = FakeBuildRunner()
@@ -369,6 +436,93 @@ def test_autopilot_workflow_uses_fallback_selection_for_practical_domains(tmp_pa
     assert select_step.output["selection_mode"] == "fallback_best_available"
 
 
+def test_autopilot_reports_low_quality_discovery_after_valid_llm_assessment(tmp_path):
+    database_path = tmp_path / "domain_atlas.sqlite3"
+    initialize_database(database_path)
+    project = DomainProjectRepository(database_path).create(
+        CreateDomainProject(name="如何做自媒体", scope="短视频自媒体入门与运营", interaction_mode="guided")
+    )
+    drafts = [
+        _draft("course", "https://course.example.com/short-video", "web", 0.43),
+        _draft("blog", "https://blog.example.com/short-video", "web", 0.43),
+    ]
+
+    try:
+        AutopilotWorkflow(
+            database_path=database_path,
+            discovery_provider=FakeDiscoveryProvider(drafts),
+            ingestion_runner=FakeIngestionRunner(),
+            build_runner=FakeBuildRunner(),
+            candidate_assessment_provider=LowQualityAssessmentProvider(),
+        ).run(project.id)
+    except ValueError as exc:
+        assert "课程推广、经验分享或覆盖不足" in str(exc)
+        assert "平台规则、行业数据" in str(exc)
+    else:
+        raise AssertionError("Expected low-quality discovery to stop before ingestion.")
+
+    run = WorkflowRepository(database_path).list_for_project(project.id)[0]
+    selection = next(step for step in run.steps if step.step_name == "select_candidates" and step.status == "failed")
+    assert selection.output["terminal_reason"] == "low_quality_discovery"
+    assert selection.output["assessment_status"] == "applied"
+    assert SourceRepository(database_path).list_for_project(project.id) == []
+
+
+def test_autopilot_uses_one_llm_supplemental_round_for_low_scored_learning_candidates(tmp_path):
+    database_path = tmp_path / "domain_atlas.sqlite3"
+    initialize_database(database_path)
+    project = DomainProjectRepository(database_path).create(
+        CreateDomainProject(name="如何做自媒体", scope="短视频自媒体入门与运营", interaction_mode="guided")
+    )
+    initial = [
+        _draft("course", "https://course.example.com/short-video", "web", 0.43),
+        _draft("blog", "https://blog.example.com/short-video", "web", 0.43),
+    ]
+    supplemental = [
+        _draft("creator-docs", "https://creator.example.com/rules", "official_docs", 0.43),
+        _draft("industry-report", "https://research.example.org/report", "institution", 0.43),
+    ]
+    discovery = QueryDiscoveryProvider(
+        {
+            "短视频自媒体入门与运营": initial,
+            "短视频 创作者 官方规则": supplemental,
+        }
+    )
+    result = AutopilotWorkflow(
+        database_path=database_path,
+        discovery_provider=discovery,
+        ingestion_runner=FakeIngestionRunner(),
+        build_runner=FakeBuildRunner(),
+        candidate_assessment_provider=SupplementingAssessmentProvider(),
+    ).run(project.id)
+
+    assert result.selected_count == 2
+    assert discovery.calls == [
+        ("短视频自媒体入门与运营", 12),
+        ("短视频 创作者 官方规则", 12),
+    ]
+    run = WorkflowRepository(database_path).list_for_project(project.id)[0]
+    assessment = next(
+        step
+        for step in reversed(run.steps)
+        if step.step_name == "assess_candidates" and step.status == "completed"
+    )
+    selection = next(
+        step
+        for step in reversed(run.steps)
+        if step.step_name == "select_candidates" and step.status == "completed"
+    )
+    assert assessment.output["assessment_status"] == "applied"
+    assert assessment.output["supplemental_search_attempted"] is True
+    assert selection.output["supplemental_query_count"] == 1
+    accepted = [
+        candidate.provider_source_id
+        for candidate in SourceCandidateRepository(database_path).list_for_project(project.id)
+        if candidate.status == "accepted"
+    ]
+    assert accepted == ["creator-docs", "industry-report"]
+
+
 def test_autopilot_stops_before_ingestion_when_service_workflow_lacks_direct_evidence(tmp_path):
     database_path = tmp_path / "domain_atlas.sqlite3"
     initialize_database(database_path)
@@ -381,6 +535,7 @@ def test_autopilot_stops_before_ingestion_when_service_workflow_lacks_direct_evi
         _draft("news", "https://news.example.com/sushiro", "web", 0.5),
     ]
     ingestion = FakeIngestionRunner()
+    assessor = MustNotBeCalledAssessmentProvider()
 
     try:
         AutopilotWorkflow(
@@ -388,6 +543,7 @@ def test_autopilot_stops_before_ingestion_when_service_workflow_lacks_direct_evi
             discovery_provider=FakeDiscoveryProvider(drafts),
             ingestion_runner=ingestion,
             build_runner=FakeBuildRunner(),
+            candidate_assessment_provider=assessor,
         ).run(project.id)
     except ValueError as exc:
         assert "未找到" in str(exc)
@@ -395,6 +551,7 @@ def test_autopilot_stops_before_ingestion_when_service_workflow_lacks_direct_evi
         raise AssertionError("Expected missing direct evidence to stop guided mode.")
 
     assert ingestion.source_ids == []
+    assert assessor.called is False
     assert SourceRepository(database_path).list_for_project(project.id) == []
     candidates = SourceCandidateRepository(database_path).list_for_project(project.id)
     assert all(candidate.status == "discovered" for candidate in candidates)

@@ -743,6 +743,10 @@ def _assert_guided_autopilot_flow(page) -> None:
         raise RuntimeError("guided workflow did not expose the source success count")
     if "Exa搜索已在重试后恢复" not in text:
         raise RuntimeError("guided workflow did not expose provider recovery state")
+    if "已使用语义评审排序 4 条候选" not in text:
+        raise RuntimeError("guided workflow did not expose candidate assessment state")
+    if "已执行 1 条受限补搜，新增 2 条候选" not in text:
+        raise RuntimeError("guided workflow did not expose supplemental search state")
     print("verified guided browser success workflow")
 
 

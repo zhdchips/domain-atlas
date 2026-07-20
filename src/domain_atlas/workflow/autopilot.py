@@ -16,8 +16,16 @@ from domain_atlas.domain.source_candidates import (
 )
 from domain_atlas.domain.sources import CreateSource, SourceRepository
 from domain_atlas.domain.workflow import WorkflowRepository
-from domain_atlas.workflow.source_policy import build_selection_plan, infer_target_region, regional_official_query
+from domain_atlas.workflow.candidate_assessment import (
+    CandidateAssessmentProvider,
+    CandidateAssessmentResult,
+    apply_candidate_assessment,
+    rank_assessed_candidates,
+    rank_candidates_deterministically,
+    resolve_candidate_assessment,
+)
 from domain_atlas.workflow.official_entries import HttpOfficialEntryInspector, OfficialEntryInspector
+from domain_atlas.workflow.source_policy import build_selection_plan, infer_target_region, regional_official_query
 
 
 PREFERRED_SOURCE_TYPES = {
@@ -29,6 +37,7 @@ PREFERRED_SOURCE_TYPES = {
 }
 MIN_BUILD_SOURCES = 2
 MAX_SOURCES_PER_DOMAIN = 2
+MAX_GUIDED_QUEUE_SIZE = 6
 
 
 class SourceDiscoveryProvider(Protocol):
@@ -192,6 +201,9 @@ class AutopilotWorkflow:
         build_runner: BuildRunner,
         search_limit: int = 12,
         official_entry_inspector: OfficialEntryInspector | None = None,
+        candidate_assessment_provider: CandidateAssessmentProvider | None = None,
+        candidate_assessment_min_confidence: float = 0.60,
+        candidate_queue_limit: int = MAX_GUIDED_QUEUE_SIZE,
     ) -> None:
         self.project_repository = DomainProjectRepository(database_path)
         self.candidate_repository = SourceCandidateRepository(database_path)
@@ -203,6 +215,9 @@ class AutopilotWorkflow:
         self.search_limit = search_limit
         self.minimum_build_sources = MIN_BUILD_SOURCES
         self.official_entry_inspector = official_entry_inspector or HttpOfficialEntryInspector()
+        self.candidate_assessment_provider = candidate_assessment_provider
+        self.candidate_assessment_min_confidence = candidate_assessment_min_confidence
+        self.candidate_queue_limit = max(self.minimum_build_sources, candidate_queue_limit)
 
     def run(self, project_id: int, *, run_id: int | None = None) -> AutopilotResult:
         if run_id is None:
@@ -274,15 +289,12 @@ class AutopilotWorkflow:
                     selection_plan = build_selection_plan(
                         project.effective_scope, drafts, language=project.language
                     )
-            persisted = self.candidate_repository.replace_discovered(
-                project_id, selection_plan.assessed
-            )
             self.workflow_repository.record_step(
                 run_id,
                 step_name="discover_candidates",
                 status="completed",
                 output={
-                    "candidate_count": len(persisted),
+                    "candidate_count": len(selection_plan.assessed),
                     "official_search_attempted": official_search_attempted,
                     "regional_search_attempted": regional_search_attempted,
                     "official_entry_count": official_entry_count,
@@ -290,9 +302,84 @@ class AutopilotWorkflow:
             )
 
             self.workflow_repository.record_step(
+                run_id, step_name="assess_candidates", status="running"
+            )
+            (
+                selection_plan,
+                candidate_queue,
+                assessment_result,
+                assessment_source,
+                assessment_status,
+            ) = self._rank_candidate_queue(project, selection_plan)
+            supplemental_queries: list[str] = []
+            supplemental_search_attempted = False
+            if (
+                not selection_plan.requires_direct_authority
+                and assessment_result is not None
+                and len(candidate_queue) < self.minimum_build_sources
+                and assessment_result.supplemental_queries
+            ):
+                supplemental_queries = assessment_result.supplemental_queries
+                supplemental_search_attempted = True
+                self.workflow_repository.record_step(
+                    run_id,
+                    step_name="supplemental_search",
+                    status="running",
+                    output={"query_count": len(supplemental_queries)},
+                )
+                supplemental_drafts: list[SourceCandidateDraft] = []
+                for query in supplemental_queries:
+                    try:
+                        supplemental_drafts.extend(
+                            self.discovery_provider.search(query, limit=self.search_limit)
+                        )
+                    except Exception:
+                        # The initial candidates remain usable even when a supplemental query fails.
+                        continue
+                if supplemental_drafts:
+                    drafts = [*drafts, *supplemental_drafts]
+                    selection_plan = build_selection_plan(
+                        project.effective_scope, drafts, language=project.language
+                    )
+                    (
+                        selection_plan,
+                        candidate_queue,
+                        assessment_result,
+                        assessment_source,
+                        assessment_status,
+                    ) = self._rank_candidate_queue(project, selection_plan)
+                self.workflow_repository.record_step(
+                    run_id,
+                    step_name="supplemental_search",
+                    status="completed",
+                    output={
+                        "query_count": len(supplemental_queries),
+                        "candidate_count": len(selection_plan.assessed),
+                        "new_candidate_count": len(supplemental_drafts),
+                    },
+                )
+            self.workflow_repository.record_step(
+                run_id,
+                step_name="assess_candidates",
+                status="completed",
+                output={
+                    "assessment_source": assessment_source,
+                    "assessment_status": assessment_status,
+                    "candidate_count": len(selection_plan.queue),
+                    "viable_count": len(candidate_queue),
+                    "missing_coverage": (
+                        assessment_result.missing_coverage if assessment_result is not None else []
+                    ),
+                    "supplemental_search_attempted": supplemental_search_attempted,
+                    "supplemental_query_count": len(supplemental_queries),
+                    **(assessment_result.to_output() if assessment_result is not None else {}),
+                },
+            )
+
+            persisted = self.candidate_repository.replace_discovered(project_id, selection_plan.assessed)
+            self.workflow_repository.record_step(
                 run_id, step_name="select_candidates", status="running"
             )
-            candidate_queue = selection_plan.queue
             persisted_by_provider_id = {
                 candidate.provider_source_id: candidate for candidate in persisted
             }
@@ -304,17 +391,27 @@ class AutopilotWorkflow:
             if not candidate_queue:
                 reason = (
                     selection_plan.evidence_insufficient_reason
-                    or "没有候选资料满足当前领域的自动构建质量门。"
+                    or _selection_recovery_message(
+                        assessment_result=assessment_result,
+                        assessment_status=assessment_status,
+                    )
                 )
                 self.workflow_repository.record_step(
                     run_id,
                     step_name="select_candidates",
                     status="failed",
                     output={
-                        "terminal_reason": selection_plan.terminal_reason or "evidence_insufficient",
+                        "terminal_reason": selection_plan.terminal_reason
+                        or _selection_terminal_reason(
+                            assessment_result=assessment_result,
+                            assessment_status=assessment_status,
+                        ),
                         "policy": selection_plan.policy_name,
                         "requires_direct_authority": selection_plan.requires_direct_authority,
                         "candidate_count": len(persisted),
+                        "assessment_source": assessment_source,
+                        "assessment_status": assessment_status,
+                        "supplemental_search_attempted": supplemental_search_attempted,
                         "recovery_message": reason,
                     },
                     error=reason,
@@ -334,6 +431,13 @@ class AutopilotWorkflow:
                     "policy": selection_plan.policy_name,
                     "requires_direct_authority": selection_plan.requires_direct_authority,
                     "selected_families": [_candidate_family(candidate) for candidate in selected],
+                    "assessment_source": assessment_source,
+                    "assessment_status": assessment_status,
+                    "missing_coverage": (
+                        assessment_result.missing_coverage if assessment_result is not None else []
+                    ),
+                    "supplemental_search_attempted": supplemental_search_attempted,
+                    "supplemental_query_count": len(supplemental_queries),
                 },
             )
 
@@ -468,6 +572,7 @@ class AutopilotWorkflow:
                         successful_sources=len(source_ids),
                         minimum_build_sources=self.minimum_build_sources,
                         attempts=attempts,
+                        supplemental_search_attempted=supplemental_search_attempted,
                     ),
                 },
             )
@@ -477,6 +582,7 @@ class AutopilotWorkflow:
                         successful_sources=len(source_ids),
                         minimum_build_sources=self.minimum_build_sources,
                         attempts=attempts,
+                        supplemental_search_attempted=supplemental_search_attempted,
                     )
                 )
             self.workflow_repository.record_step(
@@ -508,6 +614,50 @@ class AutopilotWorkflow:
             self.workflow_repository.fail_run(run_id, str(exc))
             raise
 
+    def _rank_candidate_queue(self, project, selection_plan):
+        """Apply one bounded semantic judgement after deterministic policy has run."""
+        legal_candidates = selection_plan.queue
+        if not legal_candidates:
+            return selection_plan, [], None, "fallback", "not_needed"
+        result, source, status = resolve_candidate_assessment(
+            provider=self.candidate_assessment_provider,
+            scope=project.effective_scope,
+            goal=project.goal,
+            language=project.language,
+            candidates=legal_candidates,
+            min_confidence=self.candidate_assessment_min_confidence,
+        )
+        if result is None:
+            return (
+                selection_plan,
+                rank_candidates_deterministically(
+                    legal_candidates,
+                    requires_direct_authority=selection_plan.requires_direct_authority,
+                    limit=self.candidate_queue_limit,
+                ),
+                None,
+                source,
+                status,
+            )
+        enriched = apply_candidate_assessment(selection_plan.assessed, result)
+        refreshed_plan = build_selection_plan(
+            project.effective_scope,
+            enriched,
+            language=project.language,
+        )
+        return (
+            refreshed_plan,
+            rank_assessed_candidates(
+                refreshed_plan.queue,
+                result,
+                requires_direct_authority=refreshed_plan.requires_direct_authority,
+                limit=self.candidate_queue_limit,
+            ),
+            result,
+            source,
+            status,
+        )
+
     def _source_from_candidate(self, project_id: int, candidate: SourceCandidate):
         return self.source_repository.create(
             CreateSource(
@@ -523,6 +673,11 @@ class AutopilotWorkflow:
                     "source_role": candidate.metadata.get("source_role", "unverified"),
                     "source_family": _candidate_family(candidate),
                     "selection_reason": candidate.metadata.get("selection_reason", ""),
+                    "hard_gate_reason": candidate.metadata.get("hard_gate_reason", ""),
+                    "candidate_assessment": candidate.metadata.get("candidate_assessment", {}),
+                    "candidate_assessment_source": candidate.metadata.get(
+                        "candidate_assessment_source", "fallback"
+                    ),
                     "source_region": candidate.metadata.get("source_region", ""),
                     "target_region": candidate.metadata.get("target_region", ""),
                     "region_match": candidate.metadata.get("region_match", "unknown"),
@@ -657,6 +812,7 @@ def _recovery_message(
     successful_sources: int,
     minimum_build_sources: int,
     attempts: list[SourceAttempt],
+    supplemental_search_attempted: bool = False,
 ) -> str:
     if successful_sources >= minimum_build_sources:
         return f"已获得 {successful_sources} 份可用资料，开始构建知识库。"
@@ -665,10 +821,40 @@ def _recovery_message(
     )
     category_text = "、".join(_failure_category_label(category) for category in failed_categories)
     detail = f"失败原因包括：{category_text}。" if category_text else ""
+    prefix = "补充搜索后候选资料已尝试完毕" if supplemental_search_attempted else "候选资料已尝试完毕"
     return (
-        f"候选资料已尝试完毕，仅成功摄取 {successful_sources}/{minimum_build_sources} 份。"
+        f"{prefix}，仅成功摄取 {successful_sources}/{minimum_build_sources} 份。"
         f"{detail}可稍后重试，或手动添加可访问的 URL、Markdown/PDF，也可调整领域范围后重新搜索。"
     )
+
+
+def _selection_terminal_reason(
+    *,
+    assessment_result: CandidateAssessmentResult | None,
+    assessment_status: str,
+) -> str:
+    if assessment_result is not None:
+        return "low_quality_discovery"
+    if assessment_status in {"failed", "invalid", "low_confidence", "unconfigured"}:
+        return "assessment_unavailable"
+    return "evidence_insufficient"
+
+
+def _selection_recovery_message(
+    *,
+    assessment_result: CandidateAssessmentResult | None,
+    assessment_status: str,
+) -> str:
+    if assessment_result is not None:
+        gaps = "、".join(assessment_result.missing_coverage)
+        suffix = f"当前还缺少：{gaps}。" if gaps else ""
+        return (
+            "当前搜索结果以课程推广、经验分享或覆盖不足的资料为主，暂不适合自动构建。"
+            f"{suffix}请补充可访问的官方创作者资料、行业报告、教材、论文或原始资料。"
+        )
+    if assessment_status in {"failed", "invalid", "low_confidence", "unconfigured"}:
+        return "候选资料未通过可用性与来源闸门，且语义评审暂不可用。请手动确认资料，或补充 URL、Markdown/PDF 后继续。"
+    return "没有候选资料满足当前领域的自动构建质量门。"
 
 
 def _failure_category_label(category: str) -> str:

@@ -86,7 +86,7 @@
   <h2>简易模式</h2>
   <form action="/domains/{{ project.id }}/autopilot" method="post" class="form-grid" data-pending-form data-pending-text="正在搜索、筛选、摄取资料并构建领域地图，可能需要数分钟…">
     <input type="hidden" name="_csrf" value="{{ csrf_token(request) }}">
-    <p class="muted">自动搜索候选资料并优先摄取直接权威来源；会获得至少 2 个独立来源族后再构建。品牌或机构服务流程缺少一方资料时会暂停并提示你确认。</p>
+    <p class="muted">自动搜索候选资料，并用受控语义评审结合来源规则形成候补队列；获得至少 2 个独立来源族后再构建。品牌或机构服务流程缺少一方资料时会暂停并提示你确认。</p>
     <button type="submit" {% if active_workflow %}disabled aria-disabled="true"{% endif %}>一键构建领域地图</button>
   </form>
 </section>
@@ -156,6 +156,12 @@
             {% endif %}
             {% if candidate.metadata.get("selection_reason") %}
               <small>{{ candidate.metadata.get("selection_reason") }}</small>
+            {% endif %}
+            {% if candidate.metadata.get("candidate_assessment") %}
+              {% set assessment = candidate.metadata.get("candidate_assessment") %}
+              <small>语义评审：相关性 {{ "%.2f"|format(assessment.get("relevance", 0)) }} · 权威性 {{ "%.2f"|format(assessment.get("authority", 0)) }} · 优先级 {{ assessment.get("priority", "-" ) }}</small>
+              {% if assessment.get("coverage_topics") %}<small>覆盖 {{ assessment.get("coverage_topics")|join("、") }}</small>{% endif %}
+              {% if assessment.get("risk_flags") %}<small>风险标记 {{ assessment.get("risk_flags")|join("、") }}</small>{% endif %}
             {% endif %}
             {% if candidate.metadata.get("manual_warning") %}
               <p class="candidate-warning">{{ candidate.metadata.get("manual_warning") }}</p>

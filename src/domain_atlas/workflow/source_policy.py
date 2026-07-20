@@ -147,7 +147,7 @@ def build_selection_plan(
     *,
     language: str = "zh",
 ) -> SelectionPlan:
-    """Choose a guided queue, or fail closed when direct evidence is required."""
+    """Apply only deterministic evidence and safety gates to guided candidates."""
     assessed = assess_candidates(scope, candidates, language=language)
     requires_direct_authority = scope_requires_direct_authority(scope)
     representatives = [
@@ -199,6 +199,7 @@ def _assess_candidate(
     identity_tokens: set[str],
 ) -> SourceCandidateDraft:
     metadata = dict(candidate.metadata)
+    llm_assessment = metadata.get("candidate_assessment")
     brand_domain_candidate = _is_brand_domain_candidate(scope, candidate, identity_tokens)
     role = _source_role(candidate, brand_domain_candidate=brand_domain_candidate)
     family = _source_family(candidate)
@@ -261,6 +262,11 @@ def _assess_candidate(
             "manual_warning": warning,
         }
     )
+    if isinstance(llm_assessment, dict):
+        llm_reason = llm_assessment.get("selection_reason")
+        if isinstance(llm_reason, str) and llm_reason.strip():
+            metadata["hard_gate_reason"] = reason
+            metadata["selection_reason"] = llm_reason.strip()
     return replace(candidate, metadata=metadata)
 
 
@@ -306,6 +312,7 @@ def _source_family(candidate: SourceCandidateDraft) -> str:
 
 
 def _is_guided_eligible(scope: str, candidate: SourceCandidateDraft) -> bool:
+    """Keep legal candidates; semantic quality is assessed by the bounded LLM layer."""
     role = _metadata_str(candidate, "source_role")
     if role not in PREFERRED_ROLES:
         return False
@@ -315,7 +322,9 @@ def _is_guided_eligible(scope: str, candidate: SourceCandidateDraft) -> bool:
         return False
     if candidate.metadata.get("region_match") == "cross_region":
         return False
-    return candidate.authority_score >= 0.5 or role in DIRECT_AUTHORITY_ROLES
+    # A fixed URL/type score cannot decide whether a broad-domain public source
+    # is relevant or useful. It remains a fallback ranking input, not a gate.
+    return True
 
 
 def _guided_rank_key(scope: str, candidate: SourceCandidateDraft) -> tuple[int, float, int, str]:

@@ -44,6 +44,18 @@
                 {% elif step.output.get('chunk_count') is not none %}
                   <small>{{ step.output.get('chunk_count') }} 个片段</small>
                 {% endif %}
+                {% if step.step_name == 'assess_candidates' and step.status == 'completed' %}
+                  {% if step.output.get('assessment_status') == 'applied' %}
+                    <small>已使用语义评审排序 {{ step.output.get('viable_count', 0) }} 条候选。</small>
+                  {% else %}
+                    <small>语义评审未应用（{{ step.output.get('assessment_status') }}），已使用本地候补排序。</small>
+                  {% endif %}
+                  {% if step.output.get('missing_coverage') %}
+                    <small>待补足：{{ step.output.get('missing_coverage')|join('、') }}</small>
+                  {% endif %}
+                {% elif step.step_name == 'supplemental_search' and step.status == 'completed' %}
+                  <small>已执行 {{ step.output.get('query_count', 0) }} 条受限补搜，新增 {{ step.output.get('new_candidate_count', 0) }} 条候选。</small>
+                {% endif %}
                 {% if step.output.get('terminal_reason') == 'minimum_sources_reached' %}
                   <small>已尝试 {{ step.output.get('attempted_count', 0) }} 条，{{ step.output.get('failed_count', 0) }} 条未成功；资料门槛已满足。</small>
                 {% elif step.output.get('terminal_reason') == 'minimum_independent_sources_reached' %}
@@ -51,6 +63,12 @@
                 {% elif step.output.get('terminal_reason') == 'evidence_insufficient' %}
                   <p class="workflow-error">{{ step.output.get('recovery_message') }}</p>
                   <small>请从下方候选中手动确认资料，或补充官方帮助页、公告、服务规则。</small>
+                {% elif step.output.get('terminal_reason') == 'low_quality_discovery' %}
+                  <p class="workflow-error">{{ step.output.get('recovery_message') }}</p>
+                  <small>可补充可访问的官方创作者资料、行业报告、教材、论文或原始资料。</small>
+                {% elif step.output.get('terminal_reason') == 'assessment_unavailable' %}
+                  <p class="workflow-error">{{ step.output.get('recovery_message') }}</p>
+                  <small>可先手动确认候选，或补充 URL、Markdown/PDF 后继续。</small>
                 {% elif step.output.get('terminal_reason') == 'cross_region_official_only' %}
                   <p class="workflow-error">{{ step.output.get('recovery_message') }}</p>
                   <small>请确认候选资料的地区，或补充当前地区的官方服务入口。</small>

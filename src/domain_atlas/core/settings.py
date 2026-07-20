@@ -64,6 +64,10 @@ class Settings(BaseSettings):
     )
     intake_llm_timeout_seconds: float = 15.0
     intake_llm_min_confidence: float = 0.60
+    candidate_llm_assessment_enabled: bool = True
+    candidate_llm_timeout_seconds: float = 45.0
+    candidate_llm_min_confidence: float = 0.60
+    candidate_llm_max_tokens: int = 4_000
 
     embedding_provider: str = "dashscope"
     embedding_base_url: str = ""

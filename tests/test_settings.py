@@ -31,6 +31,10 @@ def test_provider_defaults_match_mvp_contract():
     assert settings.chat_max_tokens == 12_000
     assert settings.llm_timeout_seconds == 180.0
     assert settings.llm_max_retries == 2
+    assert settings.candidate_llm_assessment_enabled is True
+    assert settings.candidate_llm_timeout_seconds == 45.0
+    assert settings.candidate_llm_min_confidence == 0.60
+    assert settings.candidate_llm_max_tokens == 4_000
     assert settings.embedding_provider == "dashscope"
     assert settings.embedding_model == "text-embedding-v4"
     assert settings.embedding_dimensions == 1024

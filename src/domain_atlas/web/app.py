@@ -62,6 +62,10 @@ from domain_atlas.wiki.presentation import (
 from domain_atlas.workflow.build import KnowledgeBuildWorkflow
 from domain_atlas.workflow.autopilot import AutopilotWorkflow
 from domain_atlas.workflow.background import BackgroundWorkflowRunner, WorkflowConflictError
+from domain_atlas.workflow.candidate_assessment import (
+    CandidateAssessmentProvider,
+    LLMCandidateAssessmentProvider,
+)
 from domain_atlas.workflow.source_policy import assess_candidates
 
 templates = Jinja2Templates(directory="src/domain_atlas/web/templates")
@@ -89,6 +93,7 @@ def create_app(
     autopilot_runner: object | None = None,
     background_runner: object | None = None,
     intake_assessment_provider: IntakeAssessmentProvider | None = None,
+    candidate_assessment_provider: CandidateAssessmentProvider | None = None,
     oauth_provider: GitHubOAuthProvider | None = None,
 ) -> FastAPI:
     """Create the Domain Atlas web app."""
@@ -303,6 +308,28 @@ def create_app(
             )
         )
 
+    def configured_candidate_assessment_provider() -> CandidateAssessmentProvider | None:
+        if candidate_assessment_provider is not None:
+            return candidate_assessment_provider
+        if (
+            not app_settings.candidate_llm_assessment_enabled
+            or not app_settings.llm_api_key.strip()
+            or not app_settings.llm_base_url.strip()
+        ):
+            return None
+        return LLMCandidateAssessmentProvider(
+            OpenAICompatibleChatProvider(
+                api_key=app_settings.llm_api_key,
+                base_url=app_settings.llm_base_url,
+                model=app_settings.chat_model,
+                max_tokens=app_settings.candidate_llm_max_tokens,
+                timeout_seconds=app_settings.candidate_llm_timeout_seconds,
+                max_retries=app_settings.llm_max_retries,
+                retry_base_delay_seconds=app_settings.provider_retry_base_delay_seconds,
+                retry_jitter_seconds=app_settings.provider_retry_jitter_seconds,
+            )
+        )
+
     def knowledge_build_workflow(
         *, retry_observer: RetryObserver | None = None
     ) -> KnowledgeBuildWorkflow:
@@ -402,6 +429,8 @@ def create_app(
             ingestion_runner=source_ingestion_service(retry_observer=retry_observer),
             build_runner=knowledge_build_workflow(retry_observer=retry_observer),
             search_limit=app_settings.search_max_results,
+            candidate_assessment_provider=configured_candidate_assessment_provider(),
+            candidate_assessment_min_confidence=app_settings.candidate_llm_min_confidence,
         )
 
     @app.get("/health")
@@ -1467,6 +1496,8 @@ def _workflow_labels() -> dict[str, str]:
 def _step_labels() -> dict[str, str]:
     return {
         "discover_candidates": "搜索候选资料",
+        "assess_candidates": "评审候选资料",
+        "supplemental_search": "补充搜索资料",
         "select_candidates": "筛选资料",
         "ingest_sources": "摄取资料",
         "build_knowledge": "生成 Wiki 与课程",

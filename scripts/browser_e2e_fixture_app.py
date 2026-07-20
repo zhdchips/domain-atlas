@@ -60,6 +60,40 @@ class BrowserAutopilotRunner:
                 "next_delay_seconds": 0,
             },
         )
+        repository.record_step(run_id, step_name="assess_candidates", status="running")
+        repository.record_step(
+            run_id,
+            step_name="supplemental_search",
+            status="completed",
+            output={"query_count": 1, "candidate_count": 4, "new_candidate_count": 2},
+        )
+        repository.record_step(
+            run_id,
+            step_name="assess_candidates",
+            status="completed",
+            output={
+                "assessment_source": "llm",
+                "assessment_status": "applied",
+                "candidate_count": 4,
+                "viable_count": 4,
+                "missing_coverage": ["行业报告"],
+                "supplemental_search_attempted": True,
+                "supplemental_query_count": 1,
+            },
+        )
+        repository.record_step(
+            run_id,
+            step_name="select_candidates",
+            status="completed",
+            output={
+                "selected_count": 4,
+                "queued_count": 4,
+                "minimum_build_sources": 2,
+                "assessment_source": "llm",
+                "assessment_status": "applied",
+                "supplemental_search_attempted": True,
+            },
+        )
         repository.record_step(
             run_id,
             step_name="ingest_sources",
