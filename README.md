@@ -168,6 +168,7 @@ uv run python scripts/regression.py --live-guided-e2e
 
 ## 开发与发布
 
+- [三个核心流程源码入门指南](docs/core-workflows-guide.md)
 - [贡献指南](CONTRIBUTING.md)
 - [更新日志](CHANGELOG.md)
 - [v0.1.0 发布说明与远程发布检查清单](docs/release-notes/v0.1.0.md)
