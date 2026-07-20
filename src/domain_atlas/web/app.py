@@ -655,6 +655,7 @@ def create_app(
         language: str = Form("zh"),
         interaction_mode: str = Form("guided"),
     ) -> RedirectResponse:
+        # 创建入口先确定学习边界；LLM 不可用、结果无效或置信度不足时退回本地判定。
         fallback = fallback_intake_assessment(name=name, goal=goal, level=level)
         assessment, assessment_source, assessment_status = _resolve_intake_assessment(
             fallback=fallback,
@@ -680,6 +681,7 @@ def create_app(
                 "assessment_status": assessment_status,
             }
         )
+        # 先持久化 Intake 结论，再按结果分流到澄清页或可直接操作的项目页。
         project = project_repository().create(
             CreateDomainProject(
                 name=name,
@@ -1003,6 +1005,7 @@ def create_app(
         if project is None:
             raise HTTPException(status_code=404, detail="Domain project not found.")
         try:
+            # HTTP 请求只创建可追踪的后台 Run；搜索、摄取和构建从 AutopilotWorkflow.run 开始。
             task_runner.submit(
                 project_id=project_id,
                 workflow_name="guided_autopilot",
@@ -1232,6 +1235,7 @@ def create_app(
         if project is None:
             raise HTTPException(status_code=404, detail="Domain project not found.")
         try:
+            # RetrievalQAService 同步完成 Wiki-first 检索、原始证据兜底并保存问答记录。
             retrieval_qa_service().answer(project_id=project_id, question=question)
         except Exception as exc:
             return RedirectResponse(

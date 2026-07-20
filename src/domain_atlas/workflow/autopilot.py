@@ -210,6 +210,7 @@ class AutopilotWorkflow:
         else:
             self.workflow_repository.mark_running(run_id)
         try:
+            # 编排主干：发现候选 -> 权威性筛选 -> 摄取独立来源 -> 生成 Wiki 与学习路线。
             project = self.project_repository.get(project_id)
             if project is None:
                 raise ValueError("Domain project not found.")
@@ -351,6 +352,7 @@ class AutopilotWorkflow:
                     "minimum_independent_families": self.minimum_build_sources,
                 },
             )
+            # 候选按队列补位：单条抓取失败不会终止流程，直到满足独立来源门槛或耗尽候选。
             for candidate in selected:
                 source_family = _candidate_family(candidate)
                 if source_family in successful_families:
@@ -482,6 +484,7 @@ class AutopilotWorkflow:
                 step_name="build_knowledge",
                 status="running",
             )
+            # 只有证据门槛通过后，KnowledgeBuildWorkflow 才会写入 Wiki、课程和向量索引。
             self.build_runner.run(project_id)
             self.workflow_repository.record_step(
                 run_id,

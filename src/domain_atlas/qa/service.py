@@ -43,6 +43,7 @@ class RetrievalQAService:
         if not clean_question:
             raise ValueError("Question is required.")
         embedding = self.embedding_provider.embed_texts([clean_question])[0]
+        # 优先检索已组织的 Wiki section，使答案沿用领域结构并保留其原始来源链。
         wiki_sections = self.vector_index.query_wiki_sections(
             project_id=project_id,
             query_embedding=embedding,
@@ -55,6 +56,7 @@ class RetrievalQAService:
                 retrieved=wiki_sections,
             )
 
+        # Wiki 没有召回时才退回原始 Chunk；两层都无证据则直接拒答。
         source_chunks = self.vector_index.query(
             project_id=project_id,
             query_embedding=embedding,
@@ -76,6 +78,7 @@ class RetrievalQAService:
         )
         answer = str(payload.get("answer") or "").strip()
         citations = [str(item) for item in payload.get("citations", []) if str(item).strip()]
+        # 模型只能引用本次召回集合中的标签，避免生成无法溯源的 citation。
         allowed = {chunk.citation_label for chunk in source_chunks}
         citations = [citation for citation in citations if citation in allowed]
         evidence_status = str(payload.get("evidence_status") or "sufficient")
@@ -107,6 +110,7 @@ class RetrievalQAService:
         )
         answer = str(payload.get("answer") or "").strip()
         citations = [str(item) for item in payload.get("citations", []) if str(item).strip()]
+        # Wiki 引用同样受本次召回 section 的白名单约束。
         allowed = {f"W:{section.section_uid}" for section in retrieved}
         citations = [citation for citation in citations if citation in allowed]
         source_provenance = _source_provenance(retrieved)
